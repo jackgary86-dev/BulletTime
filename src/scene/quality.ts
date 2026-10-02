@@ -13,6 +13,8 @@ export interface QualitySettings {
   /** Fraction of each particle look's instance capacity that may be used. */
   particleCap: number;
   bloom: boolean;
+  /** Screen-space ambient occlusion (#55); without it a soft baked shadow sits under the target. */
+  ambientOcclusion: boolean;
   depthOfField: boolean;
   /** Key light shadow map size in texels, or 0 for no shadows. */
   shadowMapSize: number;
@@ -21,9 +23,9 @@ export interface QualitySettings {
 }
 
 export const QUALITY: Record<QualityLevel, QualitySettings> = {
-  low: { pixelRatio: 1, particleDensity: 0.35, particleCap: 0.35, bloom: false, depthOfField: false, shadowMapSize: 0, transmissionScale: 0.5 },
-  medium: { pixelRatio: 1.5, particleDensity: 0.7, particleCap: 0.7, bloom: true, depthOfField: false, shadowMapSize: 1024, transmissionScale: 0.75 },
-  high: { pixelRatio: 2, particleDensity: 1, particleCap: 1, bloom: true, depthOfField: true, shadowMapSize: 2048, transmissionScale: 1 },
+  low: { pixelRatio: 1, particleDensity: 0.35, particleCap: 0.35, bloom: false, ambientOcclusion: false, depthOfField: false, shadowMapSize: 0, transmissionScale: 0.5 },
+  medium: { pixelRatio: 1.5, particleDensity: 0.7, particleCap: 0.7, bloom: true, ambientOcclusion: true, depthOfField: false, shadowMapSize: 1024, transmissionScale: 0.75 },
+  high: { pixelRatio: 2, particleDensity: 1, particleCap: 1, bloom: true, ambientOcclusion: true, depthOfField: true, shadowMapSize: 2048, transmissionScale: 1 },
 };
 
 export const QUALITY_LEVELS: { level: QualityLevel; label: string }[] = [
