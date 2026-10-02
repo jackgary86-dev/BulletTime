@@ -20,6 +20,9 @@ const CONCRETE = { fresh: 0x9e9b94, dust: 0x8a8781, grit: 0x7d7a74, hole: 0x1616
 const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505, paint: 0xd8d1bf };
 /** A perforation's rim glows hot and cools over about this long, in seconds. */
 const GLOW_COOL_S = 2.5e-3;
+/** Peak brightness of the flash from a steel strike, in candela, and how fast it dies, in seconds. */
+const FLASH_CD = 0.06;
+const FLASH_DECAY_S = 150e-6;
 
 export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], particles: ParticleSystem, holes: HoleMarks): void {
   let seed = 101;
@@ -175,6 +178,8 @@ function steelEvent(
       seed,
     });
     particles.add(sparks(e.t, origin, normal, c.dir, 120 * w * (0.4 + k)));
+    // The strike lights up the plate and the room for an instant.
+    particles.addFlash(e.t, origin.clone().addScaledVector(normal, 0.03), FLASH_CD * w * (0.3 + k), FLASH_DECAY_S);
   } else if (e.type === 'splash') {
     // The bullet disintegrates against the plate: lead spray flies out flat along the face.
     particles.add(splash(e.t, origin, normal, 260 * w * (0.4 + k), e.speed));
@@ -195,6 +200,7 @@ function steelEvent(
       seed,
     });
     particles.add(sparks(e.t, origin, normal, c.dir, 90 * w * (0.4 + k)));
+    particles.addFlash(e.t, origin.clone().addScaledVector(normal, 0.03), FLASH_CD * 0.5 * w * (0.3 + k), FLASH_DECAY_S);
   } else if (e.type === 'exit') {
     holes.add({
       t: e.t,

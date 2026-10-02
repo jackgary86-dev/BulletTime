@@ -67,6 +67,16 @@ interface Particle {
   /** Age at which it lands on the floor (Infinity if it never does), and where. */
   landAge: number;
   landPos: THREE.Vector3 | null;
+  /** Sparks skip off the floor rather than stopping: velocity just after the bounce. */
+  bounceV: THREE.Vector3 | null;
+  color: THREE.Color;
+}
+
+interface Flash {
+  t: number;
+  pos: THREE.Vector3;
+  intensity: number;
+  decay: number;
   color: THREE.Color;
 }
 
@@ -130,9 +140,15 @@ export class ParticleSystem {
   capScale = 1;
   /** The time the instances were last laid out for, so a paused frame costs nothing. */
   private shownT = NaN;
+  /** Brief flashes of light from hot impacts (steel sparks); one light shows the brightest. */
+  private flashes: Flash[] = [];
+  /** Always in the scene (dark when idle), so lighting a flash never recompiles the materials. */
+  readonly flashLight = new THREE.PointLight(0xffb060, 0, 0.8, 2);
 
   constructor() {
     this.group.name = 'particles';
+    this.flashLight.name = 'impact-flash';
+    this.group.add(this.flashLight);
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
       const mesh = new THREE.InstancedMesh(config.geometry, config.material, config.cap);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -154,7 +170,15 @@ export class ParticleSystem {
     return end;
   }
 
+  /** A flash of light at `pos`, peaking at `intensity` (candela) and dying away over about `decay` seconds. */
+  addFlash(t: number, pos: THREE.Vector3, intensity: number, decay: number, color: THREE.ColorRepresentation = 0xffb060): void {
+    this.flashes.push({ t, pos: pos.clone(), intensity, decay, color: new THREE.Color(color) });
+    this.shownT = NaN;
+  }
+
   clear(): void {
+    this.flashes = [];
+    this.flashLight.intensity = 0;
     for (const list of this.particles.values()) list.length = 0;
     for (const mesh of this.meshes.values()) mesh.count = 0;
     this.shownT = NaN;
@@ -209,9 +233,15 @@ export class ParticleSystem {
         aspect,
         landAge: Infinity,
         landPos: null,
+        bounceV: null,
         color: base.clone().multiplyScalar(shade),
       };
-      if (solid) land(q);
+      if (solid || spec.look === 'spark') land(q);
+      if (spec.look === 'spark' && q.landPos) {
+        // Skip off the floor, losing most of the vertical speed and some of the rest.
+        const decay = Math.exp(-q.drag * q.landAge);
+        q.bounceV = new THREE.Vector3(q.v.x * decay * 0.7, -(q.v.y * decay - q.gravity * q.landAge) * 0.35, q.v.z * decay * 0.7);
+      }
       list.push(q);
     }
   }
@@ -219,6 +249,17 @@ export class ParticleSystem {
   update(t: number): void {
     if (t === this.shownT) return;
     this.shownT = t;
+    let best = 0;
+    for (const f of this.flashes) {
+      const age = t - f.t;
+      if (age < 0 || age > f.decay * 6) continue;
+      const level = f.intensity * Math.exp(-age / f.decay);
+      if (level <= best) continue;
+      best = level;
+      this.flashLight.position.copy(f.pos);
+      this.flashLight.color.copy(f.color);
+    }
+    this.flashLight.intensity = best;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
       const fade = look === 'dust' ? (mesh.geometry.getAttribute('instanceFade') as THREE.InstancedBufferAttribute) : null;
@@ -228,9 +269,14 @@ export class ParticleSystem {
         if (age < 0 || age > q.life) continue;
         // Closed-form position under linear drag: p + v·(1 − e^(−kτ))/k, plus gravity.
         const landed = age >= q.landAge;
-        // Once on the floor, a bit stays where it landed and stops turning.
+        // Once on the floor, a bit stays where it landed and stops turning; a spark skips on.
         const moveAge = landed ? q.landAge : age;
-        if (landed) tmpPos.copy(q.landPos!);
+        if (landed && q.bounceV) {
+          const after = age - q.landAge;
+          const travel = (1 - Math.exp(-q.drag * after)) / q.drag;
+          tmpPos.copy(q.landPos!).addScaledVector(q.bounceV, travel);
+          tmpPos.y = Math.max(q.landPos!.y, tmpPos.y - 0.5 * q.gravity * after * after);
+        } else if (landed) tmpPos.copy(q.landPos!);
         else positionAt(q, age, tmpPos);
         const lifeK = age / q.life;
         // Clouds billow fast at first and slow as they spread.
@@ -246,7 +292,13 @@ export class ParticleSystem {
           n++;
           continue;
         }
-        if (q.stretch > 1 && look !== 'splinter') {
+        if (look === 'spark') {
+          // A streak as long as the spark travels in a short exposure, so fast sparks are long and slowing ones shrink to dots.
+          const v = landed && q.bounceV ? tmpDir.copy(q.bounceV).multiplyScalar(Math.exp(-q.drag * (age - q.landAge))) : velocityAt(q, age, tmpDir);
+          const streak = Math.min(q.stretch * 1.5, Math.max(1, (v.length() * SPARK_EXPOSURE_S) / size));
+          tmpQuat.setFromUnitVectors(X, v.normalize());
+          tmpScale.set(size * streak, size, size);
+        } else if (q.stretch > 1 && look !== 'splinter') {
           // Sparks and lead spray streak along their flight path.
           tmpDir.copy(q.v).normalize();
           tmpQuat.setFromUnitVectors(X, tmpDir);
@@ -260,7 +312,7 @@ export class ParticleSystem {
         }
         tmpMatrix.compose(tmpPos, tmpQuat, tmpScale);
         mesh.setMatrixAt(n, tmpMatrix);
-        mesh.setColorAt(n, look === 'spark' ? tmpColor.copy(q.color).multiplyScalar(1 - lifeK * 0.8) : q.color);
+        mesh.setColorAt(n, look === 'spark' ? sparkColor(q, lifeK) : q.color);
         n++;
       }
       mesh.count = n;
@@ -273,6 +325,34 @@ export class ParticleSystem {
 
 const tmpColor = new THREE.Color();
 const tmpLand = new THREE.Vector3();
+/** The streak a spark draws is its travel over this long, as a camera shutter would smear it. */
+const SPARK_EXPOSURE_S = 80e-6;
+/** Glowing steel cooling: white-hot, yellow, orange, dull red, then nearly dark. */
+const SPARK_RAMP = [
+  { k: 0, c: new THREE.Color(3, 2.7, 2.2) },
+  { k: 0.15, c: new THREE.Color(2.4, 1.6, 0.6) },
+  { k: 0.4, c: new THREE.Color(1.6, 0.55, 0.1) },
+  { k: 0.75, c: new THREE.Color(0.6, 0.1, 0.02) },
+  { k: 1, c: new THREE.Color(0.12, 0.02, 0) },
+];
+
+function sparkColor(q: Particle, lifeK: number): THREE.Color {
+  // Each spark cools at its own rate: small, fast ones go dark first.
+  const k = Math.min(1, lifeK * (0.8 + 0.4 * Math.abs(q.spinAxis.y)));
+  let i = 1;
+  while (i < SPARK_RAMP.length - 1 && SPARK_RAMP[i].k < k) i++;
+  const a = SPARK_RAMP[i - 1];
+  const b = SPARK_RAMP[i];
+  tmpColor.copy(a.c).lerp(b.c, (k - a.k) / (b.k - a.k));
+  // Keep the burst's own tint and brightness jitter (relative to the default spark orange).
+  return tmpColor.multiplyScalar(0.6 + 0.4 * q.color.r);
+}
+
+function velocityAt(q: Particle, age: number, out: THREE.Vector3): THREE.Vector3 {
+  out.copy(q.v).multiplyScalar(Math.exp(-q.drag * age));
+  out.y -= q.gravity * age;
+  return out;
+}
 
 /** Closed-form position under linear drag, p + v·(1 − e^(−kτ))/k, plus gravity. */
 function positionAt(q: Particle, age: number, out: THREE.Vector3): THREE.Vector3 {
