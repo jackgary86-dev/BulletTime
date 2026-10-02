@@ -92,11 +92,8 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
       material: new THREE.MeshPhysicalMaterial({ roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.1 }),
       cap: 2500,
     },
-    dust: {
-      geometry: new THREE.IcosahedronGeometry(0.5, 1),
-      material: lit({ roughness: 1, transparent: true, opacity: 0.2, depthWrite: false }),
-      cap: 2500,
-    },
+    // Soft, lit puffs: camera-facing cards with a billowy alpha, fading out as they spread.
+    dust: { geometry: dustGeometry(2500), material: dustMaterial(), cap: 2500 },
     spark: {
       geometry: new THREE.BoxGeometry(1, 0.15, 0.15),
       material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
@@ -121,6 +118,7 @@ const tmpMatrix = new THREE.Matrix4();
 const tmpDir = new THREE.Vector3();
 const tmpSpin = new THREE.Quaternion();
 const X = new THREE.Vector3(1, 0, 0);
+const Z = new THREE.Vector3(0, 0, 1);
 
 export class ParticleSystem {
   readonly group = new THREE.Group();
@@ -223,6 +221,7 @@ export class ParticleSystem {
     this.shownT = t;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
+      const fade = look === 'dust' ? (mesh.geometry.getAttribute('instanceFade') as THREE.InstancedBufferAttribute) : null;
       let n = 0;
       for (const q of list) {
         const age = t - q.t0;
@@ -234,9 +233,19 @@ export class ParticleSystem {
         if (landed) tmpPos.copy(q.landPos!);
         else positionAt(q, age, tmpPos);
         const lifeK = age / q.life;
-        let size = q.size * (1 + (q.grow - 1) * lifeK);
-        // Dust thins out and vanishes rather than popping off at the end of its life.
-        if (look === 'dust' && lifeK > 0.6) size *= (1 - lifeK) / 0.4;
+        // Clouds billow fast at first and slow as they spread.
+        const size = q.size * (1 + (q.grow - 1) * (look === 'dust' ? Math.sqrt(lifeK) : lifeK));
+        if (look === 'dust') {
+          // Thickens over the first moments, then thins away rather than popping off.
+          fade!.setX(n, Math.min(1, lifeK * 8) * (1 - lifeK) ** 1.5);
+          // Each card keeps a roll in its matrix; the shader turns it to face the camera.
+          tmpQuat.setFromAxisAngle(Z, q.spinAxis.x * Math.PI + q.spin * 0.15 * age);
+          tmpMatrix.compose(tmpPos, tmpQuat, tmpScale.setScalar(size));
+          mesh.setMatrixAt(n, tmpMatrix);
+          mesh.setColorAt(n, q.color);
+          n++;
+          continue;
+        }
         if (q.stretch > 1 && look !== 'splinter') {
           // Sparks and lead spray streak along their flight path.
           tmpDir.copy(q.v).normalize();
@@ -257,6 +266,7 @@ export class ParticleSystem {
       mesh.count = n;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      if (fade) fade.needsUpdate = true;
     }
   }
 }
@@ -361,3 +371,103 @@ function flakeGeometry(): THREE.BufferGeometry {
   return g;
 }
 const lerp = ([a, b]: [number, number], k: number) => a + (b - a) * k;
+
+function dustGeometry(cap: number): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.setAttribute('instanceFade', new THREE.InstancedBufferAttribute(new Float32Array(cap), 1).setUsage(THREE.DynamicDrawUsage));
+  return g;
+}
+
+/**
+ * Lit cloud cards. The vertex shader drops each card's rotation and lays it
+ * flat to the camera (keeping only its roll), and bends the normal outward
+ * from the centre so the puff is shaded like a ball of smoke, lit on the side
+ * facing the lights.
+ */
+function dustMaterial(): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({
+    roughness: 1,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    alphaMap: puffTexture(),
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+attribute float instanceFade;
+varying float vFade;`,
+      )
+      .replace(
+        '#include <defaultnormal_vertex>',
+        `float bbScale = length(instanceMatrix[0].xyz);
+float bbRoll = atan(instanceMatrix[0].y, instanceMatrix[0].x);
+vec2 bbLocal = mat2(cos(bbRoll), sin(bbRoll), -sin(bbRoll), cos(bbRoll)) * position.xy;
+vec3 transformedNormal = normalize(vec3(bbLocal * 1.6, 0.5));`,
+      )
+      .replace(
+        '#include <project_vertex>',
+        `vec4 mvPosition = modelViewMatrix * vec4(instanceMatrix[3].xyz, 1.0);
+mvPosition.xy += bbLocal * bbScale;
+gl_Position = projectionMatrix * mvPosition;
+vFade = instanceFade;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying float vFade;`,
+      )
+      .replace(
+        '#include <alphamap_fragment>',
+        `#include <alphamap_fragment>
+diffuseColor.a *= vFade;`,
+      );
+  };
+  return material;
+}
+
+/** A soft, lumpy puff: layered value noise under a round falloff, as an alpha map. */
+function puffTexture(): THREE.Texture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(size, size);
+  const rand = seededRandom(77);
+  const grid = 8;
+  const lattice = Array.from({ length: (grid + 1) ** 2 }, () => rand());
+  const noise = (x: number, y: number) => {
+    const ix = Math.floor(x) % grid;
+    const iy = Math.floor(y) % grid;
+    const fx = x - Math.floor(x);
+    const fy = y - Math.floor(y);
+    const at = (i: number, j: number) => lattice[((iy + j) % grid) * (grid + 1) + ((ix + i) % grid)];
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    return (at(0, 0) * (1 - sx) + at(1, 0) * sx) * (1 - sy) + (at(0, 1) * (1 - sx) + at(1, 1) * sx) * sy;
+  };
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const r = Math.hypot(u - 0.5, v - 0.5) * 2;
+      let n = 0;
+      let amp = 0.5;
+      for (let o = 1; o <= 8; o *= 2) {
+        n += amp * noise(u * grid * o * 0.5, v * grid * o * 0.5);
+        amp /= 2;
+      }
+      // Lumpy edge: the noise eats into the falloff, so the outline is billowy, not a disc.
+      const a = Math.max(0, Math.min(1, (1 - r) * 1.6 - (1 - n) * 0.9)) ** 1.3;
+      const i = (y * size + x) * 4;
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = Math.round(a * 255);
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}

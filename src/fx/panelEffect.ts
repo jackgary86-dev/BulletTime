@@ -71,7 +71,7 @@ export function loadPanelEffect(
       if (wood) {
         particles.add(burst('splinter', e.t, origin, normal, 0.7, 30 * weight * (0.5 + k), [5, 15 + 25 * k], [0.001, 0.003], debris(look.raw), { stretch: 2 }));
       }
-      particles.add(dust(e.t, origin, normal, wood ? 0.6 : 1.1, (wood ? 18 : 50) * weight * (0.5 + k), look.raw, wood ? 0.012 : 0.018));
+      particles.add(dust(e.t, origin, normal, wood ? 0.6 : 1.1, (wood ? 18 : 50) * weight * (0.5 + k), look.raw, wood ? 0.018 : 0.03));
     } else if (e.type === 'exit') {
       // Exit holes are larger and torn: the material spalls outward around the bullet.
       const spall = wood ? 2 + 1.2 * k : 1.6;
@@ -93,13 +93,13 @@ export function loadPanelEffect(
         // Splinter cone thrown out of the back face, spread wider along the grain.
         particles.add(burst('splinter', e.t, origin, normal, 0.55, 90 * weight * (0.4 + k), [10, 40 + e.speed * 0.15], [0.002, 0.007], debris(look.raw), { stretch: 5, grainSpread: true }));
         particles.add(burst('chunk', e.t, origin, normal, 0.5, 20 * weight * (0.3 + k), [5, 20 + e.speed * 0.06], [0.002, 0.006], debris(look.raw), {}));
-        particles.add(dust(e.t, origin, normal, 0.6, 25 * weight, look.raw, 0.015));
+        particles.add(dust(e.t, origin, normal, 0.6, 25 * weight, look.raw, 0.022));
       } else {
         // Drywall: a cone of gypsum chunks and a big chalky cloud.
         particles.add(burst('chunk', e.t, origin, normal, 0.6, 40 * weight, [5, 15 + e.speed * 0.04], [0.002, 0.008], debris(look.raw), {}));
         // Torn facing paper peels off the back face in flakes.
         particles.add({ ...burst('chunk', e.t, origin, normal, 0.8, 18 * weight, [4, 12 + e.speed * 0.03], [0.003, 0.009], debris(look.face), {}), look: 'flake' as const, drag: 90 });
-        particles.add(dust(e.t, origin, normal, 0.7, 70 * weight, look.raw, 0.02));
+        particles.add(dust(e.t, origin, normal, 0.7, 70 * weight, look.raw, 0.035));
       }
     }
   }
@@ -160,7 +160,7 @@ function dust(t: number, origin: THREE.Vector3, axis: THREE.Vector3, spread: num
     count: Math.round(count),
     speed: [1, 12] as [number, number],
     size: [size * 0.4, size] as [number, number],
-    life: [1e-3, 3e-3] as [number, number],
+    life: [2e-3, 6e-3] as [number, number],
     drag: 120,
     gravity: 2,
     color: debris(color),
