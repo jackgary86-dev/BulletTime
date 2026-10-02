@@ -5,13 +5,18 @@
   "license": "UNLICENSED",
   "type": "module",
   "description": "BulletTime: a slow-motion 3D bullet impact simulator in the browser",
+  "author": "JackDev",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:itch": "node scripts/build-itch.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:desktop": "tsc --noEmit && vite build --mode desktop --outDir dist-desktop",
+    "desktop": "npm run build:desktop && electron .",
+    "dist": "npm run build:desktop && electron-builder"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.3.0",
@@ -21,8 +26,53 @@
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
-  }
+  },
+  "build": {
+    "appId": "com.jackdev.bullettime",
+    "productName": "BulletTime",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-desktop/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "artifactName": "BulletTime-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.simulation-games"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Game",
+      "maintainer": "JackDev",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "BulletTime"
+        }
+      }
+    }
+  },
+  "desktopName": "bullettime.desktop"
 }

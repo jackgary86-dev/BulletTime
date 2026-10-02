@@ -1,7 +1,7 @@
 import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
-import { PHYSICS as P } from '../data/physics';
+import { PHYSICS as P, STANDARD_RESOLUTION, type SimResolution } from '../data/physics';
 import { seededRandom } from './random';
 import type {
   CavitySample,
@@ -18,7 +18,7 @@ import type {
 import { add, dot, normalize, perturb, reflect, rotateToward, scale, sub, v3 } from './vec';
 
 /**
- * The physics engine: integrates a whole shot up front with a fixed 1 µs step
+ * The physics engine: integrates a whole shot up front with a fixed step (1 µs, or 0.25 µs at Ultra)
  * and returns a keyframe timeline for playback. Plausible, data-driven and
  * deterministic; not a validated engineering model.
  *
@@ -48,6 +48,8 @@ export interface ShotSetup {
   standOffM: number;
   /** Damage already in the target from earlier shots (#22): channels, holes, craters and dents. */
   damage?: PriorDamage[];
+  /** Integration and sampling resolution; the standard 1 µs step when left out. */
+  resolution?: SimResolution;
 }
 
 /** A point of earlier damage in a layer: the new shot meets less resistance near it. */
@@ -143,6 +145,7 @@ interface Context {
   nextId: number;
   vd: VelocityDepthPoint[];
   depositedJ: number;
+  res: SimResolution;
 }
 
 export function simulate(setup: ShotSetup): Timeline {
@@ -162,6 +165,7 @@ export function simulate(setup: ShotSetup): Timeline {
     nextId: 0,
     vd: [],
     depositedJ: 0,
+    res: setup.resolution ?? STANDARD_RESOLUTION,
   };
 
   const b = setup.bullet;
@@ -284,8 +288,8 @@ function integrate(ctx: Context, body: Body): void {
 
   const isPrimary = body.id === 0 || body.kind === 'pellet';
   // Fragments fly in near-straight lines, so they need far fewer keyframes.
-  const sampleEvery = body.kind === 'fragment' ? P.sampleEvery * 4 : P.sampleEvery;
-  const dt = P.stepS;
+  const sampleEvery = body.kind === 'fragment' ? ctx.res.sampleEvery * 4 : ctx.res.sampleEvery;
+  const dt = ctx.res.stepS;
   let persists = true;
   let step = 0;
   let cavityAccum = 0;
@@ -351,7 +355,7 @@ function integrate(ctx: Context, body: Body): void {
       if (isPrimary && (medium.behaviour === 'gel' || medium.behaviour === 'water')) {
         cavityAccum += dx;
         cavityEnergy += deposited;
-        if (cavityAccum >= P.cavitySampleM) {
+        if (cavityAccum >= ctx.res.cavitySampleM) {
           addCavitySample(ctx, body, medium, layerIndex, cavityEnergy / cavityAccum);
           cavityAccum = 0;
           cavityEnergy = 0;
@@ -369,7 +373,7 @@ function integrate(ctx: Context, body: Body): void {
       body.layerDist += dx;
       body.materialDist += dx;
       body.maxDepth = Math.max(body.maxDepth, depthOf(ctx, body.pos));
-      if (body.id === 0 && step % P.sampleEvery === 0) ctx.vd.push({ depth: body.pathSinceImpact, speed: body.speed });
+      if (body.id === 0 && step % ctx.res.sampleEvery === 0) ctx.vd.push({ depth: body.pathSinceImpact, speed: body.speed });
       updateExpansion(body, medium);
       updateYawAndBreakup(ctx, body, medium);
     }
@@ -527,7 +531,7 @@ function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void
         event(ctx, body, 'yaw', { layer: body.layer });
       }
       const flip = P.yawFlipDistanceM * Math.max(0.15, medium.yawNeckScale);
-      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * P.stepS);
+      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * ctx.res.stepS);
     }
   }
 

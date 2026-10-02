@@ -55,3 +55,27 @@ export const PHYSICS = {
   /** Permanent wound channel radius as a multiple of the bullet's current radius. */
   channelRadiusFactor: 1.4,
 } as const;
+
+/** How finely a shot is integrated and recorded. */
+export interface SimResolution {
+  /** Integration step, in seconds. */
+  stepS: number;
+  /** Keep one keyframe every N steps (plus every event). */
+  sampleEvery: number;
+  /** Distance between temporary-cavity samples along the wound path, in metres. */
+  cavitySampleM: number;
+}
+
+/** The web default: 1 µs steps, a keyframe every 5 µs. */
+export const STANDARD_RESOLUTION: SimResolution = {
+  stepS: PHYSICS.stepS,
+  sampleEvery: PHYSICS.sampleEvery,
+  cavitySampleM: PHYSICS.cavitySampleM,
+};
+
+/** Ultra (#38): 0.25 µs steps, a keyframe every 2 µs and twice the cavity samples. */
+export const ULTRA_RESOLUTION: SimResolution = {
+  stepS: PHYSICS.stepS / 4,
+  sampleEvery: 8,
+  cavitySampleM: PHYSICS.cavitySampleM / 2,
+};

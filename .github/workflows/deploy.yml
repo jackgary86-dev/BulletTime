@@ -23,6 +23,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          # The web build doesn't need the Electron binary (#38); release.yml downloads it.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       - run: npm test
       # Typechecks, then builds with the /BulletTime/ base path (see vite.config.ts).
       - run: npm run build

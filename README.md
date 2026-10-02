@@ -51,9 +51,23 @@ npm test           # Vitest physics suite
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the production build
 npm run build:itch # itch.io upload: release/bullettime-web-<version>.zip
+npm run desktop    # build and open the desktop app
+npm run dist       # desktop installer for this OS, into release/
 ```
 
 Every push to `main` is tested, built and published to GitHub Pages by `.github/workflows/deploy.yml`. Production builds use the base path `/BulletTime/`. Set `VITE_BASE=/` when building for a custom domain.
+
+## Desktop app
+
+The desktop app wraps the same build in Electron (`electron/main.cjs`), so it installs and runs offline. It asks for the high-performance GPU, ignores the GPU blocklist and never throttles in the background. F11 toggles fullscreen.
+
+It defaults to the **Ultra** quality tier, which the web build also offers with `?ultra` in the URL:
+
+- **Physics:** a 0.25 µs integration step instead of 1 µs, a keyframe every 2 µs instead of 5 µs, and twice as many temporary-cavity samples. The tuning baseline tests run at both resolutions.
+- **Particles:** 1.6× the particles of High, with each look's cap doubled.
+- **Rendering:** full device pixel ratio, 4096 px shadows, bloom, ambient occlusion and depth of field.
+
+`npm run dist` builds the installer for the current OS: Windows NSIS `.exe`, macOS `.dmg`, Linux `AppImage` and `.deb`. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three on GitHub's runners and attaches them, plus the itch.io zip, to a draft GitHub release. The installers are unsigned: Windows SmartScreen and macOS Gatekeeper will warn until you add a code-signing certificate (`CSC_LINK`/`CSC_KEY_PASSWORD` secrets) and, for macOS, Apple notarization. Electron's and Chromium's own license files ship next to the executable.
 
 ## Publishing on itch.io
 
