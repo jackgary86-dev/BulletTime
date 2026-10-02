@@ -97,7 +97,7 @@ function bootstrap(): void {
         standOffM: STAND_OFF_M,
       });
       shot.load(timeline, spec);
-      if (targetGroup) effects.load(timeline, targetGroup, layers.map((l) => l.medium));
+      if (targetGroup) effects.load(timeline, targetGroup, layers, angleDeg);
       // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
       timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
       playback.start(timeline);

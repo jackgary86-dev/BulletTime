@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import type { MediumSpec } from '../data/media';
 import { GEL_BODY_NAME, WATER_BODY_NAME } from '../models/targets';
+import type { TargetLayer } from '../sim/engine';
 import type { Timeline } from '../sim/types';
+import { GlassCracks } from './glassEffect';
 import { GelEffect } from './gelEffect';
 import { HoleMarks } from './holes';
 import { loadHardEffect } from './hardEffect';
@@ -18,14 +19,16 @@ export class TargetEffects {
   readonly particles = new ParticleSystem();
   private readonly gel = new GelEffect(this.particles);
   private readonly holes = new HoleMarks();
+  private readonly glass = new GlassCracks();
 
   constructor() {
     this.group.name = 'target-effects';
-    this.group.add(this.particles.group, this.gel.group, this.holes.group);
+    this.group.add(this.particles.group, this.gel.group, this.holes.group, this.glass.group);
   }
 
-  load(timeline: Timeline, target: THREE.Group, layers: MediumSpec[]): void {
+  load(timeline: Timeline, target: THREE.Group, targetLayers: TargetLayer[], angleDeg: number): void {
     this.clear();
+    const layers = targetLayers.map((l) => l.medium);
     layers.forEach((medium, layer) => {
       if (medium.behaviour === 'gel') {
         const body = target.getObjectByName(GEL_BODY_NAME);
@@ -40,6 +43,7 @@ export class TargetEffects {
       }
     });
     loadHardEffect(timeline, layers, this.particles, this.holes);
+    this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
   }
 
   /** Sim time when the last effect has settled (dust cleared, debris gone). */
@@ -50,12 +54,14 @@ export class TargetEffects {
   clear(): void {
     this.gel.clear();
     this.holes.clear();
+    this.glass.clear();
     this.particles.clear();
   }
 
   update(t: number): void {
     this.gel.update(t);
     this.holes.update(t);
+    this.glass.update(t);
     this.particles.update(t);
   }
 }
