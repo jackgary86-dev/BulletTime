@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import type { MediumSpec } from '../data/media';
+import type { MediumLook, MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { concreteMaps, gelSurfaceMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap, woodTexture } from './textures';
+import { concreteMaps, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
 export { standSteel } from './stands';
 
@@ -44,14 +44,14 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number): THREE
   group.rotation.y = THREE.MathUtils.degToRad(angleDeg);
 
   const offsets = stackOffsets(layers);
-  layers.forEach(({ medium: spec, thickness }, i) => {
+  layers.forEach(({ medium: spec, thickness, look }, i) => {
     const layer = new THREE.Group();
     layer.name = layerGroupName(i);
     layer.position.x = offsets[i];
-    const body = buildBody(spec, thickness);
+    const body = buildBody(spec, thickness, look ?? spec.look);
     body.position.x = thickness / 2;
     layer.add(body);
-    layer.add(createSupport(spec, thickness, SHOT_Y));
+    layer.add(createSupport(spec, thickness, SHOT_Y, look ?? spec.look));
     group.add(layer);
   });
 
@@ -75,11 +75,11 @@ export function disposeTarget(group: THREE.Group): void {
 }
 
 /** The target body, centred on its own origin, thickness along x. */
-function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
+function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3D {
   const h = spec.heightM;
   const w = spec.widthM;
 
-  switch (spec.look) {
+  switch (look) {
     case 'gel': {
       // Finely subdivided so the gel effect can bulge the block and pull out the exit cone.
       const surface = gelSurfaceMaps();
@@ -200,20 +200,48 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
 
     case 'pine':
     case 'oak': {
-      const map = woodTexture(spec.look);
-      return new THREE.Mesh(
-        new THREE.BoxGeometry(t, h, w),
-        new THREE.MeshStandardMaterial({ map, roughness: spec.look === 'oak' ? 0.6 : 0.72 }),
-      );
+      const wood = woodMaps(look);
+      const roughness = look === 'oak' ? 0.75 : 0.85;
+      const grain = new THREE.MeshStandardMaterial({
+        map: wood.map,
+        roughnessMap: wood.roughnessMap,
+        normalMap: wood.normalMap,
+        normalScale: new THREE.Vector2(0.5, 0.5),
+        roughness,
+      });
+      const endGrain = new THREE.MeshStandardMaterial({ map: wood.endGrain, roughness: 0.95 });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z. The grain runs up the plank, so the cut ends are ±y.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [grain, grain, endGrain, endGrain, grain, grain]);
     }
 
     case 'drywall': {
       // Paper faces front and back, exposed gypsum on the cut edges.
-      const paper = new THREE.MeshStandardMaterial({ color: 0xece8de, roughness: 0.9 });
-      const backPaper = new THREE.MeshStandardMaterial({ color: 0xa79f8c, roughness: 0.95 });
-      const gypsum = new THREE.MeshStandardMaterial({ color: 0xcfcac0, roughness: 1 });
-      // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
+      const front = drywallPaperMaps('front');
+      const back = drywallPaperMaps('back');
+      const paper = new THREE.MeshStandardMaterial({ map: front.map, normalMap: front.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughness: 0.92 });
+      const backPaper = new THREE.MeshStandardMaterial({ map: back.map, normalMap: back.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughness: 0.95 });
+      const gypsum = new THREE.MeshStandardMaterial({ color: 0xd9d4c8, roughness: 1 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [backPaper, paper, gypsum, gypsum, gypsum, gypsum]);
+    }
+
+    case 'carDoorOuter':
+    case 'carDoorInner': {
+      if (look === 'carDoorInner') {
+        // The inner skin: grey e-coat primer, never seen in the showroom.
+        return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: 0x55595e, roughness: 0.6, metalness: 0.3 }));
+      }
+      // Deep red metallic paint under a glossy clear coat on the outside, primer inside.
+      const paint = new THREE.MeshPhysicalMaterial({
+        color: 0xa3141f,
+        metalness: 0.4,
+        roughness: 0.38,
+        normalMap: paintFlakeNormalMap(),
+        normalScale: new THREE.Vector2(0.2, 0.2),
+        clearcoat: 1,
+        clearcoatRoughness: 0.03,
+      });
+      const primer = new THREE.MeshStandardMaterial({ color: 0x55595e, roughness: 0.6, metalness: 0.3 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [primer, paint, paint, paint, paint, paint]);
     }
 
     case 'concrete': {
