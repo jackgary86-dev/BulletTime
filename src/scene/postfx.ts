@@ -5,6 +5,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShockwavePass } from './shockwavePass';
 
 export interface PostFx {
   composer: EffectComposer;
@@ -12,6 +13,8 @@ export interface PostFx {
   ambientOcclusion: GTAOPass;
   bloom: UnrealBloomPass;
   depthOfField: BokehPass;
+  /** The muzzle blast's refracting shell (#65); enabled only while it is in the air. */
+  shockwave: ShockwavePass;
   /** Sets the depth-of-field focus distance in metres from the camera. */
   setFocus(distance: number): void;
   setSize(width: number, height: number): void;
@@ -51,6 +54,9 @@ export function createPostFx(
   });
   composer.addPass(depthOfField);
 
+  const shockwave = new ShockwavePass(camera);
+  composer.addPass(shockwave);
+
   composer.addPass(new OutputPass());
 
   const focusUniform = (depthOfField.uniforms as Record<string, THREE.IUniform<number>>).focus;
@@ -60,6 +66,7 @@ export function createPostFx(
     ambientOcclusion,
     bloom,
     depthOfField,
+    shockwave,
     setFocus(distance) {
       focusUniform.value = distance;
     },

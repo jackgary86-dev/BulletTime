@@ -4,6 +4,7 @@ import { physicsLayers, stackDepth } from './data/stacks';
 import type { BulletSpec } from './data/bullets';
 import { MuzzleEffect } from './fx/muzzle';
 import { ShotRenderer } from './fx/shotRenderer';
+import type { BurstSpec } from './fx/particles';
 import { TargetEffects } from './fx/targetEffects';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
@@ -152,6 +153,7 @@ export class Lane {
     this.lastFireStart = fireStart;
     this.shot.load(timeline);
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
+    for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
     timeline.duration = Math.max(timeline.duration, Math.min(this.effects.endTime, timeline.duration + EFFECT_TAIL_S));
     return timeline;
@@ -176,7 +178,34 @@ export class Lane {
     const current = timeline && t !== null ? activeShot(timeline, t) : null;
     if (current) this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y + current.aim.y, current.aim.z));
     this.muzzle.update(current && t !== null ? t - current.start : null, camera);
+    const { shockwave } = this.postFx;
+    shockwave.enabled = this.muzzle.shock.strength > 0;
+    shockwave.center.copy(this.muzzle.shock.center);
+    shockwave.radius = this.muzzle.shock.radius;
+    shockwave.strength = this.muzzle.shock.strength;
   }
+}
+
+/** The grey puff of powder smoke that rolls out of the barrel behind the flash (#63, #65). */
+function muzzleSmoke(start: number, aim: { y: number; z: number }): BurstSpec {
+  return {
+    look: 'dust',
+    t0: start + 60e-6,
+    duration: 600e-6,
+    origin: new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M + 0.01, SHOT_Y + aim.y, aim.z),
+    originJitter: 0.008,
+    axis: new THREE.Vector3(1, 0, 0),
+    spread: 0.7,
+    count: 30,
+    speed: [3, 25],
+    size: [0.012, 0.03],
+    life: [3e-3, 8e-3],
+    drag: 250,
+    gravity: 0,
+    color: 0x9a9893,
+    colorJitter: 0.2,
+    grow: 4,
+  };
 }
 
 /** Height of the shot line: the usual bench height, or the dummy region being shot. */
