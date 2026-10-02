@@ -121,7 +121,7 @@ const SOFTBOXES: SoftboxSpec[] = [
     target: TARGET_FOCUS,
     width: 0.25,
     height: 1.1,
-    color: 0xa9c6ff,
+    color: 0xc8d6ee,
     intensity: 9,
     reflection: 4,
   },

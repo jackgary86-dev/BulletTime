@@ -3,7 +3,7 @@ import type { MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { burlapTexture, concreteTexture, gelSurfaceMaps, steelTexture, waterRippleNormalMap, woodTexture } from './textures';
+import { burlapTexture, concreteTexture, gelSurfaceMaps, steelPlateMaps, waterRippleNormalMap, woodTexture } from './textures';
 
 export { standSteel } from './stands';
 
@@ -247,18 +247,29 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
 
     case 'mildSteel':
     case 'ar500': {
-      const painted = spec.look === 'ar500';
-      const map = steelTexture(painted ? 'painted' : 'mill');
-      return new THREE.Mesh(
-        new THREE.BoxGeometry(t, h, w),
-        new THREE.MeshStandardMaterial({
-          map,
-          metalness: painted ? 0.15 : 0.7,
-          roughness: painted ? 0.7 : 0.38,
-          // The studio is dark, so lift bare steel's reflections enough to read as metal.
-          envMapIntensity: painted ? 1 : 3,
-        }),
-      );
+      // AR500 targets are painted on both faces; their cut edges and mild steel show bare mill scale.
+      const mill = steelPlateMaps('mill');
+      const scale = new THREE.MeshStandardMaterial({
+        map: mill.map,
+        roughnessMap: mill.roughnessMap,
+        normalMap: mill.normalMap,
+        normalScale: new THREE.Vector2(0.6, 0.6),
+        metalness: 0.75,
+        roughness: 1,
+        envMapIntensity: 2,
+      });
+      if (spec.look === 'mildSteel') return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale);
+      const paint = steelPlateMaps('painted');
+      const painted = new THREE.MeshStandardMaterial({
+        map: paint.map,
+        roughnessMap: paint.roughnessMap,
+        normalMap: paint.normalMap,
+        normalScale: new THREE.Vector2(0.4, 0.4),
+        metalness: 0,
+        roughness: 1,
+      });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [painted, painted, scale, scale, scale, scale]);
     }
 
     case 'sandbag':

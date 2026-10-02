@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { cached, canvas, normalMapFromHeight, toTexture } from '../models/textures';
+import { cached, cachedMaps, canvas, normalMapFromHeight, toTexture, type MaterialMaps } from '../models/textures';
 import { seededRandom } from '../sim/random';
 
 /**
@@ -7,22 +7,7 @@ import { seededRandom } from '../sim/random';
  * is seeded so the room always looks the same, and built once then cached.
  */
 
-export interface SurfaceMaps {
-  map: THREE.Texture;
-  roughnessMap: THREE.Texture;
-  normalMap: THREE.Texture;
-}
-
-/** Caches a set of maps built together, so each is made once per page. */
-function cachedMaps(key: string, make: () => SurfaceMaps): SurfaceMaps {
-  let built: SurfaceMaps | null = null;
-  const get = () => (built ??= make());
-  return {
-    map: cached(`${key}:map`, () => get().map),
-    roughnessMap: cached(`${key}:rough`, () => get().roughnessMap),
-    normalMap: cached(`${key}:normal`, () => get().normalMap),
-  };
-}
+export type SurfaceMaps = MaterialMaps;
 
 /** Soft value noise in [0, 1], tileable at `period` cells. */
 function valueNoise(seed: number, period: number): (x: number, y: number) => number {

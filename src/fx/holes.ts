@@ -49,6 +49,15 @@ export interface HoleSpec {
   };
   /** Draw only the crater and cracks, not a dark opening (a dent or a pit that did not go through). */
   noOpening?: boolean;
+  /** Radial streaks on the face (lead splash). Drawn like cracks but straighter and tapering. */
+  streaks?: {
+    count: number;
+    length: [number, number];
+    width: number;
+    color: THREE.ColorRepresentation;
+  };
+  /** A hot ring round a perforation that glows and cools over `cool` seconds (#58). */
+  glow?: { radius: number; cool: number };
   /** Skip the soft dark bruise ring around the hole. */
   noHalo?: boolean;
   seed: number;
@@ -58,7 +67,7 @@ const OFFSET = 0.0006;
 
 export class HoleMarks {
   readonly group = new THREE.Group();
-  private readonly holes: { t: number; object: THREE.Object3D }[] = [];
+  private readonly holes: { t: number; object: THREE.Object3D; glow?: { material: THREE.MeshBasicMaterial; cool: number } }[] = [];
 
   constructor() {
     this.group.name = 'holes';
@@ -152,6 +161,44 @@ export class HoleMarks {
       object.add(cracks);
     }
 
+    if (spec.streaks) {
+      const c = spec.streaks;
+      const streaks = new THREE.InstancedMesh(
+        new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, -0.5), new THREE.Vector2(1, 0), new THREE.Vector2(0, 0.5)])),
+        new THREE.MeshStandardMaterial({ color: c.color, roughness: 0.85, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 }),
+        c.count,
+      );
+      const m = new THREE.Matrix4();
+      for (let i = 0; i < c.count; i++) {
+        // A thin spike pointing outward from the impact, wide at its root.
+        const a = (i / c.count) * Math.PI * 2 + (rand() - 0.5) * 0.5;
+        const length = c.length[0] + (c.length[1] - c.length[0]) * rand();
+        m.compose(
+          new THREE.Vector3(Math.cos(a) * spec.radius * 0.5, Math.sin(a) * spec.radius * 0.5 * stretch, 0),
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a),
+          new THREE.Vector3(length, c.width * (0.6 + 0.8 * rand()), 1),
+        );
+        streaks.setMatrixAt(i, m);
+      }
+      object.add(streaks);
+    }
+
+    let glow: { material: THREE.MeshBasicMaterial; cool: number } | undefined;
+    if (spec.glow) {
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xff7a1a,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+      });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(spec.radius * 0.6, spec.glow.radius, 32), material);
+      ring.scale.y = stretch;
+      object.add(ring);
+      glow = { material, cool: spec.glow.cool };
+    }
+
     // A soft scorch/bruise ring around the opening.
     const halo = new THREE.Mesh(
       new THREE.RingGeometry(spec.radius * 0.9, spec.radius * (1.8 + spec.ragged), 32),
@@ -196,7 +243,7 @@ export class HoleMarks {
     object.renderOrder = this.holes.length;
     object.traverse((o) => (o.renderOrder = this.holes.length));
     this.group.add(object);
-    this.holes.push({ t: spec.t, object });
+    this.holes.push({ t: spec.t, object, glow });
   }
 
   clear(): void {
@@ -212,6 +259,14 @@ export class HoleMarks {
   }
 
   update(t: number): void {
-    for (const hole of this.holes) hole.object.visible = t >= hole.t;
+    for (const hole of this.holes) {
+      hole.object.visible = t >= hole.t;
+      if (hole.glow) {
+        // White-hot at first, cooling through orange to nothing.
+        const heat = Math.exp(-Math.max(0, t - hole.t) / hole.glow.cool);
+        hole.glow.material.opacity = heat;
+        hole.glow.material.color.setRGB(1, 0.35 + 0.6 * heat * heat, 0.08 + 0.7 * heat ** 4).multiplyScalar(1 + 2 * heat);
+      }
+    }
   }
 }
