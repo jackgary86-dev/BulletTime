@@ -1,0 +1,352 @@
+import * as THREE from 'three';
+import type { CavitySample, Timeline } from '../sim/types';
+import { crinkleNormalMap } from './crinkleTexture';
+import type { ParticleSystem } from './particles';
+
+/**
+ * The ballistic gelatin showcase: a crinkled, spindle-shaped temporary cavity
+ * that balloons after the bullet passes, then collapses and pulses down to the
+ * permanent wound channel; the block bulging around it; a splash at the entry
+ * face; the exit face drawn out into a cone on a pass-through; and gel debris.
+ * Everything is a pure function of sim time, so it scrubs and replays.
+ *
+ * Visual target: a high-speed camera frame of a gel block at peak cavity
+ * (see issue #8).
+ */
+
+/** Time for a cavity section to reach its peak: base + per metre of radius, in seconds. */
+const RISE_BASE_S = 0.35e-3;
+const RISE_PER_M_S = 25e-3;
+/** Each collapse–rebound pulse is this many rise times long, and decays at this rate. */
+const PULSE_PERIOD = 1.6;
+const PULSE_DECAY = 2.4;
+/** Block cross-section grows by this fraction of the cavity's excess radius. */
+const BULGE_GAIN = 0.45;
+/** The cavity starts to push the block out once it passes this fraction of the half-width. */
+const BULGE_ONSET = 0.35;
+/** Keep the cavity wall at least this far inside the (bulged) block surface, in metres. */
+const WALL_MARGIN = 0.006;
+/** Exit cone: base radius, peak length cap and how long it holds before springing back, in metres / seconds. */
+const CONE_RADIUS = 0.04;
+const CONE_MAX = 0.12;
+const CONE_SPRING_S = 1.6e-3;
+/** Entry splash: crater depth on the front face and how long it lasts. */
+const SPLASH_DEPTH = 0.01;
+const SPLASH_S = 0.8e-3;
+
+const RING_SEGMENTS = 40;
+
+interface Ring {
+  centre: THREE.Vector3;
+  t: number;
+  peak: number;
+  channel: number;
+  rise: number;
+}
+
+export class GelEffect {
+  readonly group = new THREE.Group();
+  private rings: Ring[] = [];
+  private radii = new Float32Array(0);
+  private block: THREE.Mesh | null = null;
+  private blockRest: Float32Array | null = null;
+  /** Block-local transform: world x of the block centre. */
+  private blockCentre = new THREE.Vector3();
+  private half = { x: 0, y: 0, z: 0 };
+  private impactT = Infinity;
+  private exitT = Infinity;
+  private exitSpeed = 0;
+  private readonly material: THREE.MeshPhysicalMaterial;
+
+  constructor(private readonly particles: ParticleSystem) {
+    this.group.name = 'gel-effect';
+    const normalMap = crinkleNormalMap();
+    normalMap.repeat.set(10, 3);
+    this.material = new THREE.MeshPhysicalMaterial({
+      color: 0x6e5638,
+      roughness: 0.22,
+      metalness: 0,
+      normalMap,
+      normalScale: new THREE.Vector2(1.6, 1.6),
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.3,
+      side: THREE.DoubleSide,
+    });
+  }
+
+  /**
+   * Sets up the effect for a shot. `block` is the gel mesh (centred at its own
+   * origin, thickness along x) and `layer` the gel's index in the target stack.
+   */
+  load(timeline: Timeline, block: THREE.Mesh, layer: number): void {
+    this.clear();
+    const samples = timeline.cavity.filter((c) => c.layer === layer);
+    if (samples.length < 2) return;
+
+    // Only the main projectile's path draws the big cavity (pellets each leave their own small one).
+    const byTrack = groupByPath(samples);
+    block.updateWorldMatrix(true, false);
+    this.blockCentre.setFromMatrixPosition(block.matrixWorld);
+    const box = (block.geometry as THREE.BoxGeometry).parameters;
+    this.half = { x: box.width / 2, y: box.height / 2, z: box.depth / 2 };
+    this.block = block;
+    this.blockRest = Float32Array.from(block.geometry.attributes.position.array as Float32Array);
+
+    const allRings: Ring[] = [];
+    for (const path of byTrack) {
+      const rings = path.map((c) => toRing(c));
+      // Close the entry end with a zero-radius ring at the face.
+      const first = rings[0];
+      rings.unshift({ ...first, centre: first.centre.clone().setX(this.blockCentre.x - this.half.x), peak: 0, channel: 0 });
+      allRings.push(...rings);
+      this.group.add(this.buildCavityMesh(rings));
+    }
+    this.rings = allRings.sort((a, b) => a.centre.x - b.centre.x);
+    this.radii = new Float32Array(this.rings.length);
+
+    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer);
+    const exit = timeline.events.find((e) => e.type === 'exit' && e.layer === layer && e.trackId === 0);
+    this.impactT = impact?.t ?? Infinity;
+    if (exit) {
+      this.exitT = exit.t;
+      this.exitSpeed = exit.speed;
+    }
+    this.addDebris(timeline, layer);
+  }
+
+  clear(): void {
+    for (const child of [...this.group.children]) {
+      this.group.remove(child);
+      (child as THREE.Mesh).geometry?.dispose();
+    }
+    if (this.block && this.blockRest) {
+      const pos = this.block.geometry.attributes.position;
+      (pos.array as Float32Array).set(this.blockRest);
+      pos.needsUpdate = true;
+      this.block.geometry.computeVertexNormals();
+    }
+    this.block = null;
+    this.blockRest = null;
+    this.rings = [];
+    this.impactT = Infinity;
+    this.exitT = Infinity;
+  }
+
+  update(t: number): void {
+    if (!this.rings.length) return;
+    this.updateRadii(t);
+    this.deformBlock(t);
+    for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
+  }
+
+  /** Cavity radius of one section at time t: rises to its peak, then pulses down to the channel. */
+  private radiusAt(ring: Ring, t: number): number {
+    const age = t - ring.t;
+    if (age <= 0) return 0;
+    if (age < ring.rise) return Math.max(ring.channel, ring.peak * Math.sin((Math.PI / 2) * (age / ring.rise)));
+    const after = (age - ring.rise) / ring.rise;
+    const envelope = Math.exp(-after / PULSE_DECAY);
+    const wave = 0.5 + 0.5 * Math.cos((Math.PI * 2 * after) / PULSE_PERIOD);
+    return ring.channel + (ring.peak - ring.channel) * envelope * wave;
+  }
+
+  private updateRadii(t: number): void {
+    for (let i = 0; i < this.rings.length; i++) this.radii[i] = this.radiusAt(this.rings[i], t);
+  }
+
+  /** Current cavity radius at block-local x, from the nearest rings. */
+  private radiusAtX(localX: number): number {
+    const worldX = localX + this.blockCentre.x;
+    const rings = this.rings;
+    let best = 0;
+    // Rings are sorted by x and ~5 mm apart; a short scan around the estimate is enough.
+    let lo = 0;
+    let hi = rings.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (rings[mid].centre.x <= worldX) lo = mid;
+      else hi = mid;
+    }
+    for (let i = Math.max(0, lo - 2); i <= Math.min(rings.length - 1, hi + 2); i++) {
+      const d = Math.abs(rings[i].centre.x - worldX);
+      const weight = Math.max(0, 1 - d / 0.012);
+      best = Math.max(best, this.radii[i] * weight);
+    }
+    return best;
+  }
+
+  private bulgeAt(radius: number): number {
+    const halfMin = Math.min(this.half.y, this.half.z);
+    return BULGE_GAIN * Math.max(0, radius - BULGE_ONSET * halfMin);
+  }
+
+  private deformBlock(t: number): void {
+    const block = this.block;
+    const rest = this.blockRest;
+    if (!block || !rest) return;
+    const pos = block.geometry.attributes.position;
+    const arr = pos.array as Float32Array;
+    const halfMin = Math.min(this.half.y, this.half.z);
+
+    const splashAge = t - this.impactT;
+    const splash = splashAge > 0 && splashAge < SPLASH_S ? SPLASH_DEPTH * Math.sin((Math.PI * splashAge) / SPLASH_S) : 0;
+    const cone = this.coneLength(t);
+
+    for (let i = 0; i < arr.length; i += 3) {
+      const x = rest[i];
+      const y = rest[i + 1];
+      const z = rest[i + 2];
+      const bulge = this.bulgeAt(this.radiusAtX(x));
+      const s = 1 + bulge / halfMin;
+      let nx = x;
+      const rho = Math.hypot(y, z);
+      if (x <= -this.half.x + 1e-5 && splash > 0) {
+        nx -= splash * Math.max(0, 1 - rho / (CONE_RADIUS * 0.8)) ** 2;
+      } else if (x >= this.half.x - 1e-5 && cone > 0) {
+        nx += cone * Math.max(0, 1 - rho / CONE_RADIUS) ** 2.2;
+      }
+      arr[i] = nx;
+      arr[i + 1] = y * s;
+      arr[i + 2] = z * s;
+    }
+    pos.needsUpdate = true;
+    block.geometry.computeVertexNormals();
+  }
+
+  /** Exit cone length: shoots out with the bullet, holds, then springs back with a wobble. */
+  private coneLength(t: number): number {
+    const age = t - this.exitT;
+    if (age <= 0) return 0;
+    const peak = Math.min(CONE_MAX, 0.00012 * this.exitSpeed + 0.03);
+    const grow = Math.min(1, (age * this.exitSpeed * 0.5) / peak);
+    if (age < CONE_SPRING_S) return peak * grow;
+    const after = (age - CONE_SPRING_S) / CONE_SPRING_S;
+    return peak * Math.exp(-after * 1.5) * (0.6 + 0.4 * Math.cos(after * Math.PI * 2));
+  }
+
+  private buildCavityMesh(rings: Ring[]): THREE.Mesh {
+    const n = rings.length;
+    const positions = new Float32Array(n * RING_SEGMENTS * 3);
+    const uvs = new Float32Array(n * RING_SEGMENTS * 2);
+    const index: number[] = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < RING_SEGMENTS; j++) {
+        uvs[(i * RING_SEGMENTS + j) * 2] = i / (n - 1);
+        uvs[(i * RING_SEGMENTS + j) * 2 + 1] = j / RING_SEGMENTS;
+        if (i < n - 1) {
+          const a = i * RING_SEGMENTS + j;
+          const b = i * RING_SEGMENTS + ((j + 1) % RING_SEGMENTS);
+          const c = a + RING_SEGMENTS;
+          const d = b + RING_SEGMENTS;
+          index.push(a, c, b, b, c, d);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geometry.setIndex(index);
+    const mesh = new THREE.Mesh(geometry, this.material);
+    mesh.frustumCulled = false;
+    mesh.userData.rings = rings;
+    // Per-vertex wrinkle offsets so the silhouette crumples, not just the shading.
+    const wrinkle = new Float32Array(n * RING_SEGMENTS);
+    for (let k = 0; k < wrinkle.length; k++) wrinkle[k] = Math.abs((Math.sin(k * 12.9898) * 43758.5453) % 1);
+    mesh.userData.wrinkle = wrinkle;
+    return mesh;
+  }
+
+  private updateCavityMesh(mesh: THREE.Mesh, t: number): void {
+    const rings = mesh.userData.rings as Ring[];
+    const wrinkle = mesh.userData.wrinkle as Float32Array;
+    const pos = mesh.geometry.attributes.position;
+    const arr = pos.array as Float32Array;
+    let visible = false;
+    for (let i = 0; i < rings.length; i++) {
+      const ring = rings[i];
+      let r = this.radiusAt(ring, t);
+      if (r > 0) visible = true;
+      // Stay inside the block walls as they bulge.
+      const limit = Math.min(this.half.y, this.half.z) + this.bulgeAt(r) - WALL_MARGIN;
+      r = Math.min(r, Math.max(0, limit));
+      for (let j = 0; j < RING_SEGMENTS; j++) {
+        const a = (j / RING_SEGMENTS) * Math.PI * 2;
+        const crumple = 1 + 0.07 * (wrinkle[i * RING_SEGMENTS + j] - 0.5) * Math.min(1, r / 0.01);
+        const k = (i * RING_SEGMENTS + j) * 3;
+        arr[k] = ring.centre.x;
+        arr[k + 1] = ring.centre.y + Math.sin(a) * r * crumple;
+        arr[k + 2] = ring.centre.z + Math.cos(a) * r * crumple;
+      }
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.visible = visible;
+  }
+
+  private addDebris(timeline: Timeline, layer: number): void {
+    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer && e.trackId === 0);
+    const gelColour = 0xe8c48a;
+    if (impact) {
+      const energy = 0.5 * timeline.tracks[0].massKg * impact.speed ** 2;
+      const scale = Math.min(1, Math.sqrt(energy / 3000));
+      this.particles.add({
+        look: 'droplet',
+        t0: impact.t + 40e-6,
+        duration: 600e-6,
+        origin: new THREE.Vector3(impact.pos.x - 0.002, impact.pos.y, impact.pos.z),
+        axis: new THREE.Vector3(-1, 0.15, 0),
+        spread: 0.9,
+        count: Math.round(40 + 160 * scale),
+        speed: [3, 10 + 40 * scale],
+        size: [0.0012, 0.004],
+        life: [3e-3, 8e-3],
+        drag: 300,
+        gravity: 9.8,
+        color: gelColour,
+      });
+    }
+    if (this.exitT < Infinity) {
+      const exit = timeline.events.find((e) => e.type === 'exit' && e.layer === layer && e.trackId === 0)!;
+      this.particles.add({
+        look: 'droplet',
+        t0: exit.t + 100e-6,
+        duration: 1.2e-3,
+        origin: new THREE.Vector3(exit.pos.x + 0.02, exit.pos.y, exit.pos.z),
+        originJitter: 0.01,
+        axis: new THREE.Vector3(1, 0, 0),
+        spread: 0.45,
+        count: Math.round(60 + Math.min(200, exit.speed / 2)),
+        speed: [5, 15 + exit.speed * 0.25],
+        size: [0.001, 0.0035],
+        life: [3e-3, 8e-3],
+        drag: 250,
+        gravity: 9.8,
+        color: gelColour,
+      });
+    }
+  }
+}
+
+function toRing(c: CavitySample): Ring {
+  return {
+    centre: new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z),
+    t: c.t,
+    peak: c.radius,
+    channel: c.channelRadius,
+    rise: RISE_BASE_S + RISE_PER_M_S * c.radius,
+  };
+}
+
+/** Splits cavity samples into one ordered path per projectile (consecutive samples close together). */
+function groupByPath(samples: CavitySample[]): CavitySample[][] {
+  const paths: CavitySample[][] = [];
+  for (const s of samples) {
+    const path = paths.find((p) => {
+      const last = p[p.length - 1];
+      return Math.hypot(last.pos.x - s.pos.x, last.pos.y - s.pos.y, last.pos.z - s.pos.z) < 0.02 && s.t >= last.t;
+    });
+    if (path) path.push(s);
+    else paths.push([s]);
+  }
+  return paths.filter((p) => p.length >= 2);
+}

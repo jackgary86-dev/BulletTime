@@ -7,6 +7,9 @@ export const SHOT_Y = 0.16;
 /** World x of every target's front face; the lab grid's zero mark sits here. */
 export const TARGET_FRONT_X = -0.2;
 
+/** Name of the gel block mesh, so effects can find and deform it. */
+export const GEL_BODY_NAME = 'gel-body';
+
 const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
 
 /**
@@ -53,9 +56,10 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
   const w = spec.widthM;
 
   switch (spec.look) {
-    case 'gel':
-      return new THREE.Mesh(
-        new THREE.BoxGeometry(t, h, w),
+    case 'gel': {
+      // Finely subdivided so the gel effect can bulge the block and pull out the exit cone.
+      const gel = new THREE.Mesh(
+        new THREE.BoxGeometry(t, h, w, Math.ceil(t / 0.005), 24, 24),
         new THREE.MeshPhysicalMaterial({
           color: 0xfff3dc,
           roughness: 0.08,
@@ -69,6 +73,9 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
           clearcoatRoughness: 0.1,
         }),
       );
+      gel.name = GEL_BODY_NAME;
+      return gel;
+    }
 
     case 'waterTank': {
       const tank = new THREE.Group();
