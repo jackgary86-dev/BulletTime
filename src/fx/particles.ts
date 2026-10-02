@@ -8,7 +8,10 @@ import { seededRandom } from '../sim/random';
  * Each look is one InstancedMesh, so thousands of particles cost a few draw calls.
  */
 
-export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain' | 'flake';
+export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain' | 'flake' | 'vapour';
+
+/** Looks drawn as soft, camera-facing cloud cards. */
+const CLOUD: ReadonlySet<ParticleLook> = new Set(['dust', 'vapour']);
 
 /** Height of the lab floor; debris that reaches it stops there instead of falling through. */
 export const FLOOR_Y = 0;
@@ -109,7 +112,9 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
       cap: 2500,
     },
     // Soft, lit puffs: camera-facing cards with a billowy alpha, fading out as they spread.
-    dust: { geometry: dustGeometry(2500), material: dustMaterial(), cap: 2500 },
+    dust: { geometry: dustGeometry(2500), material: dustMaterial(0.85), cap: 2500 },
+    // The faint heat-shimmer and vapour trail a bullet leaves in the air (#72).
+    vapour: { geometry: dustGeometry(1200), material: dustMaterial(0.16), cap: 1200 },
     spark: {
       geometry: new THREE.BoxGeometry(1, 0.15, 0.15),
       material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
@@ -274,7 +279,7 @@ export class ParticleSystem {
     this.flashLight.intensity = best;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
-      const fade = look === 'dust' ? (mesh.geometry.getAttribute('instanceFade') as THREE.InstancedBufferAttribute) : null;
+      const fade = CLOUD.has(look) ? (mesh.geometry.getAttribute('instanceFade') as THREE.InstancedBufferAttribute) : null;
       let n = 0;
       for (const q of list) {
         const age = t - q.t0;
@@ -292,8 +297,8 @@ export class ParticleSystem {
         else positionAt(q, age, tmpPos);
         const lifeK = age / q.life;
         // Clouds billow fast at first and slow as they spread.
-        const size = q.size * (1 + (q.grow - 1) * (look === 'dust' ? Math.sqrt(lifeK) : lifeK));
-        if (look === 'dust') {
+        const size = q.size * (1 + (q.grow - 1) * (CLOUD.has(look) ? Math.sqrt(lifeK) : lifeK));
+        if (CLOUD.has(look)) {
           // Thickens over the first moments, then thins away rather than popping off.
           fade!.setX(n, Math.min(1, lifeK * 8) * (1 - lifeK) ** 1.5);
           // Each card keeps a roll in its matrix; the shader turns it to face the camera.
@@ -511,11 +516,11 @@ function dustGeometry(cap: number): THREE.BufferGeometry {
  * from the centre so the puff is shaded like a ball of smoke, lit on the side
  * facing the lights.
  */
-function dustMaterial(): THREE.MeshStandardMaterial {
+function dustMaterial(opacity: number): THREE.MeshStandardMaterial {
   const material = new THREE.MeshStandardMaterial({
     roughness: 1,
     transparent: true,
-    opacity: 0.85,
+    opacity,
     depthWrite: false,
     alphaMap: puffTexture(),
   });

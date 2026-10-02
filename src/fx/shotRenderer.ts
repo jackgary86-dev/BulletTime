@@ -4,6 +4,7 @@ import { createBulletModel, disposeBulletModel, type BulletModel } from '../mode
 import { BULLET_MATERIALS } from '../models/materials';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
+import { airIntervals, createWake, type Wake } from './wake';
 
 const MAX_FRAGMENTS = 256;
 /** Fragments are drawn at least this big so they read on screen, in metres. */
@@ -26,7 +27,7 @@ const tmpPos = new THREE.Vector3();
 export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
-  private bullets: { model: BulletModel; trackId: number }[] = [];
+  private bullets: { model: BulletModel; trackId: number; wake: Wake; air: [number, number][] }[] = [];
   private pellets: THREE.Mesh[] = [];
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
@@ -70,16 +71,18 @@ export class ShotRenderer {
         }
       } else {
         const model = createBulletModel(spec);
-        this.group.add(model.group);
-        this.bullets.push({ model, trackId: shot.primaryId });
+        const wake = createWake();
+        this.group.add(model.group, wake.group);
+        this.bullets.push({ model, trackId: shot.primaryId, wake, air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
       }
     }
   }
 
   clear(): void {
-    for (const { model } of this.bullets) {
-      this.group.remove(model.group);
+    for (const { model, wake } of this.bullets) {
+      this.group.remove(model.group, wake.group);
       disposeBulletModel(model);
+      wake.dispose();
     }
     this.bullets = [];
     for (const pellet of this.pellets) this.group.remove(pellet);
@@ -93,13 +96,18 @@ export class ShotRenderer {
     const timeline = this.timeline;
     if (!timeline) return;
 
-    for (const { model, trackId } of this.bullets) {
+    for (const { model, trackId, wake, air } of this.bullets) {
       const frame = sampleTrack(timeline.tracks[trackId], t);
       model.group.visible = !!frame;
       if (frame) {
         place(model.group, frame);
         model.setDiameter(frame.diameter);
+        // The wake follows the flight path, not the bullet's yaw.
+        wake.group.position.copy(model.group.position);
+        wake.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
       }
+      const inAir = !!frame && air.some(([a, b]) => t >= a && t < b);
+      wake.update(inAir, frame?.speed ?? 0, frame?.diameter ?? 0, model.length);
     }
 
     for (const pellet of this.pellets) {

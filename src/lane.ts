@@ -6,6 +6,7 @@ import { MuzzleEffect } from './fx/muzzle';
 import { ShotRenderer } from './fx/shotRenderer';
 import type { BurstSpec } from './fx/particles';
 import { TargetEffects } from './fx/targetEffects';
+import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { createPostFx, type PostFx } from './scene/postfx';
@@ -154,6 +155,7 @@ export class Lane {
     this.shot.load(timeline);
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
     for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
+    addVapourTrails(timeline, this.effects.particles);
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
     timeline.duration = Math.max(timeline.duration, Math.min(this.effects.endTime, timeline.duration + EFFECT_TAIL_S));
     return timeline;
