@@ -8,6 +8,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShockwavePass } from './shockwavePass';
 import { GradePass } from './gradePass';
 
+/** Multisample count for the post-processing buffers. */
+const MSAA_SAMPLES = 4;
+
 export interface PostFx {
   composer: EffectComposer;
   /** Ground-truth ambient occlusion: darkens creases and where objects meet the floor (#55). */
@@ -35,7 +38,11 @@ export function createPostFx(
   camera: THREE.PerspectiveCamera,
 ): PostFx {
   const size = renderer.getSize(new THREE.Vector2());
-  const composer = new EffectComposer(renderer);
+  // A multisampled target keeps edges clean through the post-processing chain (#74), which would
+  // otherwise lose the canvas's own antialiasing.
+  const pixelRatio = renderer.getPixelRatio();
+  const target = new THREE.WebGLRenderTarget(size.x * pixelRatio, size.y * pixelRatio, { type: THREE.HalfFloatType, samples: MSAA_SAMPLES });
+  const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
   const ambientOcclusion = new GTAOPass(scene, camera, size.x, size.y);

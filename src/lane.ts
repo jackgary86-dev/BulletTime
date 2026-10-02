@@ -172,11 +172,11 @@ export class Lane {
   }
 
   /** Advances the shot, effects and muzzle flash to sim time `t` (null when nothing is playing). */
-  update(t: number | null, camera: THREE.Camera): void {
+  update(t: number | null, camera: THREE.Camera, shutterS = 0): void {
     const timeline = t !== null ? this.session : null;
     if (timeline && t !== null) {
-      this.shot.update(t);
-      this.effects.update(t);
+      this.shot.update(t, shutterS);
+      this.effects.update(t, shutterS);
     }
     // The muzzle flash belongs to whichever shot is playing, at that shot's aim point.
     const current = timeline && t !== null ? activeShot(timeline, t) : null;

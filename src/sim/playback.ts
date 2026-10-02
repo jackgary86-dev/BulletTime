@@ -13,6 +13,15 @@ const MIN_STEP_S = 1e-6;
  */
 export class Playback {
   rate = 1 / 1000;
+
+  /**
+   * Sim time one displayed frame's exposure covers (#74), as if filmed with a
+   * 180° shutter at the playback rate: fast playback smears moving things,
+   * deep slow motion freezes them.
+   */
+  get shutterS(): number {
+    return DISPLAY_FRAME_S * this.rate * 0.5;
+  }
   timeline: Timeline | null = null;
   private simTime = 0;
   private playing = false;
