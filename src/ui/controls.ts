@@ -2,6 +2,7 @@ import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
 import { QUALITY_LEVELS, type QualityLevel } from '../scene/quality';
 import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
+import { CAMERA_ICONS, LIGHTING_ICONS } from './icons';
 
 /** Slow-motion presets, as simulated seconds per real second. */
 export const RATE_PRESETS = [
@@ -55,8 +56,8 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
       <div>
         <span class="field-label">Lighting</span>
         <div class="lighting-modes" role="group" aria-label="Lighting">
-          <button type="button" class="active" data-mode="lab">Lab</button>
-          <button type="button" data-mode="highspeed">High-speed</button>
+          <button type="button" class="active" data-mode="lab">${LIGHTING_ICONS.lab}<span>Lab</span></button>
+          <button type="button" data-mode="highspeed">${LIGHTING_ICONS.highspeed}<span>High-speed</span></button>
         </div>
       </div>
       <div>
@@ -91,7 +92,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
   const cameraButtons = CAMERA_MODES.map(({ mode, label }) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = label;
+    button.innerHTML = `${CAMERA_ICONS[mode]}<span>${label}</span>`;
     button.addEventListener('click', () => options.onCameraChange(mode));
     cameraRow.append(button);
     return { button, mode };
