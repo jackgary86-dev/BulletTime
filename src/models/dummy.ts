@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { DUMMY_REGIONS, getRegion, regionLayers, type DummyRegion, type DummyRegionId } from '../data/dummy';
 import { stackOffsets } from '../data/stacks';
-import { addOrganicInserts, BONE_COLOR, GEL_BODY_NAME, layerGroupName, standSteel, TARGET_FRONT_X } from './targets';
+import { crinkleNormalMap } from '../fx/crinkleTexture';
+import { addOrganicInserts, GEL_BODY_NAME, layerGroupName, standSteel, TARGET_FRONT_X } from './targets';
 
 /**
  * The clinical ballistic test dummy (#25): a translucent lab-gel head, neck
@@ -234,23 +235,39 @@ function buildShell(body: THREE.Group): void {
   }
 }
 
+type Deform = (v: THREE.Vector3) => void;
+
 /**
- * Half an ellipsoid on the far side of the shot line (z ≤ 0), with a flat
- * cross-section face just behind the line, like a cutaway anatomy model.
+ * Half of a (deformed) ellipsoid on the far side of the shot line (z ≤ 0),
+ * with a flat cross-section face just behind the line, like a cutaway
+ * anatomy model. `deform` reshapes the unit sphere before it is scaled.
  */
 function cutaway(
   radii: [number, number, number],
   centre: [number, number, number],
-  color: THREE.ColorRepresentation,
-  faceColor: THREE.ColorRepresentation,
+  material: THREE.Material,
+  faceMaterial: THREE.Material,
+  deform: Deform = () => {},
 ): THREE.Group {
   const part = new THREE.Group();
-  const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 40, 24, Math.PI, Math.PI),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.55, side: THREE.DoubleSide }),
-  );
+  const geometry = new THREE.SphereGeometry(1, 48, 32, Math.PI, Math.PI);
+  const pos = geometry.getAttribute('position');
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    deform(v.fromBufferAttribute(pos, i));
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geometry.computeVertexNormals();
+  const shell = new THREE.Mesh(geometry, material);
   shell.scale.set(...radii);
-  const face = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshStandardMaterial({ color: faceColor, roughness: 0.7 }));
+  // The section face follows the deformed outline where the shell meets the cut.
+  const outline: THREE.Vector2[] = [];
+  for (let i = 0; i <= 64; i++) {
+    const theta = (i / 64) * Math.PI * 2;
+    deform(v.set(Math.sin(theta), Math.cos(theta), 0));
+    outline.push(new THREE.Vector2(v.x, v.y));
+  }
+  const face = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(outline)), faceMaterial);
   // Just behind the shot line, so the wound channel drawn on the line doesn't fight with it.
   face.scale.set(radii[0], radii[1], 1);
   face.position.z = -0.004;
@@ -259,42 +276,122 @@ function cutaway(
   return part;
 }
 
+/** Matte, slightly porous bone simulant: it should read as a lab casting, not glow. */
+function boneMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: 0xd2c6aa, roughness: 0.85, envMapIntensity: 0.5, side: THREE.DoubleSide });
+}
+
+/** Soft-tissue simulant: muted, matte, with an optional wrinkled surface. */
+function tissue(color: number, roughness: number, wrinkles?: number): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ color, roughness, envMapIntensity: 0.6, side: THREE.DoubleSide });
+  if (wrinkles) {
+    const map = crinkleNormalMap().clone();
+    map.repeat.set(wrinkles, wrinkles * 0.7);
+    map.needsUpdate = true;
+    material.normalMap = map;
+    material.normalScale.set(0.8, 0.8);
+  }
+  return material;
+}
+
+/**
+ * The bone simulant (#68): a skull with cranium, eye socket, cheekbone and
+ * jaw; ribs sweeping down from the spine to a sternum; and a spine of
+ * vertebrae with their spinous and transverse processes and discs between.
+ * Only the far half is built, as a cutaway.
+ */
 function buildSkeleton(body: THREE.Group): void {
-  const bone = new THREE.MeshStandardMaterial({ color: BONE_COLOR, roughness: 0.55 });
+  const bone = boneMaterial();
 
-  // Skull: a cutaway shell around the brain.
-  const skull = cutaway([0.087, 0.11, 0.076], [0.1, 0.752, 0], BONE_COLOR, 0xc9bb9c);
-  skull.children[1].visible = false; // the brain supplies the section face
-  body.add(skull);
+  // Cranium: a cutaway shell round the brain, a little flatter at the temples.
+  const cranium = cutaway([0.087, 0.11, 0.076], [0.1, 0.752, 0], bone, bone, (v) => {
+    v.z *= 1 - 0.08 * Math.max(0, -v.y);
+  });
+  cranium.children[1].visible = false; // the brain supplies the section face
+  body.add(cranium);
+  // Face: the far eye socket (a dark hollow), the cheekbone under it, and the upper and lower jaw.
+  const socket = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshStandardMaterial({ color: 0x3b2f24, roughness: 0.9 }));
+  socket.scale.set(0.008, 0.013, 0.014);
+  socket.position.set(0.02, 0.742, -0.032);
+  const cheek = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.005, 8, 24, Math.PI * 0.7), bone);
+  cheek.rotation.set(Math.PI / 2, 0, Math.PI * 0.15);
+  cheek.position.set(0.05, 0.722, -0.045);
+  body.add(socket, cheek);
+  const jaw = cutaway([0.05, 0.035, 0.058], [0.065, 0.68, 0], bone, bone, (v) => {
+    // A U of bone, deeper at the chin than at the angle of the jaw.
+    v.y *= 0.7 + 0.3 * Math.max(0, -v.x);
+  });
+  jaw.children[1].visible = false;
+  body.add(jaw);
 
-  // Sternum in front, ribs curving back to the spine (far half only).
-  const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.16, 0.035), bone);
-  sternum.position.set(0.02, 0.49, 0);
+  // Sternum in front; ribs sweep back and up from it to the spine (far half only).
+  const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.17, 0.03), bone);
+  sternum.position.set(0.022, 0.49, 0);
   body.add(sternum);
-  for (let i = 0; i < 6; i++) {
-    const rib = new THREE.TorusGeometry(1, 0.06, 8, 40, Math.PI);
+  for (let i = 0; i < 8; i++) {
+    const rib = new THREE.TorusGeometry(1, 0.055, 8, 48, Math.PI);
     rib.rotateX(-Math.PI / 2);
-    rib.scale(0.1, 0.1, 0.15);
+    // Flattened: ribs are wider than they are thick.
+    rib.scale(0.098, 0.07, 0.13 + 0.012 * Math.sin((i / 7) * Math.PI));
     const mesh = new THREE.Mesh(rib, bone);
-    mesh.position.set(0.12, 0.42 + i * 0.03, 0);
+    mesh.position.set(0.12, 0.405 + i * 0.024, 0);
+    // Each rib falls toward the front, so the sternum end sits lower than the spine end.
+    mesh.rotation.z = 0.28;
     body.add(mesh);
   }
 
-  // Spine: vertebrae up the back, from the pelvis through the neck.
+  // Spine: vertebral bodies with processes and a disc between each, from the pelvis through the neck.
+  const disc = new THREE.MeshStandardMaterial({ color: 0x9fb2b8, roughness: 0.5, transparent: true, opacity: 0.85 });
   for (let y = 0.225; y < 0.69; y += 0.028) {
     const neck = y > 0.6;
     const r = neck ? 0.012 : 0.017;
-    const v = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.022, 20), bone);
-    v.position.set(neck ? 0.13 : 0.2, y, 0);
-    body.add(v);
+    const x = neck ? 0.13 : 0.2;
+    const v = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.08, 0.02, 20), bone);
+    v.position.set(x, y, 0);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.006, 20), disc);
+    pad.position.set(x, y + 0.014, 0);
+    // Spinous process: a blade angled down and back from the arch.
+    const spinous = new THREE.Mesh(new THREE.BoxGeometry(neck ? 0.018 : 0.03, 0.008, 0.006), bone);
+    spinous.position.set(x + r + (neck ? 0.008 : 0.014), y - 0.004, 0);
+    spinous.rotation.z = -0.4;
+    // Transverse process on the far side.
+    const transverse = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.007, neck ? 0.016 : 0.026), bone);
+    transverse.position.set(x + r * 0.6, y, -(r + (neck ? 0.006 : 0.011)));
+    body.add(v, pad, spinous, transverse);
   }
 }
 
+/**
+ * Organ simulants (#68) in muted lab colours: a folded brain, a lung that
+ * tapers to its apex over a domed base, a heart tilted in the chest, and a
+ * wedge-shaped liver, each cut away on the shot line.
+ */
 function buildOrgans(body: THREE.Group): void {
-  // Brain simulant inside the skull, lung simulant across the chest, organ simulant in the abdomen.
-  body.add(cutaway([0.077, 0.1, 0.068], [0.1, 0.752, 0], 0xa8605e, 0xb87470));
-  body.add(cutaway([0.05, 0.095, 0.14], [0.075, 0.5, 0], 0xb8604c, 0xc4735e));
-  body.add(cutaway([0.065, 0.075, 0.15], [0.095, 0.3, 0], 0x8f4218, 0xa0522a));
+  body.add(cutaway([0.077, 0.1, 0.068], [0.1, 0.752, 0], tissue(0xb98c84, 0.7, 6), tissue(0xc79f96, 0.8)));
+  body.add(
+    cutaway([0.05, 0.095, 0.14], [0.075, 0.5, 0], tissue(0xbf8a80, 0.9), tissue(0xcf9f94, 0.95), (v) => {
+      // Narrow at the apex, broad over the diaphragm.
+      const taper = v.y > 0 ? 1 - 0.45 * v.y * v.y : 1;
+      v.x *= taper;
+      v.z *= taper;
+      if (v.y < -0.75) v.y = -0.75 - (v.y + 0.75) * 0.3;
+    }),
+  );
+  const heart = cutaway([0.035, 0.05, 0.04], [0.155, 0.48, 0], tissue(0x8e4b45, 0.65), tissue(0x9e5a52, 0.8), (v) => {
+    // Broad at the base, narrowing to the apex.
+    const k = 0.75 + 0.3 * v.y;
+    v.x *= k;
+    v.z *= k;
+  });
+  heart.rotation.z = -0.45;
+  body.add(heart);
+  body.add(
+    cutaway([0.065, 0.075, 0.15], [0.095, 0.3, 0], tissue(0x7a3f22, 0.55), tissue(0x8c4a2a, 0.75), (v) => {
+      // A wedge: thick on the far (right) side, thinning across the body.
+      v.y *= 0.65 + 0.35 * Math.max(0, -v.z) + 0.1;
+      v.y += 0.12 * v.z;
+    }),
+  );
 }
 
 /**
