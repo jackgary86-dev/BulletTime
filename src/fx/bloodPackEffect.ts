@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bloodColor } from '../data/content';
 import { PACK_BURST_MIN_CAVITY_M, PACK_BURST_SQUEEZE_M, PACK_DRAIN_S } from '../data/organic';
 import { BLOOD_PACK_PREFIX, BONE_ROD_NAME } from '../models/targets';
 import { activeShot } from '../sim/session';
@@ -133,7 +134,7 @@ export class BloodPackEffect {
       size: [0.0015, 0.004],
       life: [1, 1],
       drag: 150,
-      color: BLOOD,
+      color: bloodColor(BLOOD),
       colorJitter: 0.35,
       // Drawn out along their path into ligaments of liquid, not round dots.
       stretch: 2.4,
@@ -159,7 +160,7 @@ export class BloodPackEffect {
         size: [s.channelRadius * 0.35, s.channelRadius * 0.9],
         life: [1, 1],
         drag: 50,
-        color: BLOOD_DARK,
+        color: bloodColor(BLOOD_DARK),
         colorJitter: 0.3,
         seed: Math.round(s.pos.x * 1e5) + 3,
       });
@@ -186,7 +187,7 @@ export class BloodPackEffect {
         life: [4e-3, 12e-3],
         drag: 40,
         gravity: 9.8,
-        color: BLOOD,
+        color: bloodColor(BLOOD),
         colorJitter: 0.3,
         stretch: 2.5,
       });

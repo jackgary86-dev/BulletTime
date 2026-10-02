@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reducedGore } from '../data/content';
 import { isPrimary } from '../sim/session';
 import type { CavitySample, ShotEvent, Timeline } from '../sim/types';
 import { crinkleNormalMap } from './crinkleTexture';
@@ -311,10 +312,12 @@ outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0
     for (let i = 0; i < rings.length; i++) {
       const ring = rings[i];
       const stain = this.stains.length ? this.stainAt(ring.centre.x, t) : 0;
-      // White leaves the amber material as is; stained sections go a deep wet red.
-      const cr = 1 + 0.6 * stain;
-      const cg = 1 - 0.85 * stain;
-      const cb = 1 - 0.8 * stain;
+      // White leaves the amber material as is; stained sections go a deep wet red,
+      // or a cool blue with reduced gore on (#109).
+      const gore = !reducedGore();
+      const cr = gore ? 1 + 0.6 * stain : 1 - 0.75 * stain;
+      const cg = gore ? 1 - 0.85 * stain : 1 - 0.4 * stain;
+      const cb = gore ? 1 - 0.8 * stain : 1 + 0.3 * stain;
       for (let j = 0; j < RING_SEGMENTS; j++) {
         const c = (i * RING_SEGMENTS + j) * 3;
         carr[c] = cr;

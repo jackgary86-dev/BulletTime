@@ -23,6 +23,7 @@ import type { LightingMode } from './scene/studio';
 import { initialQuality, QUALITY, saveQuality, type QualityLevel } from './scene/quality';
 import type { Timeline } from './sim/types';
 import { attachLoader } from './ui/loader';
+import { contentGate } from './ui/contentWarning';
 
 /** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
 const COMPARE_FOV = 48;
@@ -34,6 +35,8 @@ async function bootstrap(): Promise<void> {
   const overlay = document.querySelector<HTMLElement>('#overlay');
   if (!canvas || !overlay) throw new Error('BulletTime: missing #viewport or #overlay element');
 
+  // Nothing renders until the player has seen the mature-content warning (#109).
+  await contentGate();
   await loader.progress(0.1, 'Starting the renderer');
   const renderer = createRenderer(canvas);
   const { camera, controls } = createCameraRig(canvas);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MediumLook, MediumSpec } from '../data/media';
+import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
@@ -343,6 +344,24 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
   }
 }
 
+/** The fluid inside a fake blood pack. */
+const PACK_FLUID = 0x6a0610;
+/** Every pack material built so far, recoloured in place when reduced gore is switched (#109). */
+const packMaterials = new Set<WeakRef<THREE.MeshPhysicalMaterial>>();
+onReducedGoreChange(() => {
+  for (const ref of packMaterials) {
+    const material = ref.deref();
+    if (material) tintPack(material);
+    else packMaterials.delete(ref);
+  }
+});
+
+/** Blood-red fluid with a pink sheen, or blue simulant with a pale blue sheen under reduced gore. */
+function tintPack(material: THREE.MeshPhysicalMaterial): void {
+  material.color.setHex(bloodColor(PACK_FLUID));
+  material.sheenColor.setHex(reducedGore() ? 0x9ad0ff : 0xff9a9a);
+}
+
 /**
  * Fake blood packs (dark red fluid in thin, wet plastic) and an optional bone
  * rod, suspended in the gel. Opaque, so they show through the transmissive gel.
@@ -352,7 +371,7 @@ export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: numb
   if (!layout) return;
   // Fluid seen through a glossy film: deep red with a pale sheen where the film catches the light.
   const blood = new THREE.MeshPhysicalMaterial({
-    color: 0x6a0610,
+    color: PACK_FLUID,
     roughness: 0.3,
     clearcoat: 1,
     clearcoatRoughness: 0.05,
@@ -360,6 +379,8 @@ export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: numb
     sheenRoughness: 0.35,
     sheenColor: new THREE.Color(0xff9a9a),
   });
+  tintPack(blood);
+  packMaterials.add(new WeakRef(blood));
   // The heat-sealed seam round the edge of the sachet: clear plastic film over a thin line of fluid.
   const seamFilm = new THREE.MeshPhysicalMaterial({ color: 0xd9b0b0, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 });
   const seam = new THREE.TorusGeometry(1, 0.05, 6, 48);
