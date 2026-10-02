@@ -3,6 +3,8 @@ import type { MediumSpec } from '../data/media';
 import { GEL_BODY_NAME } from '../models/targets';
 import type { Timeline } from '../sim/types';
 import { GelEffect } from './gelEffect';
+import { HoleMarks } from './holes';
+import { loadPanelEffect } from './panelEffect';
 import { ParticleSystem } from './particles';
 
 /**
@@ -13,10 +15,11 @@ export class TargetEffects {
   readonly group = new THREE.Group();
   readonly particles = new ParticleSystem();
   private readonly gel = new GelEffect(this.particles);
+  private readonly holes = new HoleMarks();
 
   constructor() {
     this.group.name = 'target-effects';
-    this.group.add(this.particles.group, this.gel.group);
+    this.group.add(this.particles.group, this.gel.group, this.holes.group);
   }
 
   load(timeline: Timeline, target: THREE.Group, layers: MediumSpec[]): void {
@@ -25,17 +28,21 @@ export class TargetEffects {
       if (medium.behaviour === 'gel') {
         const body = target.getObjectByName(GEL_BODY_NAME);
         if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer);
+      } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall') {
+        loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }
     });
   }
 
   clear(): void {
     this.gel.clear();
+    this.holes.clear();
     this.particles.clear();
   }
 
   update(t: number): void {
     this.gel.update(t);
+    this.holes.update(t);
     this.particles.update(t);
   }
 }
