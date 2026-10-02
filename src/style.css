@@ -142,8 +142,15 @@ body {
   gap: 4px;
 }
 
+.lighting-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
 .presets button,
-.camera-modes button {
+.camera-modes button,
+.lighting-modes button {
   padding: 6px 0;
   font-size: 11px;
 }
@@ -165,7 +172,8 @@ body {
 }
 
 .presets button.active,
-.camera-modes button.active {
+.camera-modes button.active,
+.lighting-modes button.active {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -263,7 +271,7 @@ body {
 }
 
 .medium-panel {
-  top: 344px;
+  top: 396px;
   right: 16px;
   width: min(300px, calc(100vw - 32px));
   display: flex;

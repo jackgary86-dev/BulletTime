@@ -10,6 +10,7 @@ import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { ShotRenderer } from './fx/shotRenderer';
 import { MuzzleEffect } from './fx/muzzle';
+import { TargetEffects } from './fx/targetEffects';
 import { CameraDirector } from './scene/cameraDirector';
 import { DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
 import { DEFAULT_MEDIUM_ID } from './data/media';
@@ -30,7 +31,7 @@ function bootstrap(): void {
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
   const { camera, controls } = createCameraRig(canvas);
-  createStudio(scene, renderer);
+  const studio = createStudio(scene, renderer);
 
   const playback = new Playback();
   const postFx = createPostFx(renderer, scene, camera);
@@ -45,6 +46,8 @@ function bootstrap(): void {
   let spec = getBullet(DEFAULT_BULLET_ID);
   const shot = new ShotRenderer();
   scene.add(shot.group);
+  const effects = new TargetEffects();
+  scene.add(effects.group);
 
   mountBulletSelector(overlay, {
     initialId: spec.id,
@@ -57,6 +60,7 @@ function bootstrap(): void {
   const clearShot = () => {
     playback.stop();
     shot.clear();
+    effects.clear();
     scrubber.hide();
     panel.setHasShot(false);
   };
@@ -66,6 +70,11 @@ function bootstrap(): void {
     initialCamera: 'auto',
     onRateChange: (rate) => (playback.rate = rate),
     onCameraChange: (mode) => director.setMode(mode),
+    onLightingChange: (mode) => {
+      studio.setLightingMode(mode);
+      // A bright scene would bloom everywhere; keep bloom for genuinely hot highlights.
+      postFx.bloom.enabled = mode !== 'highspeed';
+    },
     onReplay: () => {
       if (!playback.timeline) return;
       playback.start(playback.timeline);
@@ -85,6 +94,7 @@ function bootstrap(): void {
         standOffM: STAND_OFF_M,
       });
       shot.load(timeline, spec);
+      if (targetGroup) effects.load(timeline, targetGroup, [medium]);
       playback.start(timeline);
       scrubber.load(timeline);
       panel.setHasShot(true);
@@ -122,6 +132,7 @@ function bootstrap(): void {
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       shot.update(t);
+      effects.update(t);
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
       scrubber.sync();

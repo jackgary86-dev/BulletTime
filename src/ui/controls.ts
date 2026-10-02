@@ -1,4 +1,5 @@
 import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
+import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
 
 /** Slow-motion presets, as simulated seconds per real second. */
@@ -29,6 +30,7 @@ export interface ControlsOptions {
   onReset(): void;
   onRateChange(rate: number): void;
   onCameraChange(mode: CameraMode): void;
+  onLightingChange(mode: LightingMode): void;
 }
 
 /**
@@ -46,6 +48,11 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     </div>
     <span class="field-label">Camera</span>
     <div class="camera-modes" role="group" aria-label="Camera presets"></div>
+    <span class="field-label">Lighting</span>
+    <div class="lighting-modes" role="group" aria-label="Lighting">
+      <button type="button" class="active" data-mode="lab">Lab</button>
+      <button type="button" data-mode="highspeed">High-speed</button>
+    </div>
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
     <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="0" step="0.01" />
@@ -80,6 +87,14 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     for (const b of cameraButtons) b.button.classList.toggle('active', b.mode === mode);
   };
   setCameraMode(options.initialCamera);
+
+  const lightingButtons = [...panel.querySelectorAll<HTMLButtonElement>('.lighting-modes button')];
+  for (const button of lightingButtons) {
+    button.addEventListener('click', () => {
+      for (const b of lightingButtons) b.classList.toggle('active', b === button);
+      options.onLightingChange(button.dataset.mode as LightingMode);
+    });
+  }
 
   const presetButtons = RATE_PRESETS.map((preset) => {
     const button = document.createElement('button');
