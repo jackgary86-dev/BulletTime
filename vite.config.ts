@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 
 // GitHub Pages serves the site from /<repo>/, so production builds use that base.
@@ -7,5 +8,8 @@ export default defineConfig(({ command }) => ({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1000,
+  },
+  test: {
+    include: ['src/**/*.test.ts'],
   },
 }));
