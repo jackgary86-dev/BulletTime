@@ -1006,6 +1006,16 @@ body {
   color: var(--accent);
 }
 
+.about h3 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.about-credits a {
+  color: var(--accent);
+}
+
 .about form {
   margin: 12px 0 0;
   text-align: right;
