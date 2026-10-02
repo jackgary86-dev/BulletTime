@@ -16,7 +16,8 @@
     "test": "vitest run",
     "build:desktop": "tsc --noEmit && vite build --mode desktop --outDir dist-desktop",
     "desktop": "npm run build:desktop && electron .",
-    "dist": "npm run build:desktop && electron-builder"
+    "dist": "npm run build:desktop && electron-builder",
+    "dist:steam": "node scripts/build-steam.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.3.0",
@@ -35,6 +36,7 @@
   "build": {
     "appId": "com.jackdev.bullettime",
     "productName": "BulletTime",
+    "executableName": "BulletTime",
     "directories": {
       "output": "release"
     },

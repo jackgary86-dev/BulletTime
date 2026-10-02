@@ -1,0 +1,12 @@
+"DepotBuild"
+{
+	"DepotID" "1000003"
+	"FileMapping"
+	{
+		// The unpacked linux app from `npm run dist:steam` on linux (or the matching steam-<OS> artifact from the release workflow).
+		"LocalPath" "linux\*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "*.pdb"
+}

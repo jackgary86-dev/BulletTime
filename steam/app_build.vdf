@@ -1,0 +1,16 @@
+"AppBuild"
+{
+	// Replace 1000000 with your App ID and the depot IDs below with yours (Steamworks > SteamPipe > Depots).
+	"AppID" "1000000"
+	"Desc" "BulletTime build"
+	// Upload to a branch by hand in Steamworks; nothing goes live automatically.
+	"SetLive" ""
+	"ContentRoot" "..\release\steam\"
+	"BuildOutput" "..\release\steam-build-output\"
+	"Depots"
+	{
+		"1000001" "depot_build_windows.vdf"
+		"1000002" "depot_build_mac.vdf"
+		"1000003" "depot_build_linux.vdf"
+	}
+}
