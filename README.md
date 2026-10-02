@@ -42,7 +42,7 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 
 ## Running it
 
-You need Node 20 or newer.
+You need Node 20.15 or newer.
 
 ```sh
 npm install
@@ -50,9 +50,22 @@ npm run dev        # http://localhost:5173
 npm test           # Vitest physics suite
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the production build
+npm run build:itch # itch.io upload: release/bullettime-web-<version>.zip
 ```
 
 Every push to `main` is tested, built and published to GitHub Pages by `.github/workflows/deploy.yml`. Production builds use the base path `/BulletTime/`. Set `VITE_BASE=/` when building for a custom domain.
+
+## Publishing on itch.io
+
+`npm run build:itch` builds with relative paths into `dist-itch/` and zips it to `release/bullettime-web-<version>.zip`, with `index.html` at the root of the zip. CI also attaches that zip to every `main` build as the `bullettime-web-itch` artifact. The game makes no external requests, so it works inside itch.io's iframe.
+
+On itch.io (needs your account):
+
+1. **Create new project** → Kind of project: **HTML**.
+2. Upload the zip and tick **This file will be played in the browser**.
+3. Embed options: viewport **1600 × 900**, tick **Fullscreen button** and **Automatically start on page load** off (the content warning shows first anyway).
+4. Under **Content**, tick the mature content box (simulated blood and human-shaped targets) and set the age rating questionnaire answers to match.
+5. Set **Pricing** (paid, or "No payments" for a free demo) and publish.
 
 ## How it fits together
 
