@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 /** Where the target sits; cameras and lights frame this point. Units are metres. */
-export const TARGET_FOCUS = new THREE.Vector3(0, 0.12, 0);
+export const TARGET_FOCUS = new THREE.Vector3(0, 0.15, 0);
 
 export interface CameraRig {
   camera: THREE.PerspectiveCamera;
