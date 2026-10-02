@@ -305,20 +305,21 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
     case 'sandbag':
       return createSandbag(t, h, w);
 
-    case 'glass':
-      return new THREE.Mesh(
-        new THREE.BoxGeometry(t, h, w),
-        new THREE.MeshPhysicalMaterial({
-          color: 0xe8fff6,
-          roughness: 0.01,
-          transmission: 1,
-          thickness: t,
-          ior: 1.52,
-          attenuationColor: new THREE.Color(0x9fe0c4), // float glass green edge tint
-          attenuationDistance: 0.08,
-          specularIntensity: 1,
-        }),
-      );
+    case 'glass': {
+      const pane = new THREE.MeshPhysicalMaterial({
+        color: 0xf4fffa,
+        roughness: 0.01,
+        transmission: 1,
+        thickness: t,
+        ior: 1.52,
+        attenuationColor: new THREE.Color(0x9fe0c4), // float glass green edge tint
+        attenuationDistance: 0.08,
+        specularIntensity: 1,
+      });
+      // Looking into a cut edge you see through the full width of the pane: deep bottle green.
+      const edge = new THREE.MeshPhysicalMaterial({ color: 0x4f9c80, roughness: 0.08, transmission: 0.4, thickness: 0.05, ior: 1.52 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [pane, pane, edge, edge, edge, edge]);
+    }
 
     case 'ice':
       return new THREE.Mesh(

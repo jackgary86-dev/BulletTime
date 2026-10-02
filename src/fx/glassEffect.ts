@@ -23,6 +23,8 @@ const OFFSET = 0.0008;
 interface Segment {
   t: number;
   matrix: THREE.Matrix4;
+  /** Brightness of this bit of crack, 0–1. */
+  shade: number;
 }
 
 export class GlassCracks {
@@ -134,13 +136,14 @@ export class GlassCracks {
     const segment = (x1: number, y1: number, x2: number, y2: number, t: number, width: number) => {
       const len = Math.hypot(x2 - x1, y2 - y1);
       if (len < 1e-5) return;
+      // Each fracture face is twisted about its own length, so it catches the light at its own
+      // angle: some segments glint, others stay dark, as real cracks do.
+      const along = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(y2 - y1, x2 - x1));
+      const twist = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (rand() - 0.5) * 1.6);
       segments.push({
         t,
-        matrix: new THREE.Matrix4().compose(
-          new THREE.Vector3((x1 + x2) / 2, (y1 + y2) / 2, 0),
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(y2 - y1, x2 - x1)),
-          new THREE.Vector3(len, width, 1),
-        ),
+        matrix: new THREE.Matrix4().compose(new THREE.Vector3((x1 + x2) / 2, (y1 + y2) / 2, 0), along.multiply(twist), new THREE.Vector3(len, width, 1)),
+        shade: 0.5 + 0.5 * rand(),
       });
     };
 
@@ -163,7 +166,7 @@ export class GlassCracks {
         const nx = Math.cos(a) * nr;
         const ny = Math.sin(a) * nr;
         if (!inside(nx, ny)) break;
-        segment(x, y, nx, ny, e.t + nr / speed, 0.0006 * (1.3 - (0.8 * r) / length));
+        segment(x, y, nx, ny, e.t + nr / speed, 0.00045 * (1.3 - (0.8 * r) / length));
         ringRadii.forEach((rr, j) => {
           if (!crossed[j] && r < rr && nr >= rr) crossed[j] = new THREE.Vector2(nx, ny);
         });
@@ -173,7 +176,7 @@ export class GlassCracks {
           const bl = 0.01 + 0.03 * rand();
           const bx = nx + Math.cos(ba) * bl;
           const by = ny + Math.sin(ba) * bl;
-          if (inside(bx, by)) segment(nx, ny, bx, by, e.t + (nr + bl) / speed, 0.0004);
+          if (inside(bx, by)) segment(nx, ny, bx, by, e.t + (nr + bl) / speed, 0.0003);
         }
         x = nx;
         y = ny;
@@ -194,24 +197,34 @@ export class GlassCracks {
         const bow = mid.clone().normalize().multiplyScalar(rr * 0.06 * (rand() - 0.3));
         const m = mid.add(bow);
         if (!inside(m.x, m.y)) continue;
-        segment(p.x, p.y, m.x, m.y, t, 0.0005);
-        segment(m.x, m.y, q.x, q.y, t, 0.0005);
+        segment(p.x, p.y, m.x, m.y, t, 0.00035);
+        segment(m.x, m.y, q.x, q.y, t, 0.00035);
       }
     });
 
     segments.sort((a, b) => a.t - b.t);
     const mesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        color: ice ? 0xffffff : 0xe8f4ef,
+      // Mirror-like fracture faces: they show the room and softboxes, rather than glowing white.
+      new THREE.MeshStandardMaterial({
+        color: ice ? 0xffffff : 0xeaf6f0,
+        metalness: 1,
+        roughness: 0.3,
+        envMapIntensity: 5,
+        // A faint glow keeps every crack readable even where it reflects nothing bright.
+        emissive: 0x3a4644,
         transparent: true,
-        opacity: 0.75,
+        opacity: 0.9,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
       segments.length,
     );
-    segments.forEach((s, i) => mesh.setMatrixAt(i, s.matrix));
+    const shade = new THREE.Color();
+    segments.forEach((s, i) => {
+      mesh.setMatrixAt(i, s.matrix);
+      mesh.setColorAt(i, shade.setScalar(s.shade));
+    });
     mesh.count = 0;
     mesh.frustumCulled = false;
     // Lay the web on the entry face: local x along the pane's side axis, y up, z out of the face.
