@@ -350,12 +350,20 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
 export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: number): void {
   const layout = ORGANIC_LAYOUTS[layoutId];
   if (!layout) return;
+  // Fluid seen through a glossy film: deep red with a pale sheen where the film catches the light.
   const blood = new THREE.MeshPhysicalMaterial({
-    color: 0x5a0309,
+    color: 0x6a0610,
     roughness: 0.3,
     clearcoat: 1,
-    clearcoatRoughness: 0.08,
+    clearcoatRoughness: 0.05,
+    sheen: 0.6,
+    sheenRoughness: 0.35,
+    sheenColor: new THREE.Color(0xff9a9a),
   });
+  // The heat-sealed seam round the edge of the sachet: clear plastic film over a thin line of fluid.
+  const seamFilm = new THREE.MeshPhysicalMaterial({ color: 0xd9b0b0, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 });
+  const seam = new THREE.TorusGeometry(1, 0.05, 6, 48);
+  seam.rotateY(Math.PI / 2);
   layout.packs.forEach((pack, i) => {
     // A sachet: a sphere flattened into a pillow, slightly irregular.
     const geometry = new THREE.SphereGeometry(1, 28, 18);
@@ -374,6 +382,7 @@ export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: numb
     mesh.rotation.x = (i * 0.7) % 0.5;
     mesh.name = `${BLOOD_PACK_PREFIX}${i}`;
     mesh.userData.rest = mesh.scale.clone();
+    mesh.add(new THREE.Mesh(seam, seamFilm));
     gel.add(mesh);
   });
   if (layout.bone) {

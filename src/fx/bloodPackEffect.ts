@@ -135,6 +135,8 @@ export class BloodPackEffect {
       drag: 150,
       color: BLOOD,
       colorJitter: 0.35,
+      // Drawn out along their path into ligaments of liquid, not round dots.
+      stretch: 2.4,
     });
     // Stain: fluid driven along the permanent channel, front and back, staying after the shot.
     const along = 0.05 + 0.1 * amount;
@@ -186,6 +188,7 @@ export class BloodPackEffect {
         gravity: 9.8,
         color: BLOOD,
         colorJitter: 0.3,
+        stretch: 2.5,
       });
     }
   }
