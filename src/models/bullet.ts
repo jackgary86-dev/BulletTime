@@ -271,14 +271,87 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
   }
 }
 
+/** How a round's nose gives way as it expands or flattens (#71). */
+interface DeformStyle {
+  /** Where the deforming nose begins, as a fraction of the length from the base. */
+  zone: number;
+  /** Jacket petals peeling back (hollow points), or 0. */
+  petals: number;
+  /** How irregular the expanded rim is: lead smeared over the jacket. */
+  smear: number;
+  /** How much of the nose survives as a shortened stub at full deformation. */
+  stub: number;
+  /** Expansion ratio at which the shape is fully deformed. */
+  fullRatio: number;
+}
+
+function deformStyle(spec: BulletSpec): DeformStyle {
+  const full = spec.expansionRatio ?? 1.8;
+  switch (spec.shape) {
+    case 'hollowPoint':
+      return { zone: 0.45, petals: 6, smear: 0.04, stub: 0.3, fullRatio: full };
+    case 'softPoint':
+      return { zone: 0.5, petals: 0, smear: 0.12, stub: 0.32, fullRatio: full };
+    case 'truncatedCone':
+      return { zone: 0.5, petals: 0, smear: 0.1, stub: 0.35, fullRatio: full };
+    default:
+      // FMJ and solids: the nose flattens against hard media.
+      return { zone: 0.62, petals: 0, smear: 0.05, stub: 0.45, fullRatio: Math.max(1.3, full) };
+  }
+}
+
+/**
+ * Moves one vertex of the bullet's lathe frame (axis +y, base at 0) toward its
+ * deformed shape: the nose from `zone` up folds into a flat-faced mushroom of
+ * radius `ratio · r`, its rim flaring back (petals for hollow points, a ragged
+ * lead-smeared lip for soft points), blended in by `k`.
+ */
+function deformVertex(v: THREE.Vector3, r: number, L: number, ratio: number, k: number, style: DeformStyle): void {
+  const y0 = L * style.zone;
+  if (v.y <= y0 || k <= 0) return;
+  const rad = Math.hypot(v.x, v.z);
+  const theta = Math.atan2(v.z, v.x);
+  const h = Math.min(1, (v.y - y0) / (L - y0));
+  const R = r * ratio;
+  const yFace = y0 + (L - y0) * style.stub;
+  let tr: number;
+  let ty: number;
+  if (h < 0.4) {
+    // The flaring rim: out to the full radius, curling back toward the base at its lip.
+    const f = h / 0.4;
+    tr = r + (R - r) * f ** 0.7;
+    ty = y0 + (yFace - y0) * f - (L - y0) * 0.18 * f * f * (style.petals ? 1 : 0.4);
+    if (style.petals) {
+      // Petals with tears between them.
+      const c = Math.cos(theta * style.petals);
+      tr *= 1 + 0.1 * f * c;
+      if (c < -0.6) tr *= 1 - 0.18 * f;
+    }
+  } else {
+    // The flattened face, slightly domed.
+    const f = (h - 0.4) / 0.6;
+    tr = R * (1 - f);
+    ty = yFace + (L - y0) * 0.015 * f;
+  }
+  // Lead smeared irregularly over the lip.
+  tr *= 1 + style.smear * Math.sin(theta * 5 + 1.3) * Math.sin(theta * 3 - 0.4) * Math.min(1, h * 2.5);
+  const nr = rad + (tr - rad) * k;
+  const ny = v.y + (ty - v.y) * k;
+  const scale = rad > 1e-9 ? nr / rad : 0;
+  v.set(v.x * scale, ny, v.z * scale);
+}
+
 export function createBulletModel(spec: BulletSpec): BulletModel {
   const isShot = spec.shape === 'buckshot';
   // A stack of three layers of pellets is three diameters long.
   const length = isShot ? spec.caliberMm * 3 * MM : spec.lengthMm * MM;
+  const r = (spec.caliberMm / 2) * MM;
+  const style = deformStyle(spec);
 
   // Lathe axis is +y; rotate so the projectile points along +x with the nose at the origin.
   const body = new THREE.Group();
-  body.add(...buildMeshes(spec));
+  const meshes = buildMeshes(spec);
+  body.add(...meshes);
   body.rotation.z = -Math.PI / 2;
   body.position.x = -length;
 
@@ -287,16 +360,39 @@ export function createBulletModel(spec: BulletSpec): BulletModel {
   group.add(body);
 
   const baseDiameter = spec.caliberMm * MM;
+  // The undeformed vertices of every lathe part, in the body frame, to deform from.
+  const parts = meshes
+    .filter((m): m is THREE.Mesh => m instanceof THREE.Mesh && m.geometry instanceof THREE.LatheGeometry)
+    .map((mesh) => ({ mesh, rest: Float32Array.from(mesh.geometry.getAttribute('position').array as Float32Array) }));
+  // Small add-ons on the nose (skive slits) disappear once the petals tear open along them.
+  const noseBits = meshes.filter((m) => m instanceof THREE.Mesh && !(m.geometry instanceof THREE.LatheGeometry) && m.position.y > length * style.zone);
+  let shownRatio = 1;
+  const v = new THREE.Vector3();
 
   return {
     group,
     length,
     setDiameter(diameter) {
-      const ratio = diameter / baseDiameter;
-      // Lathe x/z are radial, y is the length; expansion trades length for width.
-      const shorten = 1 / Math.sqrt(ratio);
-      body.scale.set(ratio, shorten, ratio);
-      body.position.x = -length * shorten;
+      const ratio = Math.max(1, diameter / baseDiameter);
+      if (Math.abs(ratio - shownRatio) < 1e-4 || isShot) return;
+      shownRatio = ratio;
+      const k = Math.min(1, (ratio - 1) / Math.max(1e-3, style.fullRatio - 1));
+      let top = 0;
+      for (const { mesh, rest } of parts) {
+        const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromArray(rest, i * 3);
+          deformVertex(v, r, length, ratio, k, style);
+          pos.setXYZ(i, v.x, v.y, v.z);
+          top = Math.max(top, v.y);
+        }
+        pos.needsUpdate = true;
+        mesh.geometry.computeVertexNormals();
+        mesh.geometry.computeBoundingSphere();
+      }
+      for (const bit of noseBits) bit.visible = k < 0.05;
+      // Keep the nose at the group origin as the bullet shortens.
+      body.position.x = -(top || length);
     },
   };
 }

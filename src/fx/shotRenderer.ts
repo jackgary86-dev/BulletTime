@@ -28,19 +28,27 @@ export class ShotRenderer {
   private timeline: Timeline | null = null;
   private bullets: { model: BulletModel; trackId: number }[] = [];
   private pellets: THREE.Mesh[] = [];
+  /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
+  private readonly jacketCurls: THREE.InstancedMesh;
   private readonly pelletGeometry = new THREE.SphereGeometry(0.5, 20, 14);
 
   constructor() {
     this.group.name = 'shot';
-    const geometry = new THREE.IcosahedronGeometry(0.5, 0);
-    const material = new THREE.MeshStandardMaterial({ color: 0x9a8a78, metalness: 0.8, roughness: 0.45 });
-    this.fragments = new THREE.InstancedMesh(geometry, material, MAX_FRAGMENTS);
-    this.fragments.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.fragments.count = 0;
-    this.fragments.frustumCulled = false;
-    this.fragments.castShadow = true;
-    this.group.add(this.fragments);
+    const instanced = (geometry: THREE.BufferGeometry, material: THREE.Material) => {
+      const mesh = new THREE.InstancedMesh(geometry, material, MAX_FRAGMENTS);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      this.group.add(mesh);
+      return mesh;
+    };
+    this.fragments = instanced(shardGeometry(), new THREE.MeshStandardMaterial({ color: 0x8a8d92, metalness: 0.6, roughness: 0.5, flatShading: true }));
+    this.jacketCurls = instanced(
+      curlGeometry(),
+      new THREE.MeshStandardMaterial({ color: 0xc8733f, metalness: 1, roughness: 0.35, side: THREE.DoubleSide, flatShading: true }),
+    );
   }
 
   /** Prepares models for every shot on the timeline (each shot may be a different round). */
@@ -77,6 +85,7 @@ export class ShotRenderer {
     for (const pellet of this.pellets) this.group.remove(pellet);
     this.pellets = [];
     this.fragments.count = 0;
+    this.jacketCurls.count = 0;
     this.timeline = null;
   }
 
@@ -105,21 +114,30 @@ export class ShotRenderer {
       }
     }
 
-    let count = 0;
+    let shards = 0;
+    let curls = 0;
     for (const track of timeline.tracks) {
-      if (track.kind !== 'fragment' || count >= MAX_FRAGMENTS) continue;
+      if (track.kind !== 'fragment') continue;
+      const curl = track.id % 3 === 0;
+      if ((curl ? curls : shards) >= MAX_FRAGMENTS) continue;
       const frame = sampleTrack(track, t);
       if (!frame) continue;
       const size = Math.max(MIN_FRAGMENT_SIZE, track.baseDiameter);
       tmpPos.set(frame.pos.x, frame.pos.y, frame.pos.z);
-      // Tumble each fragment at its own rate.
-      tmpQuat.setFromAxisAngle(tmpAxis.set(1, 1, 0).normalize(), (t - track.spawnT) * 4000 + track.id);
-      tmpScale.set(size, size * 0.7, size * 0.85);
+      // Tumble each fragment about its own axis at its own rate.
+      const a = track.id * 2.399;
+      tmpAxis.set(Math.cos(a), Math.sin(a * 1.7), Math.sin(a)).normalize();
+      tmpQuat.setFromAxisAngle(tmpAxis, (t - track.spawnT) * (2500 + (track.id % 7) * 600) + track.id);
+      const stretch = 0.75 + ((track.id * 37) % 10) / 20;
+      tmpScale.set(size * stretch, size * 0.7, size * (1.6 - stretch));
       tmpMatrix.compose(tmpPos, tmpQuat, tmpScale);
-      this.fragments.setMatrixAt(count++, tmpMatrix);
+      if (curl) this.jacketCurls.setMatrixAt(curls++, tmpMatrix);
+      else this.fragments.setMatrixAt(shards++, tmpMatrix);
     }
-    this.fragments.count = count;
+    this.fragments.count = shards;
+    this.jacketCurls.count = curls;
     this.fragments.instanceMatrix.needsUpdate = true;
+    this.jacketCurls.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -136,4 +154,38 @@ function place(object: THREE.Object3D, frame: Keyframe): void {
     yawQuat.setFromAxisAngle(tmpAxis, frame.yaw);
     object.quaternion.premultiply(yawQuat);
   }
+}
+
+/** A jagged lead shard: a stretched, faceted lump with sharp corners. */
+function shardGeometry(): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(0.5, 0);
+  const pos = g.getAttribute('position');
+  const moved = new Map<string, THREE.Vector3>();
+  const p = new THREE.Vector3();
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i);
+    const key = `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;
+    if (!moved.has(key)) moved.set(key, p.clone().multiplyScalar(0.55 + 0.8 * rand()));
+    const to = moved.get(key)!;
+    pos.setXYZ(i, to.x, to.y, to.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A torn strip of jacket curled back on itself, with ragged edges. */
+function curlGeometry(): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(0.35, 0.35, 0.8, 10, 3, true, 0, Math.PI * 1.3);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    // Ragged top and bottom edges, and a twist along the strip.
+    const y = pos.getY(i);
+    const a = Math.atan2(pos.getZ(i), pos.getX(i));
+    const r = 0.35 * (1 + 0.25 * Math.sin(a * 3 + y * 4));
+    pos.setXYZ(i, Math.cos(a + y * 0.8) * r, y + (Math.abs(y) > 0.3 ? 0.08 * Math.sin(a * 7) : 0), Math.sin(a + y * 0.8) * r);
+  }
+  g.computeVertexNormals();
+  return g;
 }
