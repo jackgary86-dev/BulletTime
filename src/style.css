@@ -135,18 +135,37 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.presets {
+.presets,
+.camera-modes {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 4px;
 }
 
-.presets button {
+.presets button,
+.camera-modes button {
   padding: 6px 0;
   font-size: 11px;
 }
 
-.presets button.active {
+.shot-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.shot-actions button {
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.presets button.active,
+.camera-modes button.active {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -244,7 +263,7 @@ body {
 }
 
 .medium-panel {
-  top: 240px;
+  top: 344px;
   right: 16px;
   width: min(300px, calc(100vw - 32px));
   display: flex;

@@ -1,3 +1,4 @@
+import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
 import { formatTime } from './format';
 
 /** Slow-motion presets, as simulated seconds per real second. */
@@ -14,23 +15,37 @@ const MIN_EXPONENT = -5; // 1/100,000×
 export interface ControlsPanel {
   /** Updates the live readout of simulated time and bullet speed. */
   setReadout(timeS: number, speed: number): void;
+  /** Highlights the active camera preset (e.g. after a drag switches to orbit). */
+  setCameraMode(mode: CameraMode): void;
+  /** Enables Replay once there is a shot to replay. */
+  setHasShot(hasShot: boolean): void;
 }
 
 export interface ControlsOptions {
   initialRate: number;
+  initialCamera: CameraMode;
   onFire(): void;
+  onReplay(): void;
+  onReset(): void;
   onRateChange(rate: number): void;
+  onCameraChange(mode: CameraMode): void;
 }
 
 /**
- * The shot panel: a Fire button, slow-motion presets, a logarithmic rate slider
- * and a small readout of simulated time and speed.
+ * The shot panel: Fire, Replay and Reset, camera presets, slow-motion presets,
+ * a logarithmic rate slider and a small readout of simulated time and speed.
  */
 export function mountControls(root: HTMLElement, options: ControlsOptions): ControlsPanel {
   const panel = document.createElement('section');
   panel.className = 'panel controls';
   panel.innerHTML = `
     <button class="fire" type="button">Fire</button>
+    <div class="shot-actions">
+      <button type="button" class="replay" disabled>Replay</button>
+      <button type="button" class="reset">Reset</button>
+    </div>
+    <span class="field-label">Camera</span>
+    <div class="camera-modes" role="group" aria-label="Camera presets"></div>
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
     <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="0" step="0.01" />
@@ -47,6 +62,24 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
   const presets = panel.querySelector<HTMLDivElement>('.presets')!;
   const timeOut = panel.querySelector<HTMLElement>('.readout-time')!;
   const speedOut = panel.querySelector<HTMLElement>('.readout-speed')!;
+
+  const replay = panel.querySelector<HTMLButtonElement>('.replay')!;
+  replay.addEventListener('click', () => options.onReplay());
+  panel.querySelector('.reset')!.addEventListener('click', () => options.onReset());
+
+  const cameraRow = panel.querySelector<HTMLDivElement>('.camera-modes')!;
+  const cameraButtons = CAMERA_MODES.map(({ mode, label }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.addEventListener('click', () => options.onCameraChange(mode));
+    cameraRow.append(button);
+    return { button, mode };
+  });
+  const setCameraMode = (mode: CameraMode) => {
+    for (const b of cameraButtons) b.button.classList.toggle('active', b.mode === mode);
+  };
+  setCameraMode(options.initialCamera);
 
   const presetButtons = RATE_PRESETS.map((preset) => {
     const button = document.createElement('button');
@@ -74,6 +107,10 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     setReadout(timeS, speed) {
       timeOut.textContent = formatTime(timeS);
       speedOut.textContent = `${speed.toFixed(0)} m/s`;
+    },
+    setCameraMode,
+    setHasShot(hasShot) {
+      replay.disabled = !hasShot;
     },
   };
 }
