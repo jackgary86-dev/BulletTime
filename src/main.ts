@@ -15,6 +15,7 @@ import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountMediumSelector, type TargetSetup } from './ui/mediumSelector';
+import { mountScrubber } from './ui/scrubber';
 
 /** The bullet starts this far in front of the target face, in metres. */
 const STAND_OFF_M = 0.5;
@@ -33,6 +34,7 @@ function bootstrap(): void {
   const postFx = createPostFx(renderer, scene, camera);
   mountOverlay(overlay);
 
+  const scrubber = mountScrubber(overlay, playback);
   let spec = getBullet(DEFAULT_BULLET_ID);
   const shot = new ShotRenderer();
   scene.add(shot.group);
@@ -43,6 +45,7 @@ function bootstrap(): void {
       spec = next;
       playback.stop();
       shot.clear();
+      scrubber.hide();
     },
   });
 
@@ -60,6 +63,7 @@ function bootstrap(): void {
       });
       shot.load(timeline, spec);
       playback.start(timeline);
+      scrubber.load(timeline);
     },
   });
 
@@ -73,6 +77,7 @@ function bootstrap(): void {
     scene.add(targetGroup);
     playback.stop();
     shot.clear();
+    scrubber.hide();
   };
   const target = mountMediumSelector(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
   rebuildTarget(target);
@@ -95,6 +100,7 @@ function bootstrap(): void {
       shot.update(t);
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
+      scrubber.sync();
     }
 
     controls.update();
