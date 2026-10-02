@@ -158,6 +158,13 @@ export class GelEffect {
     for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
   }
 
+  /** Frees the materials (the cavity meshes go in `clear`). */
+  dispose(): void {
+    this.clear();
+    this.material.dispose();
+    this.waterMaterial.dispose();
+  }
+
   /** Blood from a pack burst at world x spreads along the cavity wall from time t, up to `reach` metres each way. */
   addStain(x: number, t: number, reach: number): void {
     this.stains.push({ x, t, reach });

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEL_BODY_NAME, WATER_BODY_NAME } from '../models/targets';
+import { GEL_BODY_NAME, WATER_BODY_NAME, layerGroupName } from '../models/targets';
 import type { TargetLayer } from '../sim/engine';
 import type { Timeline } from '../sim/types';
 import { BloodPackEffect, type OrganicResult } from './bloodPackEffect';
@@ -18,38 +18,48 @@ import { ParticleSystem } from './particles';
 export class TargetEffects {
   readonly group = new THREE.Group();
   readonly particles = new ParticleSystem();
-  private readonly gel = new GelEffect(this.particles);
+  /** One cavity effect (and blood-pack effect) per gel or water layer in the stack. */
+  private gels: GelEffect[] = [];
+  private bloods: BloodPackEffect[] = [];
   private readonly holes = new HoleMarks();
   private readonly glass = new GlassCracks();
-  private readonly blood = new BloodPackEffect(this.particles, this.gel);
   /** Blood packs and bone from the last shot into an organic target, or null. */
   organic: OrganicResult | null = null;
 
   constructor() {
     this.group.name = 'target-effects';
-    this.group.add(this.particles.group, this.gel.group, this.holes.group, this.glass.group);
+    this.group.add(this.particles.group, this.holes.group, this.glass.group);
   }
 
   load(timeline: Timeline, target: THREE.Group, targetLayers: TargetLayer[], angleDeg: number): void {
     this.clear();
     const layers = targetLayers.map((l) => l.medium);
+    const bodyOf = (layer: number, name: string) => {
+      const body = target.getObjectByName(layerGroupName(targetLayers[layer].stack ?? 0))?.getObjectByName(name);
+      return body instanceof THREE.Mesh ? body : null;
+    };
     layers.forEach((medium, layer) => {
-      if (medium.behaviour === 'gel') {
-        const body = target.getObjectByName(GEL_BODY_NAME);
-        if (body instanceof THREE.Mesh) {
-          this.gel.load(timeline, body, layer);
-          this.organic = this.blood.load(timeline, body, layer);
+      if (medium.behaviour === 'gel' || medium.behaviour === 'water') {
+        const water = medium.behaviour === 'water';
+        const body = bodyOf(layer, water ? WATER_BODY_NAME : GEL_BODY_NAME);
+        if (!body) return;
+        const gel = new GelEffect(this.particles);
+        this.gels.push(gel);
+        this.group.add(gel.group);
+        gel.load(timeline, body, layer, water ? 'water' : 'gel');
+        if (!water) {
+          const blood = new BloodPackEffect(this.particles, gel);
+          this.bloods.push(blood);
+          const result = blood.load(timeline, body, layer);
+          if (result) this.organic = mergeOrganic(this.organic, result);
         }
-      } else if (medium.behaviour === 'water') {
-        const body = target.getObjectByName(WATER_BODY_NAME);
-        if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer, 'water');
       } else if (medium.behaviour === 'sand') {
         loadSandEffect(timeline, layer, this.particles, this.holes);
       } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall') {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }
     });
-    loadHardEffect(timeline, layers, this.particles, this.holes);
+    loadHardEffect(timeline, targetLayers, this.particles, this.holes);
     this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
   }
 
@@ -59,19 +69,35 @@ export class TargetEffects {
   }
 
   clear(): void {
-    this.gel.clear();
+    for (const gel of this.gels) {
+      gel.dispose();
+      this.group.remove(gel.group);
+    }
+    for (const blood of this.bloods) blood.clear();
+    this.gels = [];
+    this.bloods = [];
     this.holes.clear();
     this.glass.clear();
-    this.blood.clear();
     this.organic = null;
     this.particles.clear();
   }
 
   update(t: number): void {
-    this.gel.update(t);
+    for (const gel of this.gels) gel.update(t);
     this.holes.update(t);
     this.glass.update(t);
-    this.blood.update(t);
+    for (const blood of this.bloods) blood.update(t);
     this.particles.update(t);
   }
+}
+
+function mergeOrganic(a: OrganicResult | null, b: OrganicResult): OrganicResult {
+  if (!a) return b;
+  return {
+    packs: a.packs + b.packs,
+    hit: a.hit + b.hit,
+    burstByCavity: a.burstByCavity + b.burstByCavity,
+    bone: a.bone || b.bone,
+    boneStruck: a.boneStruck || b.boneStruck,
+  };
 }

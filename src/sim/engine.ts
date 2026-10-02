@@ -33,6 +33,8 @@ export interface TargetLayer {
   medium: MediumSpec;
   thickness: number;
   offset: number;
+  /** Which layer of the user's target stack this belongs to (a cinder block splits into two shells). */
+  stack?: number;
 }
 
 export interface ShotSetup {
@@ -78,15 +80,15 @@ function damageFactor(ctx: Context, pos: Vec3, layer: number, bodyRadius: number
 }
 
 /** Splits hollow media (cinder block) into their solid shells; other media are one layer. */
-export function layersFor(medium: MediumSpec, thickness: number, offset = 0): TargetLayer[] {
+export function layersFor(medium: MediumSpec, thickness: number, offset = 0, stack = 0): TargetLayer[] {
   if (medium.shellM && thickness > medium.shellM * 2.5) {
     const shell = medium.shellM;
     return [
-      { medium, thickness: shell, offset },
-      { medium, thickness: shell, offset: offset + thickness - shell },
+      { medium, thickness: shell, offset, stack },
+      { medium, thickness: shell, offset: offset + thickness - shell, stack },
     ];
   }
-  return [{ medium, thickness, offset }];
+  return [{ medium, thickness, offset, stack }];
 }
 
 interface Body {

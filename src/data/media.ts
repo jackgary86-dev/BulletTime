@@ -278,7 +278,7 @@ export const MEDIA: MediumSpec[] = [
     behaviour: 'steel',
     look: 'mildSteel',
     density: 7850,
-    thickness: { min: 0.002, max: 0.025, default: 0.006 },
+    thickness: { min: 0.0008, max: 0.025, default: 0.006 },
     heightM: 0.3,
     widthM: 0.2,
     angleAdjustable: true,

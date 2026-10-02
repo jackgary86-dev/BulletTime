@@ -4,8 +4,9 @@ import { createRenderer, watchResize } from './scene/renderer';
 import { createCameraRig } from './scene/camera';
 import { createStudio } from './scene/studio';
 import { createPostFx } from './scene/postfx';
-import { createTarget, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
-import { layersFor, simulate } from './sim/engine';
+import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
+import { simulate } from './sim/engine';
+import { physicsLayers, stackDepth } from './data/stacks';
 import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { ShotRenderer } from './fx/shotRenderer';
@@ -17,9 +18,9 @@ import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
-import { mountMediumSelector, type TargetSetup } from './ui/mediumSelector';
+import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
 import { mountScrubber } from './ui/scrubber';
-import { mountOrganicReadout } from './ui/organicReadout';
+import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel } from './ui/shotsPanel';
 import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
 import { seededRandom } from './sim/random';
@@ -47,7 +48,7 @@ function bootstrap(): void {
   mountOverlay(overlay);
 
   const scrubber = mountScrubber(overlay, playback);
-  const organic = mountOrganicReadout(overlay);
+  const results = mountShotResults(overlay);
   const shotsPanel = mountShotsPanel(overlay);
   /** Every shot fired since the last Reset, on one timeline (#22). */
   let session: Timeline | null = null;
@@ -77,7 +78,7 @@ function bootstrap(): void {
     playback.stop();
     shot.clear();
     effects.clear();
-    organic.hide();
+    results.hide();
     scrubber.hide();
     panel.setHasShot(false);
   };
@@ -103,13 +104,14 @@ function bootstrap(): void {
       director.reset();
     },
     onFire: () => {
-      const { medium, thickness, angleDeg } = target;
-      const layers = layersFor(medium, thickness);
+      const { angleDeg } = target;
+      const layers = physicsLayers(target.layers);
+      const face = faceLimits(target);
       const plan = shotsPanel.plan();
       const rounds = plan.mode === 'single' ? 1 : plan.count;
       const rand = seededRandom(9001 + (session?.shots.length ?? 0));
-      const limitY = medium.heightM / 2 - 0.01;
-      const limitZ = medium.widthM / 2 - 0.01;
+      const limitY = face.y - 0.01;
+      const limitZ = face.z - 0.01;
       const fireStart = session ? session.duration + SHOT_GAP_S : 0;
       let offset = fireStart;
       for (let i = 0; i < rounds; i++) {
@@ -134,11 +136,10 @@ function bootstrap(): void {
       lastFireStart = fireStart;
       shot.load(timeline);
       if (targetGroup) effects.load(timeline, targetGroup, layers, angleDeg);
-      if (effects.organic) organic.show(effects.organic);
-      else organic.hide();
+      results.show(timeline, target.layers, layers, effects.organic);
       // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
       timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
-      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y + plan.aimY, plan.aimZ), thickness);
+      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y + plan.aimY, plan.aimZ), stackDepth(target.layers));
       playback.start(timeline, fireStart);
       scrubber.load(timeline);
       shotsPanel.setSession(sessionSummary(timeline));
@@ -152,13 +153,14 @@ function bootstrap(): void {
       scene.remove(targetGroup);
       disposeTarget(targetGroup);
     }
-    targetGroup = createTarget(setup.medium, setup.thickness, setup.angleDeg);
+    targetGroup = createTargetStack(setup.layers, setup.angleDeg);
     scene.add(targetGroup);
-    shotsPanel.setLimits(setup.medium.heightM / 2, setup.medium.widthM / 2);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y, 0), setup.thickness);
+    const face = faceLimits(setup);
+    shotsPanel.setLimits(face.y, face.z);
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y, 0), stackDepth(setup.layers));
     clearShot();
   };
-  const target = mountMediumSelector(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
   rebuildTarget(target);
   director.reset();
 
@@ -192,6 +194,14 @@ function bootstrap(): void {
     postFx.setFocus(director.focusDistance);
     postFx.render();
   });
+}
+
+/** Half-height and half-width that every layer covers, so an aimed shot hits the whole stack. */
+function faceLimits(setup: TargetSetup): { y: number; z: number } {
+  return {
+    y: Math.min(...setup.layers.map((l) => l.medium.heightM / 2)),
+    z: Math.min(...setup.layers.map((l) => l.medium.widthM / 2)),
+  };
 }
 
 /** Totals for the shots panel: shots fired, energy delivered and the group size (widest spread of impacts). */

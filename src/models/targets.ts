@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
+import { stackOffsets, type StackLayer } from '../data/stacks';
 import { burlapTexture, concreteTexture, steelTexture, woodTexture } from './textures';
 
 /** Height of the shot line above the floor, in metres. Every target is centred on it. */
@@ -22,18 +23,35 @@ const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 
  * through the impact point by the impact angle.
  */
 export function createTarget(spec: MediumSpec, thickness: number, angleDeg: number): THREE.Group {
+  return createTargetStack([{ medium: spec, thickness, gapM: 0 }], angleDeg);
+}
+
+/** Name of the group holding stack layer `i` (its body and its stand). */
+export const layerGroupName = (i: number) => `layer-${i}`;
+
+/**
+ * A stack of target layers along the shot line (#24), front face at the shot
+ * line's target point. The impact angle turns the whole stack.
+ */
+export function createTargetStack(layers: StackLayer[], angleDeg: number): THREE.Group {
   const group = new THREE.Group();
-  group.name = `target:${spec.id}`;
+  group.name = `target:${layers.map((l) => l.medium.id).join('+')}`;
   group.position.set(TARGET_FRONT_X, SHOT_Y, 0);
   group.rotation.y = THREE.MathUtils.degToRad(angleDeg);
 
-  const body = buildBody(spec, thickness);
-  body.position.x = thickness / 2;
-  group.add(body);
-
-  const bottom = SHOT_Y - spec.heightM / 2;
-  if (bottom > 0.03) group.add(createStand(spec, thickness, bottom));
-  else group.add(createFeet(spec, thickness));
+  const offsets = stackOffsets(layers);
+  layers.forEach(({ medium: spec, thickness }, i) => {
+    const layer = new THREE.Group();
+    layer.name = layerGroupName(i);
+    layer.position.x = offsets[i];
+    const body = buildBody(spec, thickness);
+    body.position.x = thickness / 2;
+    layer.add(body);
+    const bottom = SHOT_Y - spec.heightM / 2;
+    if (bottom > 0.03) layer.add(createStand(spec, thickness, bottom));
+    else layer.add(createFeet(spec, thickness));
+    group.add(layer);
+  });
 
   group.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
@@ -141,7 +159,7 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
       // Paper faces front and back, exposed gypsum on the cut edges.
       const paper = new THREE.MeshStandardMaterial({ color: 0xece8de, roughness: 0.9 });
       const backPaper = new THREE.MeshStandardMaterial({ color: 0xa79f8c, roughness: 0.95 });
-      const gypsum = new THREE.MeshStandardMaterial({ color: 0xf4f2ec, roughness: 1 });
+      const gypsum = new THREE.MeshStandardMaterial({ color: 0xcfcac0, roughness: 1 });
       // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [backPaper, paper, gypsum, gypsum, gypsum, gypsum]);
     }
