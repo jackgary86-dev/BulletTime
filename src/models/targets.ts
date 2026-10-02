@@ -3,7 +3,7 @@ import type { MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { burlapTexture, concreteTexture, gelSurfaceMaps, steelPlateMaps, waterRippleNormalMap, woodTexture } from './textures';
+import { concreteMaps, gelSurfaceMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap, woodTexture } from './textures';
 
 export { standSteel } from './stands';
 
@@ -217,28 +217,30 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
     }
 
     case 'concrete': {
-      const map = concreteTexture();
+      const maps = concreteMaps('cast');
       return new THREE.Mesh(
-        new THREE.BoxGeometry(t, h, w),
-        new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 2, roughness: 0.95 }),
+        tileUvs(new THREE.BoxGeometry(t, h, w), 0.5),
+        new THREE.MeshStandardMaterial({ ...maps, roughness: 1 }),
       );
     }
 
     case 'cinderBlock': {
-      // Front and back shells joined by top and bottom webs; the core is open toward the camera.
-      const map = concreteTexture();
-      const material = new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 3, roughness: 1, color: 0xb4b0a8 });
+      // Front and back shells joined by webs set in from the top and bottom, so the
+      // block shows the H-shaped end of a masonry unit with its core open toward the camera.
+      const maps = concreteMaps('block');
+      const material = new THREE.MeshStandardMaterial({ ...maps, roughness: 1 });
       const shell = Math.min(spec.shellM ?? 0.032, t / 3);
       const web = 0.035;
+      const inset = 0.022;
       const block = new THREE.Group();
       const parts: [number, number, number, number, number][] = [
         [shell, h, w, -t / 2 + shell / 2, 0],
         [shell, h, w, t / 2 - shell / 2, 0],
-        [t - shell * 2, web, w, 0, h / 2 - web / 2],
-        [t - shell * 2, web, w, 0, -h / 2 + web / 2],
+        [t - shell * 2, web, w, 0, h / 2 - inset - web / 2],
+        [t - shell * 2, web, w, 0, -h / 2 + inset + web / 2],
       ];
       for (const [sx, sy, sz, px, py] of parts) {
-        const part = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+        const part = new THREE.Mesh(tileUvs(new THREE.BoxGeometry(sx, sy, sz), 0.4), material);
         part.position.set(px, py, 0);
         block.add(part);
       }
@@ -374,6 +376,24 @@ function createSandbag(t: number, h: number, w: number): THREE.Mesh {
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   geometry.computeVertexNormals();
-  const map = burlapTexture();
-  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 1 }));
+  const maps = wovenBagMaps();
+  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...maps, roughness: 0.95 }));
+}
+
+/**
+ * Re-maps a box's UVs so every face shows the texture at the same real-world
+ * scale (one tile per `tileM` metres), instead of stretching it per face.
+ */
+function tileUvs(geometry: THREE.BoxGeometry, tileM: number): THREE.BoxGeometry {
+  const pos = geometry.attributes.position;
+  const normal = geometry.attributes.normal;
+  const uv = geometry.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    const nx = Math.abs(normal.getX(i));
+    const ny = Math.abs(normal.getY(i));
+    const [a, b] = nx > 0.5 ? [pos.getZ(i), pos.getY(i)] : ny > 0.5 ? [pos.getX(i), pos.getZ(i)] : [pos.getX(i), pos.getY(i)];
+    uv.setXY(i, a / tileM + 0.5, b / tileM + 0.5);
+  }
+  uv.needsUpdate = true;
+  return geometry;
 }

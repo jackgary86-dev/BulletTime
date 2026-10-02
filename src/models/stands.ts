@@ -17,7 +17,7 @@ const rubber = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.9 
 const clampOrange = new THREE.MeshStandardMaterial({ color: 0xd8641c, roughness: 0.5, metalness: 0.2 });
 const chainSteel = new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.35, metalness: 1 });
 // Rough-sawn, weathered timber, darker than a fresh pine plank target.
-const timber = new THREE.MeshStandardMaterial({ color: 0x8a7258, map: woodTexture('pine'), roughness: 0.9 });
+const timber = new THREE.MeshStandardMaterial({ color: 0x7d6e5e, map: woodTexture('pine'), roughness: 0.9 });
 
 /** Materials shared by every holder; disposing a target must leave these alone. */
 export const SHARED_STAND_MATERIALS: ReadonlySet<THREE.Material> = new Set([

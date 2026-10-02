@@ -115,52 +115,6 @@ export function woodTexture(kind: 'pine' | 'oak'): THREE.Texture {
   });
 }
 
-/** Cast concrete: grey aggregate speckle with small air pores. */
-export function concreteTexture(): THREE.Texture {
-  return cached('concrete', () => {
-    const [c, ctx] = canvas(512, 512);
-    const rand = seededRandom(23);
-    ctx.fillStyle = '#8d8a84';
-    ctx.fillRect(0, 0, c.width, c.height);
-    for (let i = 0; i < 26000; i++) {
-      const shade = 90 + rand() * 90;
-      ctx.fillStyle = `rgba(${shade}, ${shade - 2}, ${shade - 6}, ${0.25 + rand() * 0.4})`;
-      const s = 1 + rand() * 2.5;
-      ctx.fillRect(rand() * c.width, rand() * c.height, s, s);
-    }
-    for (let i = 0; i < 260; i++) {
-      ctx.fillStyle = `rgba(35, 33, 30, ${0.5 + rand() * 0.4})`;
-      ctx.beginPath();
-      ctx.arc(rand() * c.width, rand() * c.height, 0.8 + rand() * 2.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    return toTexture(c);
-  });
-}
-
-/** Woven burlap for the sandbag. */
-export function burlapTexture(): THREE.Texture {
-  return cached('burlap', () => {
-    const [c, ctx] = canvas(256, 256);
-    const rand = seededRandom(5);
-    ctx.fillStyle = '#7a6544';
-    ctx.fillRect(0, 0, c.width, c.height);
-    const step = 8;
-    for (let y = 0; y < c.height; y += step) {
-      for (let x = 0; x < c.width; x += step) {
-        const over = ((x + y) / step) % 2 === 0;
-        const shade = over ? 170 + rand() * 30 : 120 + rand() * 30;
-        ctx.fillStyle = `rgb(${shade}, ${shade * 0.82}, ${shade * 0.56})`;
-        if (over) ctx.fillRect(x + 1, y + 2, step - 2, step - 4);
-        else ctx.fillRect(x + 2, y + 1, step - 4, step - 2);
-      }
-    }
-    const texture = toTexture(c);
-    texture.repeat.set(4, 4);
-    return texture;
-  });
-}
-
 /** Colour, roughness and normal maps for a target surface. */
 export interface MaterialMaps {
   map: THREE.Texture;
@@ -177,6 +131,145 @@ export function cachedMaps(key: string, make: () => MaterialMaps): MaterialMaps 
     roughnessMap: cached(`${key}:rough`, () => get().roughnessMap),
     normalMap: cached(`${key}:normal`, () => get().normalMap),
   };
+}
+
+/**
+ * Concrete surfaces (#59). 'cast': a form-faced slab, smooth warm grey with
+ * cloudy mottling, exposed aggregate and small bug holes. 'block': the open,
+ * gritty face of a concrete masonry unit, darker and full of pores.
+ */
+export function concreteMaps(kind: 'cast' | 'block'): MaterialMaps {
+  return cachedMaps(`concrete:${kind}`, () => {
+    const size = 512;
+    const block = kind === 'block';
+    const rand = seededRandom(block ? 29 : 23);
+    const [colour, cctx] = canvas(size, size);
+    const [rough, rctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
+    cctx.fillStyle = block ? '#8a8781' : '#9a968e';
+    cctx.fillRect(0, 0, size, size);
+    rctx.fillStyle = block ? 'rgb(240, 240, 240)' : 'rgb(215, 215, 215)';
+    rctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = 'rgb(150, 150, 150)';
+    hctx.fillRect(0, 0, size, size);
+
+    // Cloudy mottling: large soft light and dark patches (wrapped so the tile repeats cleanly).
+    const blot = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, style: (a: number) => string, a: number) => {
+      for (const ox of [-size, 0, size]) {
+        for (const oy of [-size, 0, size]) {
+          const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+          g.addColorStop(0, style(a));
+          g.addColorStop(1, style(0));
+          ctx.fillStyle = g;
+          ctx.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+        }
+      }
+    };
+    for (let i = 0; i < 50; i++) {
+      const light = rand() > 0.5;
+      blot(cctx, rand() * size, rand() * size, 30 + rand() * 90, (a) => (light ? `rgba(190, 186, 176, ${a})` : `rgba(70, 68, 64, ${a})`), 0.08 + rand() * 0.1);
+    }
+    // Sand grain everywhere.
+    for (let i = 0; i < (block ? 60000 : 30000); i++) {
+      const v = 95 + rand() * 80;
+      const x = rand() * size;
+      const y = rand() * size;
+      const s = 0.7 + rand() * (block ? 1.4 : 1.2);
+      cctx.fillStyle = `rgba(${v}, ${v - 2}, ${v - 6}, ${0.1 + rand() * 0.2})`;
+      cctx.fillRect(x, y, s, s);
+      const hv = rand() > 0.5 ? 255 : 60;
+      hctx.fillStyle = `rgba(${hv}, ${hv}, ${hv}, ${block ? 0.2 : 0.12})`;
+      hctx.fillRect(x, y, s, s);
+    }
+    // Aggregate: angular stones, a little lighter or darker than the paste.
+    for (let i = 0; i < (block ? 500 : 180); i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = 1.5 + rand() * (block ? 3.5 : 5);
+      const v = rand() > 0.5 ? 150 + rand() * 50 : 70 + rand() * 30;
+      cctx.fillStyle = `rgba(${v}, ${v - 4}, ${v - 10}, ${block ? 0.35 : 0.3})`;
+      hctx.fillStyle = `rgba(220, 220, 220, ${block ? 0.35 : 0.2})`;
+      const sides = 5 + Math.floor(rand() * 3);
+      for (const ctx of [cctx, hctx]) {
+        ctx.beginPath();
+        for (let k = 0; k < sides; k++) {
+          const a = (k / sides) * Math.PI * 2;
+          const rr = r * (0.6 + 0.5 * rand());
+          if (k === 0) ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+          else ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+        }
+        ctx.fill();
+      }
+    }
+    // Pores and bug holes: dark pits, rough inside.
+    for (let i = 0; i < (block ? 700 : 160); i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = 0.5 + rand() * (block ? 1.8 : 1.3);
+      for (const [ctx, style] of [
+        [cctx, `rgba(40, 39, 36, ${0.35 + rand() * 0.35})`],
+        [hctx, 'rgba(0, 0, 0, 0.9)'],
+        [rctx, 'rgba(255, 255, 255, 1)'],
+      ] as const) {
+        ctx.fillStyle = style;
+        ctx.beginPath();
+        ctx.ellipse(x, y, r, r * (0.6 + 0.4 * rand()), rand() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    return {
+      map: toTexture(colour),
+      roughnessMap: toTexture(rough, false),
+      normalMap: toTexture(normalMapFromHeight(height, block ? 1.4 : 1), false),
+    };
+  });
+}
+
+/**
+ * Woven polypropylene sandbag cloth (#59): flat tan tapes over and under,
+ * with a few loose fibres and grime, as colour and normal maps.
+ */
+export function wovenBagMaps(): MaterialMaps {
+  return cachedMaps('sandbag', () => {
+    const size = 256;
+    const rand = seededRandom(5);
+    const [colour, cctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
+    const tape = 8;
+    for (let y = 0; y < size; y += tape) {
+      for (let x = 0; x < size; x += tape) {
+        const over = ((x + y) / tape) % 2 === 0;
+        const shade = (over ? 168 : 140) + rand() * 18;
+        cctx.fillStyle = `rgb(${shade}, ${shade * 0.9}, ${shade * 0.66})`;
+        cctx.fillRect(x, y, tape, tape);
+        // Each tape bulges along its length: brighter in the middle of the height map.
+        const g = over ? hctx.createLinearGradient(x, y, x, y + tape) : hctx.createLinearGradient(x, y, x + tape, y);
+        g.addColorStop(0, '#404040');
+        g.addColorStop(0.5, over ? '#f0f0f0' : '#b0b0b0');
+        g.addColorStop(1, '#404040');
+        hctx.fillStyle = g;
+        hctx.fillRect(x, y, tape, tape);
+      }
+    }
+    // Dirt and handling grime.
+    for (let i = 0; i < 30; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = 8 + rand() * 30;
+      const g = cctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(70, 58, 40, ${0.1 + rand() * 0.15})`);
+      g.addColorStop(1, 'rgba(70, 58, 40, 0)');
+      cctx.fillStyle = g;
+      cctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const maps = {
+      map: toTexture(colour),
+      roughnessMap: toTexture(colour, false),
+      normalMap: toTexture(normalMapFromHeight(height, 1.2), false),
+    };
+    for (const t of Object.values(maps)) t.repeat.set(10, 10);
+    return maps;
+  });
 }
 
 /**
