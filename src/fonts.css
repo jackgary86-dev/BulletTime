@@ -1,0 +1,11 @@
+/*
+ * UI fonts, bundled with the game rather than loaded from Google Fonts, so
+ * downloadable and desktop builds work offline and players' IPs stay private (#106).
+ * All three are SIL Open Font License 1.1; see public/THIRD_PARTY_LICENSES.txt.
+ */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/jetbrains-mono/500.css';
