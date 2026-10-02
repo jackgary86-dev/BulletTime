@@ -5,6 +5,9 @@ name: Desktop installers
 on:
   push:
     tags: ['v*']
+  # Pull requests that touch the desktop app check that all three installers still build.
+  pull_request:
+    paths: ['electron/**', 'build/**', 'package.json', 'package-lock.json', '.github/workflows/release.yml']
   workflow_dispatch:
 
 permissions:
