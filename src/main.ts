@@ -2,18 +2,9 @@ import './style.css';
 import * as THREE from 'three';
 import { createRenderer, watchResize } from './scene/renderer';
 import { createCameraRig } from './scene/camera';
-import { createStudio } from './scene/studio';
-import { createPostFx } from './scene/postfx';
-import { createDummy } from './models/dummy';
-import { getRegion } from './data/dummy';
-import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
-import { simulate } from './sim/engine';
-import { physicsLayers, stackDepth } from './data/stacks';
+import { TARGET_FRONT_X } from './models/targets';
 import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
-import { ShotRenderer } from './fx/shotRenderer';
-import { MuzzleEffect } from './fx/muzzle';
-import { TargetEffects } from './fx/targetEffects';
 import { CameraDirector } from './scene/cameraDirector';
 import { DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
 import { DEFAULT_MEDIUM_ID } from './data/media';
@@ -24,16 +15,16 @@ import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
 import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel } from './ui/shotsPanel';
-import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
-import { seededRandom } from './sim/random';
+import { mountComparePanel } from './ui/comparePanel';
+import { physicsLayers } from './data/stacks';
+import { faceLimits, Lane } from './lane';
+import type { LightingMode } from './scene/studio';
 import type { Timeline } from './sim/types';
 
-/** The bullet starts this far in front of the target face, in metres. */
-const STAND_OFF_M = 0.5;
-/** Playback may run this much past the physics so impact effects can settle, in seconds. */
-const EFFECT_TAIL_S = 8e-3;
-/** In group fire, each round leaves this long after the previous one has finished, in seconds. */
-const GROUP_GAP_S = 1e-3;
+/** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
+const COMPARE_FOV = 48;
+/** Width of the left and right control columns, in CSS pixels. */
+const SIDE_PANEL_PX = 316;
 
 function bootstrap(): void {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
@@ -41,46 +32,40 @@ function bootstrap(): void {
   if (!canvas || !overlay) throw new Error('BulletTime: missing #viewport or #overlay element');
 
   const renderer = createRenderer(canvas);
-  const scene = new THREE.Scene();
   const { camera, controls } = createCameraRig(canvas);
-  const studio = createStudio(scene, renderer);
+  const baseFov = camera.fov;
 
   const playback = new Playback();
-  const postFx = createPostFx(renderer, scene, camera);
   mountOverlay(overlay);
 
   const scrubber = mountScrubber(overlay, playback);
-  const results = mountShotResults(overlay);
+  const results = mountShotResults(overlay, 'lane-a');
+  const resultsB = mountShotResults(overlay, 'lane-b');
   const shotsPanel = mountShotsPanel(overlay);
-  /** Every shot fired since the last Reset, on one timeline (#22). */
-  let session: Timeline | null = null;
-  let lastFireStart = 0;
   const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
-  const muzzle = new MuzzleEffect();
-  muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0));
-  scene.add(muzzle.group);
+  let lighting: LightingMode = 'lab';
 
   let spec = getBullet(DEFAULT_BULLET_ID);
-  const shot = new ShotRenderer();
-  scene.add(shot.group);
-  const effects = new TargetEffects();
-  scene.add(effects.group);
+  // Lane A is the main setup; lane B only exists while comparing (#14).
+  let laneA: Lane | null = null;
+  let laneB: Lane | null = null;
+  const lanes = () => [laneA, laneB].filter((l): l is Lane => !!l);
 
   mountBulletSelector(overlay, {
     initialId: spec.id,
     // Switching rounds keeps the damage already in the target: the next shot just uses the new round.
     onChange: (next: BulletSpec) => {
       spec = next;
+      if (laneA) laneA.spec = next;
     },
   });
 
   const clearShot = () => {
-    session = null;
+    for (const lane of lanes()) lane.clear();
     shotsPanel.setSession(null);
     playback.stop();
-    shot.clear();
-    effects.clear();
     results.hide();
+    resultsB.hide();
     scrubber.hide();
     panel.setHasShot(false);
   };
@@ -91,14 +76,13 @@ function bootstrap(): void {
     onRateChange: (rate) => (playback.rate = rate),
     onCameraChange: (mode) => director.setMode(mode),
     onLightingChange: (mode) => {
-      studio.setLightingMode(mode);
-      // A bright scene would bloom everywhere; keep bloom for genuinely hot highlights.
-      postFx.bloom.enabled = mode !== 'highspeed';
+      lighting = mode;
+      for (const lane of lanes()) lane.setLightingMode(mode);
     },
     // Replays the last Fire: the last single shot, or the whole group or burst.
     onReplay: () => {
-      if (!playback.timeline) return;
-      playback.start(playback.timeline, lastFireStart);
+      if (!playback.timeline || !laneA) return;
+      playback.start(playback.timeline, laneA.lastFireStart);
       scrubber.sync();
     },
     onReset: () => {
@@ -106,74 +90,83 @@ function bootstrap(): void {
       director.reset();
     },
     onFire: () => {
-      const { angleDeg } = target;
-      const lineY = shotLineY(target);
-      const layers = physicsLayers(target.layers);
-      const face = faceLimits(target);
+      if (!laneA) return;
       const plan = shotsPanel.plan();
-      const rounds = plan.mode === 'single' ? 1 : plan.count;
-      const rand = seededRandom(9001 + (session?.shots.length ?? 0));
-      const limitY = face.y - 0.01;
-      const limitZ = face.z - 0.01;
-      const fireStart = session ? session.duration + SHOT_GAP_S : 0;
-      let offset = fireStart;
-      for (let i = 0; i < rounds; i++) {
-        // Groups and bursts scatter around the aim point, uniformly over a disc of the spread radius.
-        const r = plan.mode === 'single' ? 0 : plan.spreadM * Math.sqrt(rand());
-        const a = rand() * Math.PI * 2;
-        const y = Math.max(-limitY, Math.min(limitY, plan.aimY + r * Math.sin(a)));
-        const z = Math.max(-limitZ, Math.min(limitZ, plan.aimZ + r * Math.cos(a)));
-        const part = simulate({
-          bullet: spec,
-          layers,
-          angleDeg,
-          impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
-          standOffM: STAND_OFF_M,
-          damage: priorDamage(session),
-        });
-        part.shots[0].aim = { y: lineY - SHOT_Y + y, z };
-        session = appendShot(session, part, offset);
-        offset = plan.mode === 'burst' ? fireStart + ((i + 1) * 60) / plan.rpm : offset + part.duration + GROUP_GAP_S;
+      // Comparing: both lanes fire fresh from t = 0 so they stay in step.
+      const timeline = laneA.fire(plan, !!laneB);
+      results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
+      if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
+      results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
+      let clock: Timeline = timeline;
+      if (laneB) {
+        const b = laneB.fire(plan, true);
+        resultsB.show(b, laneB.setup.layers, physicsLayers(laneB.setup.layers), laneB.effects.organic);
+        // One clock for both: as long as the longer of the two shots.
+        clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
       }
-      const timeline = session!;
-      lastFireStart = fireStart;
-      shot.load(timeline);
-      if (targetGroup) effects.load(timeline, targetGroup, layers, angleDeg);
-      results.show(timeline, target.layers, layers, effects.organic);
-      // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
-      timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
-      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, lineY + plan.aimY, plan.aimZ), stackDepth(target.layers));
-      playback.start(timeline, fireStart);
-      scrubber.load(timeline);
+      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth);
+      playback.start(clock, laneA.lastFireStart);
+      scrubber.load(clock);
       shotsPanel.setSession(sessionSummary(timeline));
       panel.setHasShot(true);
     },
   });
 
-  let targetGroup: THREE.Group | null = null;
   const rebuildTarget = (setup: TargetSetup) => {
-    if (targetGroup) {
-      scene.remove(targetGroup);
-      disposeTarget(targetGroup);
-    }
-    targetGroup = setup.dummy ? createDummy(setup.dummy) : createTargetStack(setup.layers, setup.angleDeg);
-    scene.add(targetGroup);
+    if (!laneA) return;
+    laneA.setTarget(setup);
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, shotLineY(setup), 0), stackDepth(setup.layers));
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth);
     clearShot();
   };
   const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  laneA = new Lane(renderer, camera, target, spec);
   rebuildTarget(target);
   director.reset();
 
-  watchResize((width, height) => {
+  const size = { width: window.innerWidth, height: window.innerHeight };
+  const layout = () => {
+    const { width, height } = size;
+    const comparing = !!laneB;
     renderer.setSize(width, height, false);
-    camera.aspect = width / height;
+    const laneWidth = comparing ? Math.floor(width / 2) : width;
+    camera.aspect = laneWidth / height;
+    camera.fov = comparing ? COMPARE_FOV : baseFov;
     camera.updateProjectionMatrix();
-    postFx.setSize(width, height);
+    for (const lane of lanes()) lane.postFx.setSize(laneWidth, height);
+    overlay.classList.toggle('comparing', comparing);
+  };
+  watchResize((width, height) => {
+    size.width = width;
+    size.height = height;
+    layout();
   });
 
+
+  const compare = mountComparePanel(overlay, { bulletId: DEFAULT_BULLET_ID, mediumId: DEFAULT_MEDIUM_ID }, {
+    onToggle: (on) => {
+      if (on) {
+        laneB = new Lane(renderer, camera, compare.setup, compare.spec);
+        laneB.setLightingMode(lighting);
+      } else if (laneB) {
+        laneB.dispose();
+        laneB = null;
+      }
+      clearShot();
+      // Two full panels would cover both targets; start them folded to one line each.
+      results.setFolded(on);
+      resultsB.setFolded(on);
+      layout();
+    },
+    onChange: (bSpec, bSetup) => {
+      if (!laneB) return;
+      laneB.spec = bSpec;
+      laneB.setTarget(bSetup);
+      clearShot();
+    },
+  });
+  layout();
   const timer = new THREE.Timer();
   timer.connect(document);
   renderer.setAnimationLoop((timestamp) => {
@@ -182,39 +175,36 @@ function bootstrap(): void {
     const delta = Math.min(timer.getDelta(), 0.1);
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
-      shot.update(t);
-      effects.update(t);
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
       scrubber.sync();
     }
-
     director.update(delta, t, playback.timeline);
-    // The muzzle flash belongs to whichever shot is playing, at that shot's aim point.
-    const current = t !== null && playback.timeline ? activeShot(playback.timeline, t) : null;
-    if (current) muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y + current.aim.y, current.aim.z));
-    muzzle.update(current && t !== null ? t - current.start : null, camera);
-    postFx.setFocus(director.focusDistance);
-    postFx.render();
+
+    const { width, height } = size;
+    const all = lanes();
+    const laneWidth = all.length > 1 ? Math.floor(width / 2) : width;
+    renderer.setScissorTest(all.length > 1);
+    // The side panels cover the outer edge of each half, so slide each lane's view toward the middle.
+    const slide = all.length > 1 && width > 900 ? Math.min(SIDE_PANEL_PX / 2, laneWidth / 4) : 0;
+    all.forEach((lane, i) => {
+      lane.update(t, camera);
+      lane.postFx.setFocus(director.focusDistance);
+      // Side by side: each lane draws into its own half of the canvas, through the same camera.
+      renderer.setViewport(i * laneWidth, 0, laneWidth, height);
+      renderer.setScissor(i * laneWidth, 0, laneWidth, height);
+      if (slide) {
+        // A wider virtual view, cropped: lane A shows its left part (scene shifted right), lane B its right part.
+        camera.aspect = (laneWidth + 2 * slide) / height;
+        camera.setViewOffset(laneWidth + 2 * slide, height, i === 0 ? 0 : 2 * slide, 0, laneWidth, height);
+      }
+      lane.postFx.render();
+      if (slide) {
+        camera.aspect = laneWidth / height;
+        camera.clearViewOffset();
+      }
+    });
   });
-}
-
-/** Height of the shot line: the usual bench height, or the dummy region being shot. */
-function shotLineY(setup: TargetSetup): number {
-  return setup.dummy ? getRegion(setup.dummy).shotY : SHOT_Y;
-}
-
-/** Half-height and half-width that every layer covers, so an aimed shot hits the whole stack. */
-function faceLimits(setup: TargetSetup): { y: number; z: number } {
-  // The dummy's layers are anatomy, not slabs: keep the aim inside the region (the fire code keeps 1 cm clear).
-  if (setup.dummy) {
-    const { aim } = getRegion(setup.dummy);
-    return { y: aim.y + 0.01, z: aim.z + 0.01 };
-  }
-  return {
-    y: Math.min(...setup.layers.map((l) => l.medium.heightM / 2)),
-    z: Math.min(...setup.layers.map((l) => l.medium.widthM / 2)),
-  };
 }
 
 /** Totals for the shots panel: shots fired, energy delivered and the group size (widest spread of impacts). */
