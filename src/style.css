@@ -150,9 +150,22 @@ body {
   gap: 4px;
 }
 
+.dummy-regions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.dummy-regions[hidden],
+.dummy-hidden {
+  display: none !important;
+}
+
 .presets button,
 .camera-modes button,
-.lighting-modes button {
+.lighting-modes button,
+.dummy-regions button {
   padding: 6px 0;
   font-size: 11px;
 }
@@ -175,7 +188,8 @@ body {
 
 .presets button.active,
 .camera-modes button.active,
-.lighting-modes button.active {
+.lighting-modes button.active,
+.dummy-regions button.active {
   border-color: var(--accent);
   color: var(--accent);
 }

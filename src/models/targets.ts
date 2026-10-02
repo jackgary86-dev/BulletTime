@@ -15,7 +15,10 @@ export const WATER_BODY_NAME = 'water-body';
 export const BLOOD_PACK_PREFIX = 'blood-pack-';
 export const BONE_ROD_NAME = 'bone-rod';
 
-const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
+/** Synthetic bone simulant: off-white, slightly yellow. */
+export const BONE_COLOR = 0xe9dfc8;
+
+export const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
 
 /**
  * A target ready to place in the scene: its front face is at the group origin,
@@ -242,6 +245,10 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
           clearcoatRoughness: 0.05,
         }),
       );
+
+    case 'bone':
+      // Bone simulant normally lives inside the test dummy (models/dummy.ts); on its own it is a plain plate.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: BONE_COLOR, roughness: 0.6 }));
   }
 }
 
@@ -249,7 +256,7 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
  * Fake blood packs (dark red fluid in thin, wet plastic) and an optional bone
  * rod, suspended in the gel. Opaque, so they show through the transmissive gel.
  */
-function addOrganicInserts(gel: THREE.Mesh, layoutId: string, t: number): void {
+export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: number): void {
   const layout = ORGANIC_LAYOUTS[layoutId];
   if (!layout) return;
   const blood = new THREE.MeshPhysicalMaterial({
@@ -282,7 +289,7 @@ function addOrganicInserts(gel: THREE.Mesh, layoutId: string, t: number): void {
     const b = layout.bone;
     const bone = new THREE.Mesh(
       new THREE.CylinderGeometry(b.radius, b.radius * 1.1, b.length, 20),
-      new THREE.MeshStandardMaterial({ color: 0xe9dfc8, roughness: 0.55 }),
+      new THREE.MeshStandardMaterial({ color: BONE_COLOR, roughness: 0.55 }),
     );
     bone.position.set((b.depth - 0.5) * t, 0, b.z);
     bone.name = BONE_ROD_NAME;

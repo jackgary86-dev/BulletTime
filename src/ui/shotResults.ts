@@ -38,10 +38,12 @@ function layerTable(timeline: Timeline, stack: StackLayer[], layers: TargetLayer
   const shot = timeline.shots.at(-1)!;
   const track = timeline.tracks[shot.primaryId];
   const events = timeline.events.filter((e) => e.trackId === shot.primaryId && e.layer !== undefined);
+  const entryOf = (i: number) => events.find((e) => layers[e.layer!]?.stack === i && (e.type === 'impact' || e.type === 'enter'));
   const rows = stack.map((l, i) => {
     const mine = events.filter((e) => layers[e.layer!]?.stack === i);
-    const entry = mine.find((e) => e.type === 'impact' || e.type === 'enter');
-    const exit = mine.filter((e) => e.type === 'exit').at(-1);
+    const entry = entryOf(i);
+    // Layers that touch (the dummy's anatomy) hand the bullet straight on without an exit event.
+    const exit = mine.filter((e) => e.type === 'exit').at(-1) ?? (entry ? entryOf(i + 1) : undefined);
     const ricochet = mine.find((e) => e.type === 'ricochet');
     let outcome: string;
     if (!entry && !ricochet) outcome = 'not reached';

@@ -1,4 +1,5 @@
 import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium } from '../data/media';
+import { DUMMY_PRESET_ID, DUMMY_REGIONS, getRegion, regionLayers, type DummyRegionId } from '../data/dummy';
 import { MAX_GAP_M, MAX_STACK_LAYERS, STACK_PRESETS, presetLayers, type StackLayer } from '../data/stacks';
 
 export interface TargetSetup {
@@ -6,6 +7,8 @@ export interface TargetSetup {
   layers: StackLayer[];
   /** Impact angle in degrees from head-on, for the whole stack (0 unless every layer allows it). */
   angleDeg: number;
+  /** Set when the target is the clinical test dummy (#25): which region the shot line crosses. */
+  dummy?: DummyRegionId;
 }
 
 export interface StackEditorOptions {
@@ -24,6 +27,9 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   panel.innerHTML = `
     <label class="field-label" for="preset-select">Target</label>
     <select id="preset-select"><option value="">Single material</option></select>
+    <div class="dummy-regions" role="group" aria-label="Aim at">
+      ${DUMMY_REGIONS.map((r) => `<button type="button" data-region="${r.id}">${r.name}</button>`).join('')}
+    </div>
     <div class="stack-chips" role="tablist" aria-label="Layers, front to back"></div>
     <select id="medium-select" aria-label="Layer material"></select>
     <label class="field-label" for="thickness-slider">Thickness <output class="thickness-value"></output></label>
@@ -52,7 +58,8 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   const angleSlider = q<HTMLInputElement>('#angle-slider');
 
   for (const p of STACK_PRESETS) preset.append(new Option(p.name, p.id));
-  for (const medium of MEDIA) select.append(new Option(medium.name, medium.id));
+  preset.append(new Option('Ballistic test dummy', DUMMY_PRESET_ID));
+  for (const medium of MEDIA.filter((m) => !m.dummyOnly)) select.append(new Option(medium.name, medium.id));
 
   const initial = getMedium(options.initialId);
   const setup: TargetSetup = { layers: [{ medium: initial, thickness: initial.thickness.default, gapM: 0 }], angleDeg: 0 };
@@ -65,6 +72,22 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   };
 
   function render() {
+    const dummy = !!setup.dummy;
+    // The dummy's layers are its anatomy: pick a region, not materials.
+    for (const el of panel.querySelectorAll<HTMLElement>('.stack-chips, #medium-select, .layer-actions, .gap-row, .angle-label, #angle-slider'))
+      el.classList.toggle('dummy-hidden', dummy);
+    q('.dummy-regions').hidden = !dummy;
+    for (const b of panel.querySelectorAll<HTMLButtonElement>('.dummy-regions button'))
+      b.classList.toggle('active', b.dataset.region === setup.dummy);
+    thicknessSlider.classList.toggle('dummy-hidden', dummy);
+    q('label[for="thickness-slider"]').classList.toggle('dummy-hidden', dummy);
+    if (dummy) {
+      setup.angleDeg = 0;
+      q('.medium-description').hidden = false;
+      q('.medium-description').textContent =
+        'A lab gel torso and head with bone, brain, lung and organ simulants, and blood packs for the heart and liver.';
+      return;
+    }
     const layer = setup.layers[selected];
     chips.innerHTML = '';
     setup.layers.forEach((l, i) => {
@@ -119,9 +142,24 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
     q('.medium-description').hidden = setup.layers.length > 1;
   }
 
+  const setRegion = (id: DummyRegionId) => {
+    setup.dummy = id;
+    setup.layers = regionLayers(getRegion(id));
+    selected = 0;
+    changed();
+  };
+  for (const b of panel.querySelectorAll<HTMLButtonElement>('.dummy-regions button'))
+    b.addEventListener('click', () => setRegion(b.dataset.region as DummyRegionId));
+
   preset.addEventListener('change', () => {
+    if (preset.value === DUMMY_PRESET_ID) {
+      setRegion('chest');
+      return;
+    }
+    const wasDummy = !!setup.dummy;
+    setup.dummy = undefined;
     const p = STACK_PRESETS.find((x) => x.id === preset.value);
-    setup.layers = p ? presetLayers(p) : [{ ...setup.layers[selected], gapM: 0 }];
+    setup.layers = p ? presetLayers(p) : wasDummy ? [{ medium: getMedium('gel10'), thickness: getMedium('gel10').thickness.default, gapM: 0 }] : [{ ...setup.layers[selected], gapM: 0 }];
     selected = 0;
     changed();
   });

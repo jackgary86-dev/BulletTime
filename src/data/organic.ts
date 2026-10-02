@@ -67,4 +67,13 @@ export const ORGANIC_LAYOUTS: Record<string, OrganicLayout> = {
     ],
     bone: { depth: 0.85, z: 0.0, radius: 0.012, length: 0.28 },
   },
+  // Test dummy (#25): a heart pack in the chest's organ layer, a liver pack in the abdomen.
+  'dummy-heart': {
+    id: 'dummy-heart',
+    packs: [{ depth: 0.5, y: 0.005, z: 0.005, size: [0.024, 0.034, 0.03] }],
+  },
+  'dummy-liver': {
+    id: 'dummy-liver',
+    packs: [{ depth: 0.45, y: 0.012, z: -0.03, size: [0.05, 0.035, 0.06] }],
+  },
 };

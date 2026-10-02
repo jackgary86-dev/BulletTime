@@ -18,7 +18,8 @@ export type MediumBehaviour =
   | 'steel' // splash/flatten, sparks, dent or perforation
   | 'sand' // grains scatter, strong stopping power
   | 'glass' // radial + concentric cracks, shards, deflection
-  | 'ice'; // brittle, cracks and chunks
+  | 'ice' // brittle, cracks and chunks
+  | 'bone'; // bone simulant: hard, brittle, cracks and throws fragments
 
 /** Which procedural look builds the target. */
 export type MediumLook =
@@ -33,7 +34,8 @@ export type MediumLook =
   | 'ar500'
   | 'sandbag'
   | 'glass'
-  | 'ice';
+  | 'ice'
+  | 'bone';
 
 export interface RangeM {
   min: number;
@@ -81,6 +83,8 @@ export interface MediumSpec {
   exitDeflectionDeg?: number;
   /** Organic gel targets: which blood-pack layout is suspended inside (see `data/organic.ts`). */
   organicLayout?: string;
+  /** Simulants that only appear inside the test dummy (#25), not in the material list. */
+  dummyOnly?: boolean;
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -359,6 +363,83 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.3,
     yawNeckScale: 0.5,
     allowsExpansion: false,
+  },
+  // --- Test dummy simulants (#25). Clinical lab materials, tuned like the gel they sit in. ---
+  {
+    id: 'bone-sim',
+    name: 'Bone simulant',
+    description: 'Synthetic bone (skull, ribs, spine): a hard, brittle polymer shell that cracks and throws fragments.',
+    behaviour: 'bone',
+    look: 'bone',
+    density: 1900,
+    thickness: { min: 0.004, max: 0.04, default: 0.007 },
+    heightM: 0.12,
+    widthM: 0.1,
+    angleAdjustable: false,
+    dragCoefficient: 0.6,
+    resistancePa: 120e6, // a 7 mm skull plate takes roughly 60-120 m/s off a handgun round
+    hardness: 0.45,
+    yawNeckScale: 0.5,
+    allowsExpansion: false,
+    exitDeflectionDeg: 4,
+    dummyOnly: true,
+  },
+  {
+    id: 'brain-sim',
+    name: 'Brain simulant',
+    description: 'Soft brain-simulant gel inside the skull. Shows a violent temporary cavity on a head shot.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 1040,
+    thickness: { min: 0.05, max: 0.2, default: 0.14 },
+    heightM: 0.16,
+    widthM: 0.12,
+    angleAdjustable: false,
+    dragCoefficient: 0.3,
+    resistancePa: 4.5e6,
+    hardness: 0.01,
+    yawNeckScale: 1,
+    cavityPressurePa: 0.75e6,
+    allowsExpansion: true,
+    dummyOnly: true,
+  },
+  {
+    id: 'lung-sim',
+    name: 'Lung simulant',
+    description: 'Low-density, foam-like gel standing in for lung tissue.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 450,
+    thickness: { min: 0.03, max: 0.15, default: 0.1 },
+    heightM: 0.2,
+    widthM: 0.14,
+    angleAdjustable: false,
+    dragCoefficient: 0.25,
+    resistancePa: 1.5e6,
+    hardness: 0.01,
+    yawNeckScale: 1.6,
+    cavityPressurePa: 0.6e6,
+    allowsExpansion: true,
+    dummyOnly: true,
+  },
+  {
+    id: 'organ-sim',
+    name: 'Organ simulant',
+    description: 'Denser gel inserts standing in for the liver and other abdominal organs.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 1060,
+    thickness: { min: 0.03, max: 0.2, default: 0.13 },
+    heightM: 0.18,
+    widthM: 0.3,
+    angleAdjustable: false,
+    dragCoefficient: 0.32,
+    resistancePa: 7e6,
+    hardness: 0.03,
+    yawNeckScale: 1,
+    cavityPressurePa: 1.0e6,
+    allowsExpansion: true,
+    dummyOnly: true,
   },
 ];
 

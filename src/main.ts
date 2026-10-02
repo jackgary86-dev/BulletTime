@@ -4,6 +4,8 @@ import { createRenderer, watchResize } from './scene/renderer';
 import { createCameraRig } from './scene/camera';
 import { createStudio } from './scene/studio';
 import { createPostFx } from './scene/postfx';
+import { createDummy } from './models/dummy';
+import { getRegion } from './data/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { simulate } from './sim/engine';
 import { physicsLayers, stackDepth } from './data/stacks';
@@ -105,6 +107,7 @@ function bootstrap(): void {
     },
     onFire: () => {
       const { angleDeg } = target;
+      const lineY = shotLineY(target);
       const layers = physicsLayers(target.layers);
       const face = faceLimits(target);
       const plan = shotsPanel.plan();
@@ -124,11 +127,11 @@ function bootstrap(): void {
           bullet: spec,
           layers,
           angleDeg,
-          impactPoint: { x: TARGET_FRONT_X, y: SHOT_Y + y, z },
+          impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
           standOffM: STAND_OFF_M,
           damage: priorDamage(session),
         });
-        part.shots[0].aim = { y, z };
+        part.shots[0].aim = { y: lineY - SHOT_Y + y, z };
         session = appendShot(session, part, offset);
         offset = plan.mode === 'burst' ? fireStart + ((i + 1) * 60) / plan.rpm : offset + part.duration + GROUP_GAP_S;
       }
@@ -139,7 +142,7 @@ function bootstrap(): void {
       results.show(timeline, target.layers, layers, effects.organic);
       // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
       timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
-      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y + plan.aimY, plan.aimZ), stackDepth(target.layers));
+      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, lineY + plan.aimY, plan.aimZ), stackDepth(target.layers));
       playback.start(timeline, fireStart);
       scrubber.load(timeline);
       shotsPanel.setSession(sessionSummary(timeline));
@@ -153,11 +156,11 @@ function bootstrap(): void {
       scene.remove(targetGroup);
       disposeTarget(targetGroup);
     }
-    targetGroup = createTargetStack(setup.layers, setup.angleDeg);
+    targetGroup = setup.dummy ? createDummy(setup.dummy) : createTargetStack(setup.layers, setup.angleDeg);
     scene.add(targetGroup);
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y, 0), stackDepth(setup.layers));
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, shotLineY(setup), 0), stackDepth(setup.layers));
     clearShot();
   };
   const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
@@ -196,8 +199,18 @@ function bootstrap(): void {
   });
 }
 
+/** Height of the shot line: the usual bench height, or the dummy region being shot. */
+function shotLineY(setup: TargetSetup): number {
+  return setup.dummy ? getRegion(setup.dummy).shotY : SHOT_Y;
+}
+
 /** Half-height and half-width that every layer covers, so an aimed shot hits the whole stack. */
 function faceLimits(setup: TargetSetup): { y: number; z: number } {
+  // The dummy's layers are anatomy, not slabs: keep the aim inside the region (the fire code keeps 1 cm clear).
+  if (setup.dummy) {
+    const { aim } = getRegion(setup.dummy);
+    return { y: aim.y + 0.01, z: aim.z + 0.01 };
+  }
   return {
     y: Math.min(...setup.layers.map((l) => l.medium.heightM / 2)),
     z: Math.min(...setup.layers.map((l) => l.medium.widthM / 2)),

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GEL_BODY_NAME, WATER_BODY_NAME, layerGroupName } from '../models/targets';
 import type { TargetLayer } from '../sim/engine';
 import type { Timeline } from '../sim/types';
+import { loadBoneEffect } from './boneEffect';
 import { BloodPackEffect, type OrganicResult } from './bloodPackEffect';
 import { GlassCracks } from './glassEffect';
 import { GelEffect } from './gelEffect';
@@ -60,6 +61,7 @@ export class TargetEffects {
       }
     });
     loadHardEffect(timeline, targetLayers, this.particles, this.holes);
+    loadBoneEffect(timeline, layers, this.particles, this.holes);
     this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
   }
 
