@@ -14,7 +14,7 @@ import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
 import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
-import { mountShotsPanel } from './ui/shotsPanel';
+import { mountShotsPanel, type FirePlan } from './ui/shotsPanel';
 import { mountComparePanel } from './ui/comparePanel';
 import { mountCameraHud } from './ui/cameraHud';
 import { physicsLayers } from './data/stacks';
@@ -22,17 +22,19 @@ import { faceLimits, Lane } from './lane';
 import type { LightingMode } from './scene/studio';
 import { initialQuality, QUALITY, saveQuality, type QualityLevel } from './scene/quality';
 import type { Timeline } from './sim/types';
+import { attachLoader } from './ui/loader';
 
 /** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
 const COMPARE_FOV = 48;
 /** Width of the left and right control columns, in CSS pixels. */
 const SIDE_PANEL_PX = 316;
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
   const overlay = document.querySelector<HTMLElement>('#overlay');
   if (!canvas || !overlay) throw new Error('BulletTime: missing #viewport or #overlay element');
 
+  await loader.progress(0.1, 'Starting the renderer');
   const renderer = createRenderer(canvas);
   const { camera, controls } = createCameraRig(canvas);
   const baseFov = camera.fov;
@@ -140,6 +142,7 @@ function bootstrap(): void {
     clearShot();
   };
   const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  await loader.progress(0.25, 'Building the lab');
   laneA = new Lane(renderer, camera, target, spec);
   rebuildTarget(target);
   director.reset();
@@ -190,6 +193,11 @@ function bootstrap(): void {
   });
   applyQuality();
   layout();
+
+  await loader.progress(0.5, 'Compiling shaders');
+  await warmUp(laneA, renderer, camera, shotsPanel.plan(), (fraction, text) => loader.progress(0.5 + 0.45 * fraction, text));
+  director.intro();
+
   const timer = new THREE.Timer();
   timer.connect(document);
   renderer.setAnimationLoop((timestamp) => {
@@ -229,6 +237,36 @@ function bootstrap(): void {
       }
     });
   });
+  await loader.progress(1, 'Ready');
+  loader.finish();
+}
+
+/**
+ * Compiles every shader the lab and a first shot need while the loading screen
+ * is up (#77), so the first Fire doesn't stall: the scene as built, then a
+ * throwaway shot (bullet, cavity, particles, muzzle flash), then each
+ * post-processing pass, by drawing a frame of each. The shot is cleared again,
+ * just as Reset would.
+ */
+async function warmUp(
+  lane: Lane,
+  renderer: THREE.WebGLRenderer,
+  camera: THREE.PerspectiveCamera,
+  plan: FirePlan,
+  progress: (fraction: number, status: string) => Promise<void>,
+): Promise<void> {
+  await renderer.compileAsync(lane.scene, camera);
+  await progress(0.4, 'Warming up effects');
+  const timeline = lane.fire(plan, true);
+  for (const t of [30e-6, timeline.impactTime + 150e-6]) {
+    lane.update(t, camera, 1e-6);
+    await renderer.compileAsync(lane.scene, camera);
+    lane.postFx.render();
+  }
+  await progress(0.8, 'Preparing the first frame');
+  lane.clear();
+  lane.update(null, camera);
+  lane.postFx.render();
 }
 
 /** Totals for the shots panel: shots fired, energy delivered and the group size (widest spread of impacts). */
@@ -243,4 +281,8 @@ function sessionSummary(timeline: Timeline) {
   };
 }
 
-bootstrap();
+const loader = attachLoader();
+bootstrap().catch((error: unknown) => {
+  console.error(error);
+  loader.fail(`BulletTime couldn't start: ${error instanceof Error ? error.message : String(error)}. It needs a browser with WebGL 2.`);
+});

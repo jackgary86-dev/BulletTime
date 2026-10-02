@@ -19,6 +19,11 @@ export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
  * The spring is critically damped, so the camera glides in without overshooting (#75).
  */
 const EASE_RATE = { side: 5, tracking: 20, closeup: 6 } as const;
+/** Where the intro move starts, relative to the default framing, in metres. */
+const INTRO_OFFSET = new THREE.Vector3(-0.9, 0.55, 1.1);
+const INTRO_LOOK_RISE = 0.12;
+/** A soft spring to begin with, so the intro starts slowly and builds. */
+const INTRO_STIFFNESS = 1.2;
 /** How quickly the spring's stiffness follows a change of pose, per real second, so cuts never jerk. */
 const STIFFNESS_BLEND_RATE = 3;
 /** In auto mode, cut to the close-up this long (sim time) before impact, in seconds. */
@@ -92,6 +97,19 @@ export class CameraDirector {
     this.velocity.set(0, 0, 0);
     this.lookVelocity.set(0, 0, 0);
     this.stiffness = this.pose.ease;
+  }
+
+  /**
+   * The opening move after the loading screen (#77): start high, wide and off
+   * to one side, and glide down into the default framing.
+   */
+  intro(): void {
+    this.reset();
+    this.camera.position.add(INTRO_OFFSET);
+    this.look.y += INTRO_LOOK_RISE;
+    this.camera.lookAt(this.look);
+    this.controls.target.copy(this.look);
+    this.stiffness = INTRO_STIFFNESS;
   }
 
   /** Distance from the camera to what it is looking at, for depth-of-field focus. */
