@@ -7,6 +7,9 @@ export interface ShotResults {
   /** Shows the last shot's numbers and velocity chart, plus per-layer (stacks) and blood-pack (organic) details. */
   show(timeline: Timeline, stack: StackLayer[], layers: TargetLayer[], organic: OrganicResult | null): void;
   hide(): void;
+  /** Names the shot in the title (comparison mode), or null for the plain title. */
+  setLabel(label: string | null): void;
+  setFolded(folded: boolean): void;
 }
 
 const FT_PER_M = 3.28084;
@@ -19,9 +22,9 @@ const FT_LB_PER_J = 0.737562;
  * tables (#24, #19) sit under a Details toggle, and the whole panel folds
  * down to one line so it never has to cover the target.
  */
-export function mountShotResults(root: HTMLElement): ShotResults {
+export function mountShotResults(root: HTMLElement, className = ''): ShotResults {
   const panel = document.createElement('section');
-  panel.className = 'panel shot-results';
+  panel.className = `panel shot-results ${className}`.trim();
   panel.hidden = true;
   panel.innerHTML = `
     <div class="results-head">
@@ -47,6 +50,7 @@ export function mountShotResults(root: HTMLElement): ShotResults {
   const details = q<HTMLButtonElement>('.results-details');
   let folded = false;
   let showDetails = false;
+  let label: string | null = null;
 
   const layout = () => {
     body.hidden = folded;
@@ -71,7 +75,9 @@ export function mountShotResults(root: HTMLElement): ShotResults {
     show(timeline, stack, layers, organic) {
       const shot = timeline.shots.at(-1)!;
       const s = shot.summary;
-      q('.results-title').textContent = timeline.shots.length > 1 ? `Results · shot ${timeline.shots.length}` : 'Results';
+      const title = timeline.shots.length > 1 ? `Results · shot ${timeline.shots.length}` : 'Results';
+      q('.results-title').textContent = label ?? title;
+      q('.results-title').title = label ?? '';
       q('.results-readout').innerHTML = readout(s)
         .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
         .join('');
@@ -86,6 +92,13 @@ export function mountShotResults(root: HTMLElement): ShotResults {
     },
     hide() {
       panel.hidden = true;
+    },
+    setLabel(text) {
+      label = text;
+    },
+    setFolded(value) {
+      folded = value;
+      layout();
     },
   };
 }
