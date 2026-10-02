@@ -72,7 +72,7 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
     },
     dust: {
       geometry: new THREE.IcosahedronGeometry(0.5, 1),
-      material: lit({ roughness: 1, transparent: true, opacity: 0.35, depthWrite: false }),
+      material: lit({ roughness: 1, transparent: true, opacity: 0.2, depthWrite: false }),
       cap: 2500,
     },
     spark: {
@@ -179,7 +179,9 @@ export class ParticleSystem {
         tmpPos.copy(q.p).addScaledVector(q.v, travel);
         tmpPos.y -= 0.5 * q.gravity * age * age;
         const lifeK = age / q.life;
-        const size = q.size * (1 + (q.grow - 1) * lifeK);
+        let size = q.size * (1 + (q.grow - 1) * lifeK);
+        // Dust thins out and vanishes rather than popping off at the end of its life.
+        if (look === 'dust' && lifeK > 0.6) size *= (1 - lifeK) / 0.4;
         if (q.stretch > 1) {
           tmpDir.copy(q.v).normalize();
           tmpQuat.setFromUnitVectors(X, tmpDir);
