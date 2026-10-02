@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MediumSpec } from '../data/media';
+import type { TargetLayer } from '../sim/engine';
 import { sampleTrack } from '../sim/sample';
 import type { ShotEvent, Timeline, Track } from '../sim/types';
 import type { BurstSpec } from './particles';
@@ -19,16 +19,19 @@ import type { ParticleSystem } from './particles';
 const CONCRETE = { fresh: 0x9e9b94, dust: 0x8a8781, grit: 0x7d7a74, hole: 0x161616, crack: 0x2a2a2a };
 const STEEL = { bright: 0xe4e8ec, lead: 0x8c9096, spark: 0xffb347, hole: 0x050505 };
 
-export function loadHardEffect(timeline: Timeline, layers: MediumSpec[], particles: ParticleSystem, holes: HoleMarks): void {
+export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], particles: ParticleSystem, holes: HoleMarks): void {
   let seed = 101;
   for (const e of timeline.events) {
     if (e.layer === undefined) continue;
-    const medium = layers[e.layer];
+    const medium = layers[e.layer]?.medium;
     if (!medium) continue;
+    // A hollow block's front shell: the next physics layer is the same block's back shell.
+    const next = layers[e.layer + 1];
+    const frontShell = !!next && next.stack === layers[e.layer].stack;
     const track = timeline.tracks.find((tr) => tr.id === e.trackId);
     if (!track || track.kind === 'fragment') continue;
     const ctx = makeContext(track, e);
-    if (medium.behaviour === 'concrete') concreteEvent(ctx, e, layers, particles, holes, seed++);
+    if (medium.behaviour === 'concrete') concreteEvent(ctx, e, frontShell, particles, holes, seed++);
     else if (medium.behaviour === 'steel') steelEvent(ctx, e, particles, holes, seed++);
   }
 }
@@ -59,9 +62,8 @@ function makeContext(track: Track, e: ShotEvent): Context {
   };
 }
 
-function concreteEvent(c: Context, e: ShotEvent, layers: MediumSpec[], particles: ParticleSystem, holes: HoleMarks, seed: number): void {
+function concreteEvent(c: Context, e: ShotEvent, frontShell: boolean, particles: ParticleSystem, holes: HoleMarks, seed: number): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
-  const hollow = layers.length > 1 && layers.every((l) => l.id === layers[0].id);
 
   if (e.type === 'impact' || e.type === 'enter' || e.type === 'ricochet') {
     const glancing = e.type === 'ricochet';
@@ -83,7 +85,6 @@ function concreteEvent(c: Context, e: ShotEvent, layers: MediumSpec[], particles
     particles.add(bits('chunk', e.t, origin, normal, 0.9, 14 * w * k, [4, 15], [0.002, 0.006], CONCRETE.fresh));
     if (glancing) particles.add(sparks(e.t, origin, normal, c.dir, 25 * w * k));
   } else if (e.type === 'exit') {
-    const isFrontShell = hollow && e.layer === 0;
     holes.add({
       t: e.t,
       pos: e.pos,
@@ -95,7 +96,7 @@ function concreteEvent(c: Context, e: ShotEvent, layers: MediumSpec[], particles
       cracks: { count: 4 + Math.round(4 * k), length: [d * 4, d * (6 + 10 * k)], width: 0.0008, color: CONCRETE.crack },
       seed,
     });
-    if (isFrontShell) {
+    if (frontShell) {
       // Inside the hollow core: dust from the front-shell perforation billows slowly round the cell.
       particles.add({ ...dust(e.t, origin, normal, 1.5, 220 * w, 0.028, [1, 10]), duration: 1.2e-3, grow: 5, life: [3e-3, 9e-3], drag: 300 });
       particles.add(bits('grain', e.t, origin, normal, 0.6, 60 * w * (0.5 + k), [10, 50 + 60 * k], [0.0008, 0.002], CONCRETE.grit));

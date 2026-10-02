@@ -391,7 +391,7 @@ body {
   color: var(--muted);
 }
 
-.organic-results {
+.shot-results {
   left: 50%;
   transform: translateX(-50%);
   bottom: 96px;
@@ -401,8 +401,8 @@ body {
   gap: 6px;
 }
 
-.organic-results[hidden],
-.organic-results [hidden] {
+.shot-results[hidden],
+.shot-results [hidden] {
   display: none;
 }
 
@@ -491,6 +491,66 @@ body {
   color: var(--muted);
 }
 
-.organic-results .readout {
+.shot-results .readout {
   grid-template-columns: repeat(4, 1fr);
+}
+
+.stack-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.medium-panel button {
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.medium-panel button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.medium-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.medium-panel .chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.layer-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.medium-panel [hidden] {
+  display: none !important;
+}
+
+.layer-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.layer-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 2px 8px 2px 0;
+}
+
+.layer-table td {
+  padding: 2px 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
