@@ -67,10 +67,10 @@ export function createWake(): Wake {
   return {
     group,
     update(inAir, speed, diameter, length) {
-      group.visible = inAir;
-      if (!inAir) return;
       const mach = speed / SOUND_SPEED;
-      cone.visible = mach > 1.05;
+      cone.visible = inAir && mach > 1.05;
+      wake.visible = inAir;
+      if (!inAir) return;
       if (cone.visible) {
         const spread = Math.tan(Math.asin(1 / mach)) * CONE_LENGTH_M;
         cone.scale.set(CONE_LENGTH_M, spread, spread);
@@ -114,7 +114,7 @@ export function addVapourTrails(timeline: Timeline, particles: ParticleSystem): 
     const track = timeline.tracks[shot.primaryId];
     if (!track || track.kind !== 'bullet') continue;
     for (const [a, b] of airIntervals(track, timeline.events)) {
-      const step = 0.012;
+      const step = 0.005;
       let t = a;
       while (t < b) {
         const frame = sampleTrack(track, t);
@@ -128,7 +128,7 @@ export function addVapourTrails(timeline: Timeline, particles: ParticleSystem): 
           spread: Math.PI,
           count: 2,
           speed: [0.2, 1.5],
-          size: [frame.diameter * 1.2, frame.diameter * 2.5],
+          size: [frame.diameter * 2, frame.diameter * 3.5],
           life: [3e-3, 7e-3],
           drag: 100,
           color: 0xdde3e8,
@@ -140,4 +140,61 @@ export function addVapourTrails(timeline: Timeline, particles: ParticleSystem): 
       }
     }
   }
+}
+
+/** Longest bullet motion-blur streak, in metres, so 1× playback doesn't paint a line across the room. */
+const MAX_STREAK_M = 0.4;
+
+/**
+ * The bullet's motion blur (#74): a translucent smear behind it as long as it
+ * travels during one frame's exposure, fading toward the tail. It vanishes in
+ * deep slow motion, where each frame freezes the bullet crisp.
+ */
+export interface MotionStreak {
+  mesh: THREE.Mesh;
+  update(visible: boolean, travelM: number, diameter: number): void;
+  dispose(): void;
+}
+
+let fadeTexture: THREE.Texture | null = null;
+
+function streakFade(): THREE.Texture {
+  if (fadeTexture) return fadeTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  // Along the cylinder's v: 0 at the tail (bottom) to 1 at the nose (top).
+  const g = ctx.createLinearGradient(0, 128, 0, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.7, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0.8)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  fadeTexture = new THREE.CanvasTexture(canvas);
+  return fadeTexture;
+}
+
+export function createMotionStreak(color: THREE.ColorRepresentation): MotionStreak {
+  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 16, 1, true);
+  // Nose end at the origin, tail back along -x.
+  geometry.translate(0, -0.5, 0);
+  // Top (v = 1, opaque end) at the nose, bottom (v = 0, faded) at the tail.
+  geometry.rotateZ(-Math.PI / 2);
+  const material = new THREE.MeshBasicMaterial({ color, alphaMap: streakFade(), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 1;
+  return {
+    mesh,
+    update(visible, travelM, diameter) {
+      const length = Math.min(MAX_STREAK_M, travelM);
+      mesh.visible = visible && length > diameter * 1.5;
+      if (mesh.visible) mesh.scale.set(length, diameter, diameter);
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
 }

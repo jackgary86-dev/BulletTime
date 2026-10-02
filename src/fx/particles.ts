@@ -114,7 +114,7 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
     // Soft, lit puffs: camera-facing cards with a billowy alpha, fading out as they spread.
     dust: { geometry: dustGeometry(2500), material: dustMaterial(0.85), cap: 2500 },
     // The faint heat-shimmer and vapour trail a bullet leaves in the air (#72).
-    vapour: { geometry: dustGeometry(1200), material: dustMaterial(0.16), cap: 1200 },
+    vapour: { geometry: dustGeometry(1500), material: dustMaterial(0.09), cap: 1500 },
     spark: {
       geometry: new THREE.BoxGeometry(1, 0.15, 0.15),
       material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
@@ -152,6 +152,7 @@ export class ParticleSystem {
   capScale = 1;
   /** The time the instances were last laid out for, so a paused frame costs nothing. */
   private shownT = NaN;
+  private shownShutter = 0;
   /** Brief flashes of light from hot impacts (steel sparks); one light shows the brightest. */
   private flashes: Flash[] = [];
   /** Always in the scene (dark when idle), so lighting a flash never recompiles the materials. */
@@ -263,9 +264,11 @@ export class ParticleSystem {
     }
   }
 
-  update(t: number): void {
-    if (t === this.shownT) return;
+  /** Lays the particles out for sim time `t`; moving bits smear over a `shutterS` exposure (#74). */
+  update(t: number, shutterS = 0): void {
+    if (t === this.shownT && shutterS === this.shownShutter) return;
     this.shownT = t;
+    this.shownShutter = shutterS;
     let best = 0;
     for (const f of this.flashes) {
       const age = t - f.t;
@@ -322,9 +325,15 @@ export class ParticleSystem {
         } else if (look === 'spark') {
           // A streak as long as the spark travels in a short exposure, so fast sparks are long and slowing ones shrink to dots.
           const v = landed && q.bounceV ? tmpDir.copy(q.bounceV).multiplyScalar(Math.exp(-q.drag * (age - q.landAge))) : velocityAt(q, age, tmpDir);
-          const streak = Math.min(q.stretch * 1.5, Math.max(1, (v.length() * SPARK_EXPOSURE_S) / size));
+          const exposure = Math.max(SPARK_EXPOSURE_S, shutterS);
+          const streak = Math.min(Math.max(q.stretch * 1.5, MAX_BLUR), Math.max(1, (v.length() * exposure) / size));
           tmpQuat.setFromUnitVectors(X, v.normalize());
           tmpScale.set(size * streak, size, size);
+        } else if (shutterS > 0 && !landed && !CLOUD.has(look) && velocityAt(q, age, tmpDir).length() * shutterS > size * 0.5) {
+          // Motion blur: a fast bit smears along its path over the frame's exposure.
+          const smear = Math.min(MAX_BLUR, 1 + (tmpDir.length() * shutterS) / size);
+          tmpQuat.setFromUnitVectors(X, tmpDir.normalize());
+          tmpScale.set(size * Math.max(q.stretch, smear), size, size);
         } else if (q.stretch > 1 && look !== 'splinter') {
           // Sparks and lead spray streak along their flight path.
           tmpDir.copy(q.v).normalize();
@@ -360,6 +369,8 @@ const SPLAT_SPREAD = 2.2;
 const SPLAT_LIFE_S = 1;
 /** The streak a spark draws is its travel over this long, as a camera shutter would smear it. */
 const SPARK_EXPOSURE_S = 80e-6;
+/** Longest motion-blur smear, in multiples of a particle's size. */
+const MAX_BLUR = 14;
 /** Glowing steel cooling: white-hot, yellow, orange, dull red, then nearly dark. */
 const SPARK_RAMP = [
   { k: 0, c: new THREE.Color(3, 2.7, 2.2) },

@@ -84,12 +84,13 @@ export class TargetEffects {
     this.particles.clear();
   }
 
-  update(t: number): void {
+  /** `shutterS` is the sim time one frame's exposure covers, for motion blur (#74). */
+  update(t: number, shutterS = 0): void {
     for (const gel of this.gels) gel.update(t);
     this.holes.update(t);
     this.glass.update(t);
     for (const blood of this.bloods) blood.update(t);
-    this.particles.update(t);
+    this.particles.update(t, shutterS);
   }
 }
 

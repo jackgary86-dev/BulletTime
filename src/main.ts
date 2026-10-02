@@ -209,7 +209,7 @@ function bootstrap(): void {
     // The side panels cover the outer edge of each half, so slide each lane's view toward the middle.
     const slide = all.length > 1 && width > 900 ? Math.min(SIDE_PANEL_PX / 2, laneWidth / 4) : 0;
     all.forEach((lane, i) => {
-      lane.update(t, camera);
+      lane.update(t, camera, playback.shutterS);
       lane.postFx.setFocus(director.focusDistance);
       // Side by side: each lane draws into its own half of the canvas, through the same camera.
       renderer.setViewport(i * laneWidth, 0, laneWidth, height);
