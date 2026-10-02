@@ -62,6 +62,8 @@ export class GelEffect {
   private readonly material: THREE.MeshPhysicalMaterial;
   private readonly waterMaterial: THREE.MeshPhysicalMaterial;
   private style: CavityStyle = 'gel';
+  /** Blood stains spreading along the cavity from burst packs: centre x (world), start time. */
+  private stains: { x: number; t: number; reach: number }[] = [];
 
   constructor(private readonly particles: ParticleSystem) {
     this.group.name = 'gel-effect';
@@ -86,6 +88,7 @@ export class GelEffect {
       clearcoat: 0.6,
       clearcoatRoughness: 0.3,
       side: THREE.DoubleSide,
+      vertexColors: true,
     });
   }
 
@@ -146,6 +149,7 @@ export class GelEffect {
     this.block = null;
     this.blockRest = null;
     this.rings = [];
+    this.stains = [];
     this.impactT = Infinity;
     this.exitT = Infinity;
   }
@@ -157,15 +161,27 @@ export class GelEffect {
     for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
   }
 
+  /** Blood from a pack burst at world x spreads along the cavity wall from time t, up to `reach` metres each way. */
+  addStain(x: number, t: number, reach: number): void {
+    this.stains.push({ x, t, reach });
+  }
+
+  /** How blood-stained the cavity is at world x and time t, 0–1. */
+  private stainAt(x: number, t: number): number {
+    let k = 0;
+    for (const s of this.stains) {
+      const age = t - s.t;
+      if (age <= 0) continue;
+      const front = Math.min(s.reach, age * 30);
+      const d = Math.abs(x - s.x);
+      if (d < front) k = Math.max(k, Math.min(1, age / 0.6e-3) * (1 - (d / s.reach) ** 2));
+    }
+    return k;
+  }
+
   /** Cavity radius of one section at time t: rises to its peak, then pulses down to the channel. */
   private radiusAt(ring: Ring, t: number): number {
-    const age = t - ring.t;
-    if (age <= 0) return 0;
-    if (age < ring.rise) return Math.max(ring.channel, ring.peak * Math.sin((Math.PI / 2) * (age / ring.rise)));
-    const after = (age - ring.rise) / ring.rise;
-    const envelope = Math.exp(-after / PULSE_DECAY);
-    const wave = 0.5 + 0.5 * Math.cos((Math.PI * 2 * after) / PULSE_PERIOD);
-    return ring.channel + (ring.peak - ring.channel) * envelope * wave;
+    return cavityRadiusAt(ring.peak, ring.channel, ring.t, t);
   }
 
   private updateRadii(t: number): void {
@@ -263,6 +279,8 @@ export class GelEffect {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    // Per-vertex tint so blood from burst packs can stain the cavity wall (#19).
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * RING_SEGMENTS * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setIndex(index);
     const mesh = new THREE.Mesh(geometry, this.style === 'water' ? this.waterMaterial : this.material);
     mesh.frustumCulled = false;
@@ -279,9 +297,22 @@ export class GelEffect {
     const wrinkle = mesh.userData.wrinkle as Float32Array;
     const pos = mesh.geometry.attributes.position;
     const arr = pos.array as Float32Array;
+    const colours = mesh.geometry.attributes.color;
+    const carr = colours.array as Float32Array;
     let visible = false;
     for (let i = 0; i < rings.length; i++) {
       const ring = rings[i];
+      const stain = this.stains.length ? this.stainAt(ring.centre.x, t) : 0;
+      // White leaves the amber material as is; stained sections go a deep wet red.
+      const cr = 1 + 0.6 * stain;
+      const cg = 1 - 0.85 * stain;
+      const cb = 1 - 0.8 * stain;
+      for (let j = 0; j < RING_SEGMENTS; j++) {
+        const c = (i * RING_SEGMENTS + j) * 3;
+        carr[c] = cr;
+        carr[c + 1] = cg;
+        carr[c + 2] = cb;
+      }
       let r = this.radiusAt(ring, t);
       if (r > 0) visible = true;
       // Stay inside the block walls as they bulge.
@@ -297,6 +328,7 @@ export class GelEffect {
       }
     }
     pos.needsUpdate = true;
+    colours.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
     mesh.visible = visible;
   }
@@ -411,6 +443,26 @@ export class GelEffect {
       });
     }
   }
+}
+
+/** Time for a cavity section of this peak radius to reach its peak, in seconds. */
+export function cavityRiseTime(peak: number): number {
+  return RISE_BASE_S + RISE_PER_M_S * peak;
+}
+
+/**
+ * Radius of one section of the temporary cavity at time t: it rises to its
+ * peak after the bullet passes (at `bornT`), then pulses down to the channel.
+ */
+export function cavityRadiusAt(peak: number, channel: number, bornT: number, t: number): number {
+  const rise = cavityRiseTime(peak);
+  const age = t - bornT;
+  if (age <= 0) return 0;
+  if (age < rise) return Math.max(channel, peak * Math.sin((Math.PI / 2) * (age / rise)));
+  const after = (age - rise) / rise;
+  const envelope = Math.exp(-after / PULSE_DECAY);
+  const wave = 0.5 + 0.5 * Math.cos((Math.PI * 2 * after) / PULSE_PERIOD);
+  return channel + (peak - channel) * envelope * wave;
 }
 
 function toRing(c: CavitySample, channel?: number): Ring {

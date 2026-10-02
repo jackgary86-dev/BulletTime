@@ -388,3 +388,17 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
+
+.organic-results {
+  left: 16px;
+  bottom: 96px;
+  width: min(220px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.organic-results[hidden],
+.organic-results [hidden] {
+  display: none;
+}

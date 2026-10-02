@@ -19,6 +19,7 @@ import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountMediumSelector, type TargetSetup } from './ui/mediumSelector';
 import { mountScrubber } from './ui/scrubber';
+import { mountOrganicReadout } from './ui/organicReadout';
 
 /** The bullet starts this far in front of the target face, in metres. */
 const STAND_OFF_M = 0.5;
@@ -40,6 +41,7 @@ function bootstrap(): void {
   mountOverlay(overlay);
 
   const scrubber = mountScrubber(overlay, playback);
+  const organic = mountOrganicReadout(overlay);
   const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
   const muzzle = new MuzzleEffect();
   muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0));
@@ -63,6 +65,7 @@ function bootstrap(): void {
     playback.stop();
     shot.clear();
     effects.clear();
+    organic.hide();
     scrubber.hide();
     panel.setHasShot(false);
   };
@@ -98,6 +101,8 @@ function bootstrap(): void {
       });
       shot.load(timeline, spec);
       if (targetGroup) effects.load(timeline, targetGroup, layers, angleDeg);
+      if (effects.organic) organic.show(effects.organic);
+      else organic.hide();
       // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
       timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
       playback.start(timeline);

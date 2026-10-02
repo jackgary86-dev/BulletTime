@@ -8,7 +8,7 @@ import { seededRandom } from '../sim/random';
  * Each look is one InstancedMesh, so thousands of particles cost a few draw calls.
  */
 
-export type ParticleLook = 'chunk' | 'droplet' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain';
+export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain';
 
 export interface BurstSpec {
   look: ParticleLook;
@@ -68,6 +68,12 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
     droplet: {
       geometry: new THREE.SphereGeometry(0.5, 8, 6),
       material: new THREE.MeshPhysicalMaterial({ roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.8 }),
+      cap: 2500,
+    },
+    // Opaque wet blobs: these still show inside transmissive gel, where transparent droplets would vanish.
+    blob: {
+      geometry: new THREE.SphereGeometry(0.5, 10, 8),
+      material: new THREE.MeshPhysicalMaterial({ roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.1 }),
       cap: 2500,
     },
     dust: {
