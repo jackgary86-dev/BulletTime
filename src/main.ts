@@ -19,6 +19,7 @@ import { mountComparePanel } from './ui/comparePanel';
 import { physicsLayers } from './data/stacks';
 import { faceLimits, Lane } from './lane';
 import type { LightingMode } from './scene/studio';
+import { initialQuality, QUALITY, saveQuality, type QualityLevel } from './scene/quality';
 import type { Timeline } from './sim/types';
 
 /** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
@@ -44,6 +45,15 @@ function bootstrap(): void {
   const shotsPanel = mountShotsPanel(overlay);
   const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
   let lighting: LightingMode = 'lab';
+  let quality: QualityLevel = initialQuality();
+  /** Renderer-wide parts of the quality setting; each lane applies the rest. */
+  const applyQuality = () => {
+    const q = QUALITY[quality];
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
+    renderer.shadowMap.enabled = q.shadowMapSize > 0;
+    renderer.transmissionResolutionScale = q.transmissionScale;
+    for (const lane of lanes()) lane.setQuality(q);
+  };
 
   let spec = getBullet(DEFAULT_BULLET_ID);
   // Lane A is the main setup; lane B only exists while comparing (#14).
@@ -73,11 +83,18 @@ function bootstrap(): void {
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
     initialCamera: 'auto',
+    initialQuality: quality,
     onRateChange: (rate) => (playback.rate = rate),
     onCameraChange: (mode) => director.setMode(mode),
     onLightingChange: (mode) => {
       lighting = mode;
       for (const lane of lanes()) lane.setLightingMode(mode);
+    },
+    onQualityChange: (level) => {
+      quality = level;
+      saveQuality(level);
+      applyQuality();
+      layout();
     },
     // Replays the last Fire: the last single shot, or the whole group or burst.
     onReplay: () => {
@@ -134,7 +151,10 @@ function bootstrap(): void {
     camera.aspect = laneWidth / height;
     camera.fov = comparing ? COMPARE_FOV : baseFov;
     camera.updateProjectionMatrix();
-    for (const lane of lanes()) lane.postFx.setSize(laneWidth, height);
+    for (const lane of lanes()) {
+      lane.postFx.composer.setPixelRatio(renderer.getPixelRatio());
+      lane.postFx.setSize(laneWidth, height);
+    }
     overlay.classList.toggle('comparing', comparing);
   };
   watchResize((width, height) => {
@@ -143,12 +163,12 @@ function bootstrap(): void {
     layout();
   });
 
-
   const compare = mountComparePanel(overlay, { bulletId: DEFAULT_BULLET_ID, mediumId: DEFAULT_MEDIUM_ID }, {
     onToggle: (on) => {
       if (on) {
         laneB = new Lane(renderer, camera, compare.setup, compare.spec);
         laneB.setLightingMode(lighting);
+        laneB.setQuality(QUALITY[quality]);
       } else if (laneB) {
         laneB.dispose();
         laneB = null;
@@ -166,6 +186,7 @@ function bootstrap(): void {
       clearShot();
     },
   });
+  applyQuality();
   layout();
   const timer = new THREE.Timer();
   timer.connect(document);
