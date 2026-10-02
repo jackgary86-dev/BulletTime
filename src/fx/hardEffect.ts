@@ -17,7 +17,7 @@ import type { ParticleSystem } from './particles';
  */
 
 const CONCRETE = { fresh: 0x9e9b94, dust: 0x8a8781, grit: 0x7d7a74, hole: 0x161616, crack: 0x2a2a2a };
-const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505 };
+const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505, paint: 0xd8d1bf };
 /** A perforation's rim glows hot and cools over about this long, in seconds. */
 const GLOW_COOL_S = 2.5e-3;
 
@@ -145,6 +145,8 @@ function steelEvent(
         streaks: { count: 18, length: [d * 2, d * (4 + 4 * k)], width: d * 0.35, color: STEEL.lead },
         seed: seed + 900,
       });
+      // The blasted paint leaves as a cloud of curled flakes.
+      particles.add({ ...bits('chunk', e.t, origin, normal, 1.2, 50 * w * (0.4 + k), [6, 30 + 30 * k], [0.0015, 0.004], STEEL.paint), look: 'flake', drag: 80 });
     }
     // A grey lead splatter with a bright, polished dent at its centre; the opening only appears if the plate is perforated.
     holes.add({

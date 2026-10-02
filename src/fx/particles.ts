@@ -8,7 +8,13 @@ import { seededRandom } from '../sim/random';
  * Each look is one InstancedMesh, so thousands of particles cost a few draw calls.
  */
 
-export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain';
+export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain' | 'flake';
+
+/** Height of the lab floor; debris that reaches it stops there instead of falling through. */
+export const FLOOR_Y = 0;
+
+/** Looks that are solid bits of the target: they tumble on their own axes, land on the floor and stay. */
+const SOLID: ReadonlySet<ParticleLook> = new Set(['chunk', 'splinter', 'shard', 'grain', 'flake']);
 
 export interface BurstSpec {
   look: ParticleLook;
@@ -52,6 +58,15 @@ interface Particle {
   stretch: number;
   grow: number;
   spin: number;
+  /** Axis this bit tumbles about. */
+  spinAxis: THREE.Vector3;
+  /** Orientation at spawn: velocity-aligned for long bits, random otherwise. */
+  start: THREE.Quaternion;
+  /** Per-axis shape variation, so no two chips are the same. */
+  aspect: THREE.Vector3;
+  /** Age at which it lands on the floor (Infinity if it never does), and where. */
+  landAge: number;
+  landPos: THREE.Vector3 | null;
   color: THREE.Color;
 }
 
@@ -64,7 +79,8 @@ interface LookConfig {
 function lookConfigs(): Record<ParticleLook, LookConfig> {
   const lit = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(o);
   return {
-    chunk: { geometry: new THREE.DodecahedronGeometry(0.5, 0), material: lit({ roughness: 0.4, metalness: 0 }), cap: 1500 },
+    // Faceted, irregular chips with flat-shaded fracture faces.
+    chunk: { geometry: rockGeometry(0.5, 1, 0.32, 11), material: lit({ roughness: 0.78, metalness: 0, flatShading: true }), cap: 1500 },
     droplet: {
       geometry: new THREE.SphereGeometry(0.5, 8, 6),
       material: new THREE.MeshPhysicalMaterial({ roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.8 }),
@@ -86,13 +102,15 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
       material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
       cap: 1200,
     },
-    splinter: { geometry: new THREE.BoxGeometry(1, 0.18, 0.12), material: lit({ roughness: 0.8 }), cap: 1500 },
+    splinter: { geometry: splinterGeometry(), material: lit({ roughness: 0.85, flatShading: true }), cap: 1500 },
+    // Paint and paper flakes: thin, ragged and two-sided, flashing as they turn.
+    flake: { geometry: flakeGeometry(), material: lit({ roughness: 0.55, side: THREE.DoubleSide }), cap: 1200 },
     shard: {
       geometry: new THREE.TetrahedronGeometry(0.6, 0),
       material: new THREE.MeshPhysicalMaterial({ roughness: 0.02, metalness: 0, transparent: true, opacity: 0.55, clearcoat: 1 }),
       cap: 1500,
     },
-    grain: { geometry: new THREE.IcosahedronGeometry(0.5, 0), material: lit({ roughness: 0.95 }), cap: 3000 },
+    grain: { geometry: rockGeometry(0.5, 0, 0.25, 5), material: lit({ roughness: 0.95, flatShading: true }), cap: 3000 },
   };
 }
 
@@ -101,8 +119,8 @@ const tmpQuat = new THREE.Quaternion();
 const tmpScale = new THREE.Vector3();
 const tmpMatrix = new THREE.Matrix4();
 const tmpDir = new THREE.Vector3();
+const tmpSpin = new THREE.Quaternion();
 const X = new THREE.Vector3(1, 0, 0);
-const spinAxis = new THREE.Vector3(0.3, 1, 0.2).normalize();
 
 export class ParticleSystem {
   readonly group = new THREE.Group();
@@ -122,7 +140,7 @@ export class ParticleSystem {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
-      mesh.castShadow = look === 'chunk' || look === 'splinter' || look === 'grain';
+      mesh.castShadow = look === 'chunk' || look === 'splinter' || look === 'grain' || look === 'flake';
       // Instance colours need an initialised buffer before the first draw.
       mesh.setColorAt(0, new THREE.Color(1, 1, 1));
       this.meshes.set(look, mesh);
@@ -169,19 +187,34 @@ export class ParticleSystem {
       const jitter = spec.originJitter ?? 0;
       const p = spec.origin.clone().add(new THREE.Vector3((rand() - 0.5) * jitter, (rand() - 0.5) * jitter, (rand() - 0.5) * jitter));
       const shade = 1 - (spec.colorJitter ?? 0.15) * rand();
-      list.push({
+      const v = dir.multiplyScalar(speed);
+      const solid = SOLID.has(spec.look);
+      const spinAxis = randomUnit(rand);
+      // Long bits leave along their flight path, then tumble; chips start in any orientation.
+      const start = (spec.stretch ?? 1) > 1 ? new THREE.Quaternion().setFromUnitVectors(X, dir.clone().normalize()) : new THREE.Quaternion().setFromAxisAngle(randomUnit(rand), rand() * Math.PI * 2);
+      const aspect = solid ? new THREE.Vector3(0.7 + 0.6 * rand(), 0.6 + 0.6 * rand(), 0.7 + 0.6 * rand()) : new THREE.Vector3(1, 1, 1);
+      const size = lerp(spec.size, rand());
+      const q: Particle = {
         t0: spec.t0 + (spec.duration ?? 0) * rand(),
         life: lerp(spec.life, rand()),
         p,
-        v: dir.multiplyScalar(speed),
-        size: lerp(spec.size, rand()),
+        v,
+        size,
         drag: spec.drag * (0.7 + 0.6 * rand()),
         gravity: spec.gravity ?? 0,
         stretch: spec.stretch ?? 1,
         grow: spec.grow ?? 1,
-        spin: (rand() - 0.5) * 3000,
+        // Small bits spin faster; a few thousand rad/s for a millimetre chip.
+        spin: (rand() < 0.5 ? -1 : 1) * (800 + 2500 * rand()) * Math.min(2, 0.003 / Math.max(size, 0.0005)),
+        spinAxis,
+        start,
+        aspect,
+        landAge: Infinity,
+        landPos: null,
         color: base.clone().multiplyScalar(shade),
-      });
+      };
+      if (solid) land(q);
+      list.push(q);
     }
   }
 
@@ -195,20 +228,25 @@ export class ParticleSystem {
         const age = t - q.t0;
         if (age < 0 || age > q.life) continue;
         // Closed-form position under linear drag: p + v·(1 − e^(−kτ))/k, plus gravity.
-        const k = q.drag;
-        const travel = k > 0 ? (1 - Math.exp(-k * age)) / k : age;
-        tmpPos.copy(q.p).addScaledVector(q.v, travel);
-        tmpPos.y -= 0.5 * q.gravity * age * age;
+        const landed = age >= q.landAge;
+        // Once on the floor, a bit stays where it landed and stops turning.
+        const moveAge = landed ? q.landAge : age;
+        if (landed) tmpPos.copy(q.landPos!);
+        else positionAt(q, age, tmpPos);
         const lifeK = age / q.life;
         let size = q.size * (1 + (q.grow - 1) * lifeK);
         // Dust thins out and vanishes rather than popping off at the end of its life.
         if (look === 'dust' && lifeK > 0.6) size *= (1 - lifeK) / 0.4;
-        if (q.stretch > 1) {
+        if (q.stretch > 1 && look !== 'splinter') {
+          // Sparks and lead spray streak along their flight path.
           tmpDir.copy(q.v).normalize();
           tmpQuat.setFromUnitVectors(X, tmpDir);
           tmpScale.set(size * q.stretch, size, size);
+        } else if (SOLID.has(look)) {
+          tmpQuat.copy(q.start).premultiply(tmpSpin.setFromAxisAngle(q.spinAxis, q.spin * moveAge));
+          tmpScale.set(size * q.stretch * q.aspect.x, size * q.aspect.y, size * q.aspect.z);
         } else {
-          tmpQuat.setFromAxisAngle(spinAxis, q.spin * age);
+          tmpQuat.setFromAxisAngle(q.spinAxis, q.spin * age);
           tmpScale.setScalar(size);
         }
         tmpMatrix.compose(tmpPos, tmpQuat, tmpScale);
@@ -224,4 +262,102 @@ export class ParticleSystem {
 }
 
 const tmpColor = new THREE.Color();
+const tmpLand = new THREE.Vector3();
+
+/** Closed-form position under linear drag, p + v·(1 − e^(−kτ))/k, plus gravity. */
+function positionAt(q: Particle, age: number, out: THREE.Vector3): THREE.Vector3 {
+  const k = q.drag;
+  const travel = k > 0 ? (1 - Math.exp(-k * age)) / k : age;
+  out.copy(q.p).addScaledVector(q.v, travel);
+  out.y -= 0.5 * q.gravity * age * age;
+  return out;
+}
+
+/** Finds when (if ever, within its life) a bit reaches the floor, so it can come to rest there. */
+function land(q: Particle): void {
+  const rest = FLOOR_Y + q.size * 0.3;
+  if (positionAt(q, q.life, tmpLand).y > rest) return;
+  // Height is monotonic once falling, and the bits start above the floor, so bisect.
+  let lo = 0;
+  let hi = q.life;
+  if (positionAt(q, 0, tmpLand).y <= rest) hi = 0;
+  for (let i = 0; i < 24 && hi > 0; i++) {
+    const mid = (lo + hi) / 2;
+    if (positionAt(q, mid, tmpLand).y > rest) lo = mid;
+    else hi = mid;
+  }
+  q.landAge = hi;
+  q.landPos = positionAt(q, hi, new THREE.Vector3());
+  q.landPos.y = rest;
+}
+
+function randomUnit(rand: () => number): THREE.Vector3 {
+  const z = rand() * 2 - 1;
+  const a = rand() * Math.PI * 2;
+  const r = Math.sqrt(1 - z * z);
+  return new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), z);
+}
+
+/** Moves each vertex by a hash of where it is, so faces that share a corner stay joined. */
+function jitterVertices(geometry: THREE.BufferGeometry, amount: (p: THREE.Vector3, rand: () => number) => THREE.Vector3, seed: number): void {
+  const pos = geometry.getAttribute('position');
+  const moved = new Map<string, THREE.Vector3>();
+  const rand = seededRandom(seed);
+  const p = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i);
+    const key = `${p.x.toFixed(4)},${p.y.toFixed(4)},${p.z.toFixed(4)}`;
+    let to = moved.get(key);
+    if (!to) {
+      to = amount(p.clone(), rand);
+      moved.set(key, to);
+    }
+    pos.setXYZ(i, to.x, to.y, to.z);
+  }
+  geometry.computeVertexNormals();
+}
+
+/** A lumpy, faceted stone: an icosahedron with each corner pushed in or out. */
+function rockGeometry(radius: number, detail: number, roughness: number, seed: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(radius, detail);
+  jitterVertices(g, (p, rand) => p.multiplyScalar(1 - roughness + 2 * roughness * rand()), seed);
+  return g;
+}
+
+/** A long sliver of wood: tapered to ragged points at both ends, thicker in the middle. */
+function splinterGeometry(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(1, 0.28, 0.14, 6, 1, 1);
+  jitterVertices(
+    g,
+    (p, rand) => {
+      const along = Math.abs(p.x) * 2;
+      // Thick middle narrowing to frayed tips that end off-centre.
+      const taper = Math.max(0.08, 1 - along ** 1.6);
+      const fray = along > 0.7 ? (rand() - 0.5) * 0.12 : 0;
+      return new THREE.Vector3(p.x + (rand() - 0.5) * 0.05, p.y * taper * (0.8 + 0.4 * rand()) + fray, p.z * taper * (0.8 + 0.4 * rand()));
+    },
+    23,
+  );
+  return g;
+}
+
+/** A thin, ragged-edged flake lying in the xz plane. */
+function flakeGeometry(): THREE.BufferGeometry {
+  const rand = seededRandom(41);
+  const shape = new THREE.Shape();
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const r = 0.5 * (0.55 + 0.45 * rand());
+    if (i === 0) shape.moveTo(r * Math.cos(a), r * Math.sin(a));
+    else shape.lineTo(r * Math.cos(a), r * Math.sin(a));
+  }
+  const g = new THREE.ShapeGeometry(shape);
+  g.rotateX(-Math.PI / 2);
+  // A slight curl, as paint flakes peel.
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) pos.setY(i, 0.25 * pos.getX(i) ** 2);
+  g.computeVertexNormals();
+  return g;
+}
 const lerp = ([a, b]: [number, number], k: number) => a + (b - a) * k;
