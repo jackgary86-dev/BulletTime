@@ -9,6 +9,7 @@ import { TargetEffects } from './fx/targetEffects';
 import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
+import { HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
 import { createPostFx, type PostFx } from './scene/postfx';
 import { QUALITY, type QualitySettings } from './scene/quality';
 import { createStudio, type LightingMode, type Studio } from './scene/studio';
@@ -82,6 +83,7 @@ export class Lane {
   setLightingMode(mode: LightingMode): void {
     this.lighting = mode;
     this.studio.setLightingMode(mode);
+    this.postFx.grade.setGrade(mode === 'highspeed' ? HIGHSPEED_GRADE : LAB_GRADE);
     this.applyPostFx();
   }
 
