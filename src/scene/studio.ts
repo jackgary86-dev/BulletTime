@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { TARGET_FOCUS } from './camera';
+import { createLabEnvironment } from './labEnvironment';
 import { createLabSet } from './labSet';
+import { createSoftbox, type Softbox, type SoftboxSpec } from './softbox';
 
 /** Background tone of the high-speed camera lab. */
 const BACKGROUND = new THREE.Color(0x07080a);
@@ -22,8 +23,9 @@ export interface Studio {
 const HIGHSPEED_BACKGROUND = new THREE.Color(0xc9ccd0);
 
 /**
- * Builds the high-speed camera lab: the lab room (#53), key light with soft
- * shadow, two coloured rim lights, a dim environment for reflections, and a
+ * Builds the high-speed camera lab: the lab room (#53), three softboxes (a
+ * key above the camera and two coloured rim strips, #54) with a shadow-casting
+ * spot inside the key, reflections baked from the room itself, and a
  * measurement grid board behind the target.
  */
 export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Studio {
@@ -31,11 +33,9 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
   // Far enough that the lab walls read, close enough that the room falls into shadow.
   scene.fog = new THREE.Fog(BACKGROUND, 4, 14);
 
-  // Low-intensity image-based lighting so metals and gel have something to reflect.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.25;
-  pmrem.dispose();
+  // Metals, glass and gel reflect the lab and its softboxes.
+  scene.environment = createLabEnvironment(renderer, SOFTBOXES);
+  scene.environmentIntensity = LAB_ENVIRONMENT;
 
   const group = new THREE.Group();
   group.name = 'studio';
@@ -57,8 +57,10 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
     const background = bright ? HIGHSPEED_BACKGROUND : BACKGROUND;
     scene.background = background;
     (scene.fog as THREE.Fog).color.copy(background);
-    scene.environmentIntensity = bright ? 0.6 : 0.25;
+    scene.environmentIntensity = bright ? 0.7 : LAB_ENVIRONMENT;
     lights.fill.intensity = bright ? 0.6 : 0.2;
+    // Against the bright backdrop the coloured rims would only muddy it.
+    for (const box of lights.softboxes) box.setLevel(bright && box.spec.name !== 'key' ? 0.25 : 1);
     lights.back.intensity = bright ? 1.5 : 0;
     // The board becomes a light panel behind the target, lighting gel from behind like a photo backdrop.
     gridMaterial.map = bright ? brightGrid : darkGrid;
@@ -83,11 +85,59 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
   return { group, labGrid, setLightingMode, setShadowMapSize };
 }
 
-function addLights(group: THREE.Group): { key: THREE.SpotLight; fill: THREE.HemisphereLight; back: THREE.DirectionalLight } {
-  // Key: a soft overhead spot that casts the floor shadow.
-  const key = new THREE.SpotLight(0xfff4e6, 28, 6, Math.PI / 7, 0.6, 1.6);
-  key.position.set(0.6, 2.2, 1.0);
-  key.target.position.copy(TARGET_FOCUS);
+/** How strongly the baked room lights the scene in the dark lab look. */
+const LAB_ENVIRONMENT = 0.35;
+
+/** The key softbox hangs above and in front of the target; the rims stand either side, behind it. */
+const SOFTBOXES: SoftboxSpec[] = [
+  {
+    name: 'key',
+    position: new THREE.Vector3(0.45, 1.5, 1.25),
+    target: TARGET_FOCUS,
+    width: 0.9,
+    height: 0.6,
+    color: 0xfff1e0,
+    intensity: 7,
+    reflection: 5,
+  },
+  {
+    name: 'rim-cool',
+    position: new THREE.Vector3(-1.5, 0.65, -0.55),
+    target: TARGET_FOCUS,
+    width: 0.25,
+    height: 1.1,
+    color: 0xa9c6ff,
+    intensity: 9,
+    reflection: 4,
+  },
+  {
+    name: 'rim-warm',
+    position: new THREE.Vector3(1.6, 0.6, -0.45),
+    target: TARGET_FOCUS,
+    width: 0.25,
+    height: 1.1,
+    color: 0xffbf85,
+    intensity: 8,
+    reflection: 4,
+  },
+];
+
+interface StudioLights {
+  key: THREE.SpotLight;
+  softboxes: Softbox[];
+  fill: THREE.HemisphereLight;
+  back: THREE.DirectionalLight;
+}
+
+function addLights(group: THREE.Group): StudioLights {
+  const softboxes = SOFTBOXES.map(createSoftbox);
+  for (const box of softboxes) group.add(box.group);
+
+  // Area lights cast no shadows, so a spot inside the key softbox casts the floor shadow.
+  const keySpec = SOFTBOXES[0];
+  const key = new THREE.SpotLight(0xfff1e0, 16, 6, Math.PI / 6, 0.8, 1.6);
+  key.position.copy(keySpec.position);
+  key.target.position.copy(keySpec.target);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0002;
@@ -96,17 +146,6 @@ function addLights(group: THREE.Group): { key: THREE.SpotLight; fill: THREE.Hemi
   key.shadow.camera.near = 0.5;
   key.shadow.camera.far = 5;
   group.add(key, key.target);
-
-  // Rim lights: cool from behind-left, warm from behind-right, to outline edges.
-  const rimCool = new THREE.DirectionalLight(0x8fb8ff, 1.6);
-  rimCool.position.set(-1.6, 0.9, -1.4);
-  rimCool.target.position.copy(TARGET_FOCUS);
-  group.add(rimCool, rimCool.target);
-
-  const rimWarm = new THREE.DirectionalLight(0xffb070, 1.4);
-  rimWarm.position.set(1.8, 0.6, -1.2);
-  rimWarm.target.position.copy(TARGET_FOCUS);
-  group.add(rimWarm, rimWarm.target);
 
   // Faint fill so shadowed faces never go fully black.
   const fill = new THREE.HemisphereLight(0x9aa6b8, 0x0a0a0c, 0.2);
@@ -117,7 +156,7 @@ function addLights(group: THREE.Group): { key: THREE.SpotLight; fill: THREE.Hemi
   back.position.set(0, 0.6, -2);
   back.target.position.copy(TARGET_FOCUS);
   group.add(back, back.target);
-  return { key, fill, back };
+  return { key, softboxes, fill, back };
 }
 
 /**
