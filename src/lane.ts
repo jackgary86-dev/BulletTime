@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getRegion } from './data/dummy';
+import { STANDARD_RESOLUTION, ULTRA_RESOLUTION } from './data/physics';
 import { physicsLayers, stackDepth } from './data/stacks';
 import type { BulletSpec } from './data/bullets';
 import { MuzzleEffect } from './fx/muzzle';
@@ -146,6 +147,7 @@ export class Lane {
         impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
         standOffM: STAND_OFF_M,
         damage: priorDamage(this.session),
+        resolution: this.quality.fineSimulation ? ULTRA_RESOLUTION : STANDARD_RESOLUTION,
       });
       // Stored relative to the bench shot line, so the muzzle can follow it.
       part.shots[0].aim = { y: lineY - SHOT_Y + y, z };

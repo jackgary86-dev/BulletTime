@@ -1,5 +1,6 @@
 import { getBullet, type BulletSpec } from '../data/bullets';
 import { getMedium } from '../data/media';
+import type { SimResolution } from '../data/physics';
 import { physicsLayers, type StackLayer } from '../data/stacks';
 import { layersFor, simulate, type PriorDamage } from './engine';
 import type { Timeline } from './types';
@@ -15,6 +16,7 @@ export interface Shot {
   stack?: StackLayer[];
   aim?: { y: number; z: number };
   damage?: PriorDamage[];
+  resolution?: SimResolution;
 }
 
 export function bulletAt(id: string, speed?: number): BulletSpec {
@@ -32,5 +34,6 @@ export function fire(shot: Shot): Timeline {
     impactPoint: { x: -0.2, y: 0.16 + (shot.aim?.y ?? 0), z: shot.aim?.z ?? 0 },
     standOffM: 0.5,
     damage: shot.damage,
+    resolution: shot.resolution,
   });
 }

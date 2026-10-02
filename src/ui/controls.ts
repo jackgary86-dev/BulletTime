@@ -1,5 +1,5 @@
 import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
-import { QUALITY_LEVELS, type QualityLevel } from '../scene/quality';
+import { qualityLevels, type QualityLevel } from '../scene/quality';
 import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
 import { CAMERA_ICONS, LIGHTING_ICONS } from './icons';
@@ -63,7 +63,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
       <div>
         <label class="field-label" for="quality-select">Quality</label>
         <select id="quality-select" title="Lower quality uses fewer particles, no glow and no shadows, for smoother playback">
-          ${QUALITY_LEVELS.map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
+          ${qualityLevels().map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
         </select>
       </div>
     </div>

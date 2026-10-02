@@ -112,9 +112,9 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
       cap: 2500,
     },
     // Soft, lit puffs: camera-facing cards with a billowy alpha, fading out as they spread.
-    dust: { geometry: dustGeometry(2500), material: dustMaterial(0.85), cap: 2500 },
+    dust: { geometry: dustGeometry(2500 * MAX_CAP_SCALE), material: dustMaterial(0.85), cap: 2500 },
     // The faint heat-shimmer and vapour trail a bullet leaves in the air (#72).
-    vapour: { geometry: dustGeometry(1500), material: dustMaterial(0.09), cap: 1500 },
+    vapour: { geometry: dustGeometry(1500 * MAX_CAP_SCALE), material: dustMaterial(0.09), cap: 1500 },
     spark: {
       geometry: new THREE.BoxGeometry(1, 0.15, 0.15),
       material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
@@ -142,13 +142,16 @@ const X = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
 const Y = new THREE.Vector3(0, 1, 0);
 
+/** Instance buffers are allocated this many times each look's cap, so Ultra can raise the caps (#38). */
+export const MAX_CAP_SCALE = 2;
+
 export class ParticleSystem {
   readonly group = new THREE.Group();
   private readonly meshes = new Map<ParticleLook, THREE.InstancedMesh>();
   private readonly particles = new Map<ParticleLook, Particle[]>();
   /** Multiplies every burst's particle count (the quality setting, #16). */
   density = 1;
-  /** Fraction of each look's instance capacity that bursts may fill (the quality setting, #16). */
+  /** Multiplies each look's particle cap, up to MAX_CAP_SCALE (the quality setting, #16; Ultra goes above 1, #38). */
   capScale = 1;
   /** The time the instances were last laid out for, so a paused frame costs nothing. */
   private shownT = NaN;
@@ -163,7 +166,7 @@ export class ParticleSystem {
     this.flashLight.name = 'impact-flash';
     this.group.add(this.flashLight);
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
-      const mesh = new THREE.InstancedMesh(config.geometry, config.material, config.cap);
+      const mesh = new THREE.InstancedMesh(config.geometry, config.material, config.cap * MAX_CAP_SCALE);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
@@ -199,7 +202,7 @@ export class ParticleSystem {
 
   add(spec: BurstSpec): void {
     const list = this.particles.get(spec.look)!;
-    const cap = Math.floor(this.meshes.get(spec.look)!.instanceMatrix.count * this.capScale);
+    const cap = Math.floor((this.meshes.get(spec.look)!.instanceMatrix.count / MAX_CAP_SCALE) * this.capScale);
     const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + list.length * 7919);
     const count = Math.max(0, Math.min(Math.round(spec.count * this.density), cap - list.length));
     this.shownT = NaN;

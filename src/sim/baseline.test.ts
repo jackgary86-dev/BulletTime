@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BULLETS } from '../data/bullets';
 import type { FinalState } from './types';
+import { ULTRA_RESOLUTION } from '../data/physics';
 import { fire } from './testUtil';
 
 /**
@@ -44,6 +45,19 @@ describe('tuning baseline', () => {
     expect(gel.finalState).toBe(state);
     within(fire({ bullet, medium: 'pine' }).summary.exitSpeed, pineExit, 0.08, 10);
     within(fire({ bullet, medium: 'water', thickness: 0.6 }).summary.exitSpeed, waterExit, 0.08, 10);
+  });
+});
+
+// Ultra (#38) integrates 4× finer; it must land on the same tuned numbers, not re-tune them.
+describe('tuning baseline at Ultra resolution', () => {
+  it.each(BASELINE)('%s', (bullet, gelDepth, gelExit, state, pineExit, waterExit) => {
+    const resolution = ULTRA_RESOLUTION;
+    const gel = fire({ bullet, thickness: 0.9, resolution }).summary;
+    within(gel.penetrationM, gelDepth, 0.06, 0.005);
+    within(gel.exitSpeed, gelExit, 0.08, 10);
+    expect(gel.finalState).toBe(state);
+    within(fire({ bullet, medium: 'pine', resolution }).summary.exitSpeed, pineExit, 0.08, 10);
+    within(fire({ bullet, medium: 'water', thickness: 0.6, resolution }).summary.exitSpeed, waterExit, 0.08, 10);
   });
 });
 
