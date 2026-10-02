@@ -45,6 +45,7 @@ const SAMPLE_EVERY = 5; // keep one keyframe per 5 µs
 const STOP_SPEED = 2; // m/s below which the bullet is considered at rest
 const HOLD_AFTER_S = 1.5e-3; // linger after the bullet stops so the aftermath is visible
 const MAX_TIME_S = 0.05;
+const EXIT_RUN_M = 0.6; // after passing through, follow the bullet this far, then end
 
 /** Integrates the shot with a fixed timestep and returns the keyframe timeline. */
 export function simulateShot(p: ShotParams): Timeline {
@@ -78,6 +79,10 @@ export function simulateShot(p: ShotParams): Timeline {
     step++;
 
     if (step % SAMPLE_EVERY === 0) record();
+    if (x > p.targetBackX + EXIT_RUN_M) {
+      record();
+      break;
+    }
     if (v < STOP_SPEED) {
       v = 0;
       record();

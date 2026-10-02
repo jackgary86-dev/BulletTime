@@ -1,74 +1,264 @@
 import * as THREE from 'three';
+import type { BulletSpec } from '../data/bullets';
+import { BULLET_MATERIALS as M } from './materials';
 
 /**
- * A simple procedural 9mm jacketed hollow point: a lathe profile with a copper
- * jacket and an exposed lead core in the nose cavity. The full catalogue of
- * bullet models arrives with #3.
+ * Procedural projectile models built from lathe profiles, one shape per bullet
+ * family. All models are built in true scale (metres), so rounds keep their
+ * real size relative to each other.
  *
- * The returned group's origin is the bullet's nose and it points along +x, so
- * the timeline's nose position can be applied directly.
+ * The returned group's origin is the projectile's nose and it points along +x,
+ * so a timeline nose position can be applied directly.
  */
 export interface BulletModel {
   group: THREE.Group;
-  /** Shows the bullet expanded to `diameter` (metres); shortens as it mushrooms. */
+  /** Overall length in metres (nose to base). */
+  length: number;
+  /** Shows the bullet expanded to `diameter` (metres); it shortens as it mushrooms. */
   setDiameter(diameter: number): void;
 }
 
-const DIAMETER = 0.00901;
-const LENGTH = 0.0155;
+const SEGMENTS = 48;
+const MM = 0.001;
 
-export function createBulletModel(): BulletModel {
-  const r = DIAMETER / 2;
-  // Profile from the base (y = 0) to the hollow-point nose (y = LENGTH), as (radius, height).
-  const profile = [
-    [0, 0],
-    [r * 0.92, 0],
-    [r, LENGTH * 0.04],
-    [r, LENGTH * 0.55],
-    [r * 0.93, LENGTH * 0.72],
-    [r * 0.76, LENGTH * 0.88],
-    [r * 0.6, LENGTH],
-    [r * 0.42, LENGTH],
-    [r * 0.3, LENGTH * 0.86],
-    [0, LENGTH * 0.82],
-  ].map(([x, y]) => new THREE.Vector2(x, y));
+type Profile = [radius: number, height: number][];
 
-  const jacket = new THREE.Mesh(
-    new THREE.LatheGeometry(profile, 48),
-    new THREE.MeshPhysicalMaterial({
-      color: 0xc8733f,
-      metalness: 1,
-      roughness: 0.28,
-      clearcoat: 0.3,
-    }),
+/** A lathe section between two heights of a profile, in the given material. */
+function lathe(profile: Profile, material: THREE.Material): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.LatheGeometry(
+      profile.map(([r, y]) => new THREE.Vector2(r, y)),
+      SEGMENTS,
+    ),
+    material,
   );
-  jacket.castShadow = true;
+  mesh.castShadow = true;
+  return mesh;
+}
 
-  // Lead core visible inside the hollow point.
-  const core = new THREE.Mesh(
-    new THREE.CircleGeometry(r * 0.3, 24),
-    new THREE.MeshStandardMaterial({ color: 0x6b6f75, metalness: 0.6, roughness: 0.55 }),
-  );
-  core.rotation.x = -Math.PI / 2;
-  core.position.y = LENGTH * 0.825;
+/** Points of a nose curve from (r, y0) to (tipR, y1); `round` = elliptical, otherwise tangent ogive. */
+function nose(r: number, y0: number, y1: number, tipR: number, round: boolean, steps = 14): Profile {
+  const pts: Profile = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const k = round ? Math.sqrt(1 - t * t) : 1 - t * t;
+    pts.push([tipR + (r - tipR) * k, y0 + (y1 - y0) * t]);
+  }
+  return pts;
+}
 
-  // Lathe axis is +y; rotate so the bullet points along +x with the nose at the origin.
+/** Builds the meshes for one bullet in its local frame: base at y = 0, nose at y = L, axis +y. */
+function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
+  const r = (spec.caliberMm / 2) * MM;
+  const L = spec.lengthMm * MM;
+
+  switch (spec.shape) {
+    case 'roundNose': {
+      const isLead = spec.type.toLowerCase().includes('lead');
+      const material = isLead ? M.lead : M.copper;
+      const profile: Profile = [
+        [0, 0],
+        [r * 0.92, 0],
+        [r, L * 0.04],
+        [r, L * 0.5],
+        ...nose(r, L * 0.5, L, r * 0.18, true),
+        [0, L],
+      ];
+      return [lathe(profile, material)];
+    }
+
+    case 'truncatedCone': {
+      // Jacket to the shoulder, exposed lead cone and flat meplat above.
+      const shoulder = L * 0.62;
+      const jacket: Profile = [
+        [0, 0],
+        [r * 0.93, 0],
+        [r, L * 0.04],
+        [r, shoulder],
+        [r * 0.97, shoulder + L * 0.02],
+        [0, shoulder + L * 0.02],
+      ];
+      const tip: Profile = [
+        [r * 0.97, shoulder],
+        [r * 0.62, L * 0.97],
+        [r * 0.56, L],
+        [0, L],
+      ];
+      return [lathe(jacket, M.gildingMetal), lathe(tip, M.lead)];
+    }
+
+    case 'hollowPoint': {
+      const profile: Profile = [
+        [0, 0],
+        [r * 0.92, 0],
+        [r, L * 0.04],
+        [r, L * 0.55],
+        [r * 0.93, L * 0.72],
+        [r * 0.76, L * 0.88],
+        [r * 0.6, L],
+        [r * 0.42, L],
+        [r * 0.3, L * 0.86],
+        [0, L * 0.82],
+      ];
+      const core = new THREE.Mesh(new THREE.CircleGeometry(r * 0.3, 24), M.lead);
+      core.rotation.x = -Math.PI / 2;
+      core.position.y = L * 0.825;
+      return [lathe(profile, M.copper), core];
+    }
+
+    case 'softPoint':
+    case 'spitzer':
+    case 'boatTail': {
+      const boatTail = spec.shape !== 'spitzer';
+      const bearingEnd = L * (spec.shape === 'softPoint' ? 0.45 : 0.42);
+      const tipStart = spec.shape === 'softPoint' ? L * 0.84 : L;
+      const body: Profile = [
+        [0, 0],
+        [boatTail ? r * 0.78 : r * 0.94, 0],
+        ...(boatTail ? ([[r, L * 0.13]] as Profile) : ([[r, L * 0.03]] as Profile)),
+        // Cannelure groove.
+        [r, bearingEnd - L * 0.06],
+        [r * 0.97, bearingEnd - L * 0.05],
+        [r, bearingEnd - L * 0.04],
+        [r, bearingEnd],
+        ...nose(r, bearingEnd, L, r * 0.05, false).filter(([, y]) => y < tipStart - 1e-9),
+      ];
+      const meshes: THREE.Object3D[] = [];
+      if (spec.shape === 'softPoint') {
+        // The jacket ends where the exposed lead tip begins, on the same ogive curve.
+        const t = (tipStart - bearingEnd) / (L - bearingEnd);
+        const tipR = r * 0.05 + (r - r * 0.05) * (1 - t * t);
+        body.push([tipR, tipStart], [0, tipStart]);
+        const tip: Profile = [
+          [tipR, tipStart],
+          ...nose(tipR, tipStart, L, r * 0.12, true, 8),
+          [0, L],
+        ];
+        meshes.push(lathe(tip, M.lead));
+      } else {
+        body.push([0, L]);
+      }
+      meshes.unshift(lathe(body, M.gildingMetal));
+      return meshes;
+    }
+
+    case 'fosterSlug': {
+      // Hollow base, rifled ribs on the side, domed nose. All soft lead.
+      const ribs: Profile = [];
+      const ribStart = L * 0.08;
+      const ribEnd = L * 0.6;
+      const ribCount = 6;
+      for (let i = 0; i <= ribCount * 2; i++) {
+        const y = ribStart + ((ribEnd - ribStart) * i) / (ribCount * 2);
+        ribs.push([i % 2 === 0 ? r : r * 0.94, y]);
+      }
+      const profile: Profile = [
+        [0, L * 0.42],
+        [r * 0.55, L * 0.3],
+        [r * 0.66, L * 0.02],
+        [r * 0.7, 0],
+        [r * 0.97, 0],
+        ...ribs,
+        ...nose(r, ribEnd, L, r * 0.25, true),
+        [0, L],
+      ];
+      return [lathe(profile, M.lead)];
+    }
+
+    case 'buckshot': {
+      // Nine pellets stacked three layers of three, as they sit in the shell.
+      const count = spec.pellets ?? 9;
+      const geometry = new THREE.SphereGeometry(r, 24, 16);
+      const meshes: THREE.Object3D[] = [];
+      const ringRadius = r / Math.sin(Math.PI / 3); // three touching spheres
+      for (let i = 0; i < count; i++) {
+        const layer = Math.floor(i / 3);
+        const angle = ((i % 3) / 3) * Math.PI * 2 + layer * (Math.PI / 3);
+        const pellet = new THREE.Mesh(geometry, M.lead);
+        pellet.position.set(Math.cos(angle) * ringRadius, r + layer * r * 2, Math.sin(angle) * ringRadius);
+        pellet.castShadow = true;
+        meshes.push(pellet);
+      }
+      return meshes;
+    }
+
+    case 'cannonShell': {
+      // Painted steel body with a copper rotating band and a pointed aluminium fuze.
+      const bandLo = L * 0.08;
+      const bandHi = L * 0.15;
+      const bodyTop = L * 0.62;
+      const body: Profile = [
+        [0, 0],
+        [r * 0.9, 0],
+        [r * 0.97, L * 0.02],
+        [r * 0.97, bodyTop - L * 0.08],
+        ...nose(r * 0.97, bodyTop - L * 0.08, bodyTop, r * 0.78, false, 6),
+        [0, bodyTop],
+      ];
+      const band: Profile = [
+        [r * 0.965, bandLo],
+        [r * 1.02, bandLo + L * 0.005],
+        [r * 1.02, bandHi - L * 0.005],
+        [r * 0.965, bandHi],
+      ];
+      const yellow: Profile = [
+        [r * 0.975, L * 0.36],
+        [r * 0.975, L * 0.4],
+      ];
+      const red: Profile = [
+        [r * 0.975, L * 0.42],
+        [r * 0.975, L * 0.45],
+      ];
+      const fuze: Profile = [
+        [0, bodyTop],
+        [r * 0.78, bodyTop],
+        ...nose(r * 0.78, bodyTop, L, r * 0.06, false),
+        [0, L],
+      ];
+      return [
+        lathe(body, M.paintedSteel),
+        lathe(band, M.copper),
+        lathe(yellow, M.yellowPaint),
+        lathe(red, M.redPaint),
+        lathe(fuze, M.aluminium),
+      ];
+    }
+  }
+}
+
+export function createBulletModel(spec: BulletSpec): BulletModel {
+  const isShot = spec.shape === 'buckshot';
+  // A stack of three layers of pellets is three diameters long.
+  const length = isShot ? spec.caliberMm * 3 * MM : spec.lengthMm * MM;
+
+  // Lathe axis is +y; rotate so the projectile points along +x with the nose at the origin.
   const body = new THREE.Group();
-  body.add(jacket, core);
+  body.add(...buildMeshes(spec));
   body.rotation.z = -Math.PI / 2;
-  body.position.x = -LENGTH;
+  body.position.x = -length;
 
   const group = new THREE.Group();
-  group.name = 'bullet';
+  group.name = `bullet:${spec.id}`;
   group.add(body);
+
+  const baseDiameter = spec.caliberMm * MM;
 
   return {
     group,
+    length,
     setDiameter(diameter) {
-      const ratio = diameter / DIAMETER;
+      const ratio = diameter / baseDiameter;
       // Lathe x/z are radial, y is the length; expansion trades length for width.
-      body.scale.set(ratio, 1 / Math.sqrt(ratio), ratio);
-      body.position.x = -LENGTH / Math.sqrt(ratio);
+      const shorten = 1 / Math.sqrt(ratio);
+      body.scale.set(ratio, shorten, ratio);
+      body.position.x = -length * shorten;
     },
   };
+}
+
+/** Frees the GPU geometry owned by a model (materials are shared and kept). */
+export function disposeBulletModel(model: BulletModel): void {
+  model.group.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) obj.geometry.dispose();
+  });
 }
