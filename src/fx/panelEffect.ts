@@ -97,6 +97,8 @@ export function loadPanelEffect(
       } else {
         // Drywall: a cone of gypsum chunks and a big chalky cloud.
         particles.add(burst('chunk', e.t, origin, normal, 0.6, 40 * weight, [5, 15 + e.speed * 0.04], [0.002, 0.008], debris(look.raw), {}));
+        // Torn facing paper peels off the back face in flakes.
+        particles.add({ ...burst('chunk', e.t, origin, normal, 0.8, 18 * weight, [4, 12 + e.speed * 0.03], [0.003, 0.009], debris(look.face), {}), look: 'flake' as const, drag: 90 });
         particles.add(dust(e.t, origin, normal, 0.7, 70 * weight, look.raw, 0.02));
       }
     }
