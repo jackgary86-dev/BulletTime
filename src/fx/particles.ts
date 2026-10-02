@@ -121,6 +121,13 @@ export class ParticleSystem {
     }
   }
 
+  /** Sim time when the last particle dies. */
+  get endTime(): number {
+    let end = 0;
+    for (const list of this.particles.values()) for (const q of list) end = Math.max(end, q.t0 + q.life);
+    return end;
+  }
+
   clear(): void {
     for (const list of this.particles.values()) list.length = 0;
     for (const mesh of this.meshes.values()) mesh.count = 0;

@@ -4,6 +4,7 @@ import { GEL_BODY_NAME } from '../models/targets';
 import type { Timeline } from '../sim/types';
 import { GelEffect } from './gelEffect';
 import { HoleMarks } from './holes';
+import { loadHardEffect } from './hardEffect';
 import { loadPanelEffect } from './panelEffect';
 import { ParticleSystem } from './particles';
 
@@ -32,6 +33,12 @@ export class TargetEffects {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }
     });
+    loadHardEffect(timeline, layers, this.particles, this.holes);
+  }
+
+  /** Sim time when the last effect has settled (dust cleared, debris gone). */
+  get endTime(): number {
+    return this.particles.endTime;
   }
 
   clear(): void {

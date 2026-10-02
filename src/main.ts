@@ -22,6 +22,8 @@ import { mountScrubber } from './ui/scrubber';
 
 /** The bullet starts this far in front of the target face, in metres. */
 const STAND_OFF_M = 0.5;
+/** Playback may run this much past the physics so impact effects can settle, in seconds. */
+const EFFECT_TAIL_S = 8e-3;
 
 function bootstrap(): void {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
@@ -86,15 +88,18 @@ function bootstrap(): void {
     },
     onFire: () => {
       const { medium, thickness, angleDeg } = target;
+      const layers = layersFor(medium, thickness);
       const timeline = simulate({
         bullet: spec,
-        layers: layersFor(medium, thickness),
+        layers,
         angleDeg,
         impactPoint: { x: TARGET_FRONT_X, y: SHOT_Y, z: 0 },
         standOffM: STAND_OFF_M,
       });
       shot.load(timeline, spec);
-      if (targetGroup) effects.load(timeline, targetGroup, [medium]);
+      if (targetGroup) effects.load(timeline, targetGroup, layers.map((l) => l.medium));
+      // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
+      timeline.duration = Math.max(timeline.duration, Math.min(effects.endTime, timeline.duration + EFFECT_TAIL_S));
       playback.start(timeline);
       scrubber.load(timeline);
       panel.setHasShot(true);
