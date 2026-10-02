@@ -3,7 +3,7 @@ import type { MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { burlapTexture, concreteTexture, steelTexture, woodTexture } from './textures';
+import { burlapTexture, concreteTexture, gelSurfaceMaps, steelTexture, waterRippleNormalMap, woodTexture } from './textures';
 
 export { standSteel } from './stands';
 
@@ -82,19 +82,29 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
   switch (spec.look) {
     case 'gel': {
       // Finely subdivided so the gel effect can bulge the block and pull out the exit cone.
+      const surface = gelSurfaceMaps();
       const gel = new THREE.Mesh(
         new THREE.BoxGeometry(t, h, w, Math.ceil(t / 0.005), 24, 24),
         new THREE.MeshPhysicalMaterial({
-          color: 0xfff3dc,
-          roughness: 0.08,
-          transmission: 0.96,
+          color: 0xffe6bf,
+          // Clear and glossy, with faint smudges and finger marks from handling.
+          roughness: 0.35,
+          roughnessMap: surface.roughnessMap,
+          normalMap: surface.normalMap,
+          normalScale: new THREE.Vector2(0.25, 0.25),
+          transmission: 0.97,
           thickness: w,
           ior: 1.35,
-          attenuationColor: new THREE.Color(0xf3c98a),
-          attenuationDistance: 1.2,
-          specularIntensity: 0.8,
-          clearcoat: 0.4,
-          clearcoatRoughness: 0.1,
+          // Amber deepens with the depth of gel the light passes through.
+          attenuationColor: new THREE.Color(0xe0a458),
+          attenuationDistance: 0.5,
+          // A soft amber glow at grazing angles picks out the block's faces in the dark lab.
+          sheen: 0.35,
+          sheenColor: new THREE.Color(0xd9a060),
+          sheenRoughness: 0.4,
+          specularIntensity: 1,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.12,
         }),
       );
       gel.name = GEL_BODY_NAME;
@@ -108,10 +118,10 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
       // Thin walls use plain alpha blending rather than transmission: three.js transmissive
       // surfaces can't see other transmissive surfaces, so the water would vanish behind them.
       const glass = new THREE.MeshPhysicalMaterial({
-        color: 0xe6f6ff,
+        color: 0xeefbff,
         roughness: 0.02,
         transparent: true,
-        opacity: 0.12,
+        opacity: 0.06,
         specularIntensity: 1,
         clearcoat: 1,
         depthWrite: false,
@@ -119,13 +129,13 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
       const water = new THREE.Mesh(
         new THREE.BoxGeometry(t - wall * 2, h * 0.88 - wall, w - wall * 2),
         new THREE.MeshPhysicalMaterial({
-          color: 0xcfeaff,
-          roughness: 0.03,
-          transmission: 0.97,
+          color: 0xf2fbff,
+          roughness: 0.02,
+          transmission: 1,
           thickness: w,
           ior: 1.33,
-          attenuationColor: new THREE.Color(0x3f9fd0),
-          attenuationDistance: 0.3,
+          attenuationColor: new THREE.Color(0x58b4d8),
+          attenuationDistance: 0.55,
           specularIntensity: 1,
         }),
       );
@@ -145,6 +155,46 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
         tank.add(panel);
       }
       tank.add(water);
+      // Cut glass edges catch the light green, and black silicone seals the corners.
+      const edgeGlass = new THREE.MeshPhysicalMaterial({ color: 0x9fdcc4, roughness: 0.05, transparent: true, opacity: 0.55, depthWrite: false });
+      const silicone = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.6 });
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const seam = new THREE.Mesh(new THREE.BoxGeometry(0.004, h, 0.004), silicone);
+          seam.position.set(sx * (t / 2 - wall - 0.002), 0, sz * (w / 2 - wall - 0.002));
+          tank.add(seam);
+        }
+      }
+      // Top rims of the four walls: thin bright lines along the open top.
+      for (const [sx, sz, px, pz] of [
+        [t, wall, 0, -w / 2 + wall / 2],
+        [t, wall, 0, w / 2 - wall / 2],
+        [wall, w, -t / 2 + wall / 2, 0],
+        [wall, w, t / 2 - wall / 2, 0],
+      ] as const) {
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.002, sz), edgeGlass);
+        rim.position.set(px, h / 2 - 0.001, pz);
+        tank.add(rim);
+      }
+      // A still surface with faint ripples, catching the softboxes.
+      const ripples = waterRippleNormalMap();
+      ripples.repeat.set(2, 2);
+      const surface = new THREE.Mesh(
+        new THREE.PlaneGeometry(t - wall * 2, w - wall * 2),
+        new THREE.MeshPhysicalMaterial({
+          color: 0x9cc8dc,
+          roughness: 0.04,
+          transparent: true,
+          opacity: 0.14,
+          normalMap: ripples,
+          normalScale: new THREE.Vector2(0.15, 0.15),
+          specularIntensity: 1,
+          depthWrite: false,
+        }),
+      );
+      surface.rotation.x = -Math.PI / 2;
+      surface.position.y = -h * 0.06 + (h * 0.88 - wall) / 2 + 0.0005;
+      tank.add(surface);
       return tank;
     }
 

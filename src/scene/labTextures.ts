@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { cached, canvas, toTexture } from '../models/textures';
+import { cached, canvas, normalMapFromHeight, toTexture } from '../models/textures';
 import { seededRandom } from '../sim/random';
 
 /**
@@ -22,36 +22,6 @@ function cachedMaps(key: string, make: () => SurfaceMaps): SurfaceMaps {
     roughnessMap: cached(`${key}:rough`, () => get().roughnessMap),
     normalMap: cached(`${key}:normal`, () => get().normalMap),
   };
-}
-
-/**
- * Turns a greyscale height canvas (white = high) into a tangent-space normal
- * map with a Sobel filter. Wraps at the edges so tiled textures stay seamless.
- */
-export function normalMapFromHeight(height: HTMLCanvasElement, strength: number): HTMLCanvasElement {
-  const { width: w, height: h } = height;
-  const src = height.getContext('2d')!.getImageData(0, 0, w, h).data;
-  const [out, ctx] = canvas(w, h);
-  const image = ctx.createImageData(w, h);
-  const at = (x: number, y: number) => src[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const dx =
-        at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
-      const dy =
-        at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
-      const nx = -dx * strength;
-      const ny = dy * strength;
-      const len = Math.hypot(nx, ny, 1);
-      const i = (y * w + x) * 4;
-      image.data[i] = ((nx / len) * 0.5 + 0.5) * 255;
-      image.data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255;
-      image.data[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
-      image.data[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-  return out;
 }
 
 /** Soft value noise in [0, 1], tileable at `period` cells. */
