@@ -36,6 +36,14 @@ function lathe(profile: Profile, material: THREE.Material): THREE.Mesh {
   return mesh;
 }
 
+/** The exposed lead core at the base of an open-base FMJ, inside the jacket's folded rim (the base seam). */
+function openBase(radius: number): THREE.Mesh {
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 32), M.leadCore);
+  disc.rotation.x = Math.PI / 2;
+  disc.position.y = -0.00004;
+  return disc;
+}
+
 /** Points of a nose curve from (r, y0) to (tipR, y1); `round` = elliptical, otherwise tangent ogive. */
 function nose(r: number, y0: number, y1: number, tipR: number, round: boolean, steps = 14): Profile {
   const pts: Profile = [];
@@ -64,7 +72,7 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         ...nose(r, L * 0.5, L, r * 0.18, true),
         [0, L],
       ];
-      return [lathe(profile, material)];
+      return isLead ? [lathe(profile, material)] : [lathe(profile, material), openBase(r * 0.72)];
     }
 
     case 'truncatedCone': {
@@ -74,6 +82,10 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         [0, 0],
         [r * 0.93, 0],
         [r, L * 0.04],
+        // Crimp cannelure.
+        [r, L * 0.4],
+        [r * 0.965, L * 0.42],
+        [r, L * 0.44],
         [r, shoulder],
         [r * 0.97, shoulder + L * 0.02],
         [0, shoulder + L * 0.02],
@@ -88,7 +100,8 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
     }
 
     case 'hollowPoint': {
-      const profile: Profile = [
+      // The jacket up to its mouth, then the lead-lined cavity down into the core.
+      const jacket: Profile = [
         [0, 0],
         [r * 0.92, 0],
         [r, L * 0.04],
@@ -96,14 +109,28 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         [r * 0.93, L * 0.72],
         [r * 0.76, L * 0.88],
         [r * 0.6, L],
-        [r * 0.42, L],
+        [r * 0.5, L],
+      ];
+      const cavity: Profile = [
+        [r * 0.5, L],
+        [r * 0.42, L * 0.97],
         [r * 0.3, L * 0.86],
         [0, L * 0.82],
       ];
-      const core = new THREE.Mesh(new THREE.CircleGeometry(r * 0.3, 24), M.lead);
-      core.rotation.x = -Math.PI / 2;
-      core.position.y = L * 0.825;
-      return [lathe(profile, M.copper), core];
+      const meshes: THREE.Object3D[] = [lathe(jacket, M.copper), lathe(cavity, M.leadCore)];
+      // Skive lines: six notches cut down the jacket from the mouth, where the petals will tear.
+      const skive = new THREE.BoxGeometry(r * 0.03, L * 0.14, r * 0.08);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const notch = new THREE.Mesh(skive, M.skive);
+        const rr = r * 0.66;
+        notch.position.set(Math.cos(a) * rr, L * 0.93, Math.sin(a) * rr);
+        notch.rotation.y = -a;
+        // Lean in with the ogive.
+        notch.rotateZ(0.6);
+        meshes.push(notch);
+      }
+      return meshes;
     }
 
     case 'softPoint':
@@ -137,6 +164,8 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         meshes.push(lathe(tip, M.lead));
       } else {
         body.push([0, L]);
+        // Military ball: the jacket is drawn from the nose, leaving lead showing at the base.
+        meshes.push(openBase(r * (boatTail ? 0.6 : 0.75)));
       }
       meshes.unshift(lathe(body, M.gildingMetal));
       return meshes;
@@ -179,6 +208,22 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         pellet.castShadow = true;
         meshes.push(pellet);
       }
+      // The shot cup: a thin plastic sleeve slit into petals round the lower layers, on a cushion wad.
+      const cupR = ringRadius + r * 1.04;
+      const petals = 4;
+      for (let i = 0; i < petals; i++) {
+        const petal = new THREE.Mesh(
+          new THREE.CylinderGeometry(cupR, cupR, r * 3, 16, 1, true, (i / petals) * Math.PI * 2 + 0.25, (Math.PI * 2) / petals - 0.5),
+          M.wad,
+        );
+        petal.position.y = r * 1.5;
+        meshes.push(petal);
+      }
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(cupR, cupR, r * 0.25, 32), M.wad);
+      base.position.y = -r * 0.12;
+      const cushion = new THREE.Mesh(new THREE.CylinderGeometry(cupR * 0.9, cupR * 0.9, r * 1.6, 32), M.wad);
+      cushion.position.y = -r * 1.05;
+      meshes.push(base, cushion);
       return meshes;
     }
 
