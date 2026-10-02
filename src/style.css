@@ -242,3 +242,51 @@ body {
 .bullet-panel.fun {
   border-color: rgba(224, 162, 74, 0.6);
 }
+
+.medium-panel {
+  top: 240px;
+  right: 16px;
+  width: min(300px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.medium-panel select {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.medium-panel select option {
+  background: #15171b;
+}
+
+.medium-panel input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.medium-panel input[type='range']:disabled {
+  opacity: 0.35;
+}
+
+.field-label.disabled {
+  opacity: 0.5;
+}
+
+.field-label output {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.medium-description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #b9c0cb;
+}

@@ -4,20 +4,19 @@ import { createRenderer, watchResize } from './scene/renderer';
 import { createCameraRig } from './scene/camera';
 import { createStudio } from './scene/studio';
 import { createPostFx } from './scene/postfx';
-import {
-  createTargetStand,
-  PREVIEW_BLOCK_BACK_X,
-  PREVIEW_BLOCK_CENTER_Y,
-  PREVIEW_BLOCK_FRONT_X,
-} from './models/targetStand';
+import { createTarget, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { createBulletModel, disposeBulletModel } from './models/bullet';
-import { bulletMassKg, DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
 import { simulateShot } from './sim/timeline';
 import { Playback } from './sim/playback';
-import { SLICE_GEL, SLICE_STAND_OFF_M } from './data/sliceShot';
+import { bulletMassKg, DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
+import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
+import { mountMediumSelector, type TargetSetup } from './ui/mediumSelector';
+
+/** The bullet starts this far in front of the target face, in metres. */
+const STAND_OFF_M = 0.5;
 
 function bootstrap(): void {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
@@ -28,20 +27,20 @@ function bootstrap(): void {
   const scene = new THREE.Scene();
   const { camera, controls } = createCameraRig(canvas);
   createStudio(scene, renderer);
-  scene.add(createTargetStand());
+
+  const playback = new Playback();
+  const postFx = createPostFx(renderer, scene, camera);
+  mountOverlay(overlay);
 
   let spec = getBullet(DEFAULT_BULLET_ID);
   let bullet = createBulletModel(spec);
   const placeBullet = () => {
-    bullet.group.position.set(PREVIEW_BLOCK_FRONT_X - SLICE_STAND_OFF_M, PREVIEW_BLOCK_CENTER_Y, 0);
+    bullet.group.position.set(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0);
     bullet.group.visible = false;
     scene.add(bullet.group);
   };
   placeBullet();
 
-  const playback = new Playback();
-  const postFx = createPostFx(renderer, scene, camera);
-  mountOverlay(overlay);
   mountBulletSelector(overlay, {
     initialId: spec.id,
     onChange: (next: BulletSpec) => {
@@ -59,23 +58,40 @@ function bootstrap(): void {
     onRateChange: (rate) => (playback.rate = rate),
     onFire: () => {
       const diameterM = spec.caliberMm / 1000;
-      // Crude stand-in until the physics engine (#5): expanding rounds open to their full ratio.
+      const { medium, thickness, angleDeg } = target;
+      // Crude stand-in until the physics engine (#5): expanding rounds open to their full
+      // ratio, and an angled target is a longer straight path through the material.
       const expands = spec.behaviour === 'expand' && spec.muzzleVelocityMs >= (spec.expansionThresholdMs ?? 0);
+      const pathLength = thickness / Math.cos(THREE.MathUtils.degToRad(angleDeg));
       const timeline = simulateShot({
         massKg: bulletMassKg(spec),
         diameterM,
         muzzleVelocity: spec.muzzleVelocityMs,
         expandedDiameterM: expands ? diameterM * (spec.expansionRatio ?? 1) : diameterM,
         expansionDistanceM: 0.02,
-        startX: PREVIEW_BLOCK_FRONT_X - SLICE_STAND_OFF_M,
-        targetFrontX: PREVIEW_BLOCK_FRONT_X,
-        targetBackX: PREVIEW_BLOCK_BACK_X,
-        medium: SLICE_GEL,
+        startX: TARGET_FRONT_X - STAND_OFF_M,
+        targetFrontX: TARGET_FRONT_X,
+        targetBackX: TARGET_FRONT_X + pathLength,
+        medium,
       });
       playback.start(timeline);
       bullet.group.visible = true;
     },
   });
+
+  let targetGroup: THREE.Group | null = null;
+  const rebuildTarget = (setup: TargetSetup) => {
+    if (targetGroup) {
+      scene.remove(targetGroup);
+      disposeTarget(targetGroup);
+    }
+    targetGroup = createTarget(setup.medium, setup.thickness, setup.angleDeg);
+    scene.add(targetGroup);
+    playback.stop();
+    bullet.group.visible = false;
+  };
+  const target = mountMediumSelector(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  rebuildTarget(target);
 
   watchResize((width, height) => {
     renderer.setSize(width, height, false);
