@@ -14,8 +14,13 @@ export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
   { mode: 'orbit', label: 'Orbit' },
 ];
 
-/** How quickly the camera eases toward its target pose, per real second. Higher = snappier. */
-const EASE_RATE = { side: 3, tracking: 10, closeup: 4 } as const;
+/**
+ * Natural frequency of the camera's spring toward each pose, per real second. Higher = snappier.
+ * The spring is critically damped, so the camera glides in without overshooting (#75).
+ */
+const EASE_RATE = { side: 5, tracking: 20, closeup: 6 } as const;
+/** How quickly the spring's stiffness follows a change of pose, per real second, so cuts never jerk. */
+const STIFFNESS_BLEND_RATE = 3;
 /** In auto mode, cut to the close-up this long (sim time) before impact, in seconds. */
 const CLOSEUP_LEAD_S = 120e-6;
 /** In auto mode, hold the close-up this long after impact before pulling back, in seconds. */
@@ -38,7 +43,12 @@ export class CameraDirector {
   private impactPoint = new THREE.Vector3();
   private targetDepth = 0.4;
   private readonly look = new THREE.Vector3();
-  private readonly pose: Pose = { position: new THREE.Vector3(), look: new THREE.Vector3(), ease: 3 };
+  private readonly pose: Pose = { position: new THREE.Vector3(), look: new THREE.Vector3(), ease: EASE_RATE.side };
+  /** Velocities of the camera position and look point, in metres per real second. */
+  private readonly velocity = new THREE.Vector3();
+  private readonly lookVelocity = new THREE.Vector3();
+  /** The spring's current stiffness, easing toward the pose's own. */
+  private stiffness: number = EASE_RATE.side;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -58,6 +68,14 @@ export class CameraDirector {
   }
 
   setMode(mode: CameraMode): void {
+    // Leaving orbit, the camera starts at rest from wherever the user left it.
+    if (this.mode === 'orbit' && mode !== 'orbit') {
+      this.look.copy(this.controls.target);
+      this.velocity.set(0, 0, 0);
+      this.lookVelocity.set(0, 0, 0);
+      // Start soft, so the glide away from a hand-placed view is gentle.
+      this.stiffness = Math.min(this.stiffness, EASE_RATE.side);
+    }
     this.mode = mode;
     if (mode === 'orbit') this.controls.target.copy(this.look);
     this.onModeChange(mode);
@@ -71,6 +89,9 @@ export class CameraDirector {
     this.look.copy(this.pose.look);
     this.camera.lookAt(this.look);
     this.controls.target.copy(this.look);
+    this.velocity.set(0, 0, 0);
+    this.lookVelocity.set(0, 0, 0);
+    this.stiffness = this.pose.ease;
   }
 
   /** Distance from the camera to what it is looking at, for depth-of-field focus. */
@@ -96,9 +117,11 @@ export class CameraDirector {
         this.sidePose(pose);
     }
 
-    const k = 1 - Math.exp(-realDeltaS * pose.ease);
-    this.camera.position.lerp(pose.position, k);
-    this.look.lerp(pose.look, k);
+    // Blend the stiffness too: cutting from the tight tracking spring to the soft side one would
+    // otherwise jerk, even with velocity carried over.
+    this.stiffness += (pose.ease - this.stiffness) * (1 - Math.exp(-realDeltaS * STIFFNESS_BLEND_RATE));
+    springTo(this.camera.position, this.velocity, pose.position, this.stiffness, realDeltaS);
+    springTo(this.look, this.lookVelocity, pose.look, this.stiffness, realDeltaS);
     this.camera.lookAt(this.look);
     this.controls.target.copy(this.look);
   }
@@ -137,4 +160,21 @@ export class CameraDirector {
     pose.look.set(i.x + 0.05, i.y, 0);
     pose.ease = EASE_RATE.closeup;
   }
+}
+
+const offset = new THREE.Vector3();
+const push = new THREE.Vector3();
+
+/**
+ * One exact step of a critically damped spring pulling `value` toward `target`
+ * at natural frequency `omega`: the camera keeps its momentum through a cut and
+ * settles without overshoot, however long the frame.
+ */
+export function springTo(value: THREE.Vector3, velocity: THREE.Vector3, target: THREE.Vector3, omega: number, dt: number): void {
+  const decay = Math.exp(-omega * dt);
+  offset.subVectors(value, target);
+  // temp = (v + omega x) dt
+  push.copy(offset).multiplyScalar(omega).add(velocity).multiplyScalar(dt);
+  value.copy(target).add(offset.add(push).multiplyScalar(decay));
+  velocity.addScaledVector(push, -omega).multiplyScalar(decay);
 }
