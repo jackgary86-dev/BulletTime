@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MediumSpec } from '../data/media';
+import { ORGANIC_LAYOUTS } from '../data/organic';
 import { burlapTexture, concreteTexture, steelTexture, woodTexture } from './textures';
 
 /** Height of the shot line above the floor, in metres. Every target is centred on it. */
@@ -10,6 +11,8 @@ export const TARGET_FRONT_X = -0.2;
 /** Name of the gel block mesh, so effects can find and deform it. */
 export const GEL_BODY_NAME = 'gel-body';
 export const WATER_BODY_NAME = 'water-body';
+export const BLOOD_PACK_PREFIX = 'blood-pack-';
+export const BONE_ROD_NAME = 'bone-rod';
 
 const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
 
@@ -75,6 +78,7 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
         }),
       );
       gel.name = GEL_BODY_NAME;
+      if (spec.organicLayout) addOrganicInserts(gel, spec.organicLayout, t);
       return gel;
     }
 
@@ -220,6 +224,51 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
           clearcoatRoughness: 0.05,
         }),
       );
+  }
+}
+
+/**
+ * Fake blood packs (dark red fluid in thin, wet plastic) and an optional bone
+ * rod, suspended in the gel. Opaque, so they show through the transmissive gel.
+ */
+function addOrganicInserts(gel: THREE.Mesh, layoutId: string, t: number): void {
+  const layout = ORGANIC_LAYOUTS[layoutId];
+  if (!layout) return;
+  const blood = new THREE.MeshPhysicalMaterial({
+    color: 0x5a0309,
+    roughness: 0.3,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+  });
+  layout.packs.forEach((pack, i) => {
+    // A sachet: a sphere flattened into a pillow, slightly irregular.
+    const geometry = new THREE.SphereGeometry(1, 28, 18);
+    const pos = geometry.attributes.position;
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k);
+      const y = pos.getY(k);
+      const z = pos.getZ(k);
+      const squish = 1 - 0.25 * x * x;
+      pos.setXYZ(k, x, y * squish, z * squish);
+    }
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, blood);
+    mesh.scale.set(...pack.size);
+    mesh.position.set((pack.depth - 0.5) * t, pack.y, pack.z);
+    mesh.rotation.x = (i * 0.7) % 0.5;
+    mesh.name = `${BLOOD_PACK_PREFIX}${i}`;
+    mesh.userData.rest = mesh.scale.clone();
+    gel.add(mesh);
+  });
+  if (layout.bone) {
+    const b = layout.bone;
+    const bone = new THREE.Mesh(
+      new THREE.CylinderGeometry(b.radius, b.radius * 1.1, b.length, 20),
+      new THREE.MeshStandardMaterial({ color: 0xe9dfc8, roughness: 0.55 }),
+    );
+    bone.position.set((b.depth - 0.5) * t, 0, b.z);
+    bone.name = BONE_ROD_NAME;
+    gel.add(bone);
   }
 }
 

@@ -79,6 +79,8 @@ export interface MediumSpec {
   allowsExpansion: boolean;
   /** Extra random deflection of the path on leaving a layer (brittle panes), in degrees. */
   exitDeflectionDeg?: number;
+  /** Organic gel targets: which blood-pack layout is suspended inside (see `data/organic.ts`). */
+  organicLayout?: string;
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -99,6 +101,66 @@ export const MEDIA: MediumSpec[] = [
     yawNeckScale: 1,
     cavityPressurePa: 0.9e6, // 9mm JHP ≈ 8 cm peak cavity
     allowsExpansion: true,
+  },
+  {
+    id: 'gel-bloodpack',
+    name: 'Gel + blood pack',
+    description:
+      'MythBusters style: a gel block with a sachet of fake blood on the bullet path. Watch it rupture and the red fluid squirt out of the wound channel.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 1030,
+    thickness: { min: 0.2, max: 0.6, default: 0.4 },
+    heightM: 0.15,
+    widthM: 0.15,
+    angleAdjustable: false,
+    dragCoefficient: 0.3,
+    resistancePa: 6.0e6,
+    hardness: 0.02,
+    yawNeckScale: 1,
+    cavityPressurePa: 0.9e6,
+    allowsExpansion: true,
+    organicLayout: 'single',
+  },
+  {
+    id: 'gel-bloodpacks',
+    name: 'Gel + blood pack cluster',
+    description:
+      'Several blood packs at different depths and heights. Packs on the path burst on contact; the temporary cavity bursts nearby ones if it grows big enough.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 1030,
+    thickness: { min: 0.3, max: 0.6, default: 0.45 },
+    heightM: 0.18,
+    widthM: 0.18,
+    angleAdjustable: false,
+    dragCoefficient: 0.3,
+    resistancePa: 6.0e6,
+    hardness: 0.02,
+    yawNeckScale: 1,
+    cavityPressurePa: 0.9e6,
+    allowsExpansion: true,
+    organicLayout: 'cluster',
+  },
+  {
+    id: 'gel-torso',
+    name: 'Gel torso (organ packs + spine)',
+    description:
+      'A torso-sized gel block with blood packs where the heart, lungs and liver would be and a synthetic spine rod at the back.',
+    behaviour: 'gel',
+    look: 'gel',
+    density: 1030,
+    thickness: { min: 0.22, max: 0.32, default: 0.26 },
+    heightM: 0.32,
+    widthM: 0.3,
+    angleAdjustable: false,
+    dragCoefficient: 0.3,
+    resistancePa: 6.0e6,
+    hardness: 0.02,
+    yawNeckScale: 1,
+    cavityPressurePa: 0.9e6,
+    allowsExpansion: true,
+    organicLayout: 'torso',
   },
   {
     id: 'water',

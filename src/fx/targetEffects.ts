@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GEL_BODY_NAME, WATER_BODY_NAME } from '../models/targets';
 import type { TargetLayer } from '../sim/engine';
 import type { Timeline } from '../sim/types';
+import { BloodPackEffect, type OrganicResult } from './bloodPackEffect';
 import { GlassCracks } from './glassEffect';
 import { GelEffect } from './gelEffect';
 import { HoleMarks } from './holes';
@@ -20,6 +21,9 @@ export class TargetEffects {
   private readonly gel = new GelEffect(this.particles);
   private readonly holes = new HoleMarks();
   private readonly glass = new GlassCracks();
+  private readonly blood = new BloodPackEffect(this.particles, this.gel);
+  /** Blood packs and bone from the last shot into an organic target, or null. */
+  organic: OrganicResult | null = null;
 
   constructor() {
     this.group.name = 'target-effects';
@@ -32,7 +36,10 @@ export class TargetEffects {
     layers.forEach((medium, layer) => {
       if (medium.behaviour === 'gel') {
         const body = target.getObjectByName(GEL_BODY_NAME);
-        if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer);
+        if (body instanceof THREE.Mesh) {
+          this.gel.load(timeline, body, layer);
+          this.organic = this.blood.load(timeline, body, layer);
+        }
       } else if (medium.behaviour === 'water') {
         const body = target.getObjectByName(WATER_BODY_NAME);
         if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer, 'water');
@@ -55,6 +62,8 @@ export class TargetEffects {
     this.gel.clear();
     this.holes.clear();
     this.glass.clear();
+    this.blood.clear();
+    this.organic = null;
     this.particles.clear();
   }
 
@@ -62,6 +71,7 @@ export class TargetEffects {
     this.gel.update(t);
     this.holes.update(t);
     this.glass.update(t);
+    this.blood.update(t);
     this.particles.update(t);
   }
 }
