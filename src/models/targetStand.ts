@@ -4,6 +4,11 @@ import * as THREE from 'three';
 export const PREVIEW_BLOCK = { length: 0.4, width: 0.15, height: 0.15 } as const;
 const STAND_HEIGHT = 0.045;
 
+/** World-space geometry of the preview gel block, used to aim the shot. */
+export const PREVIEW_BLOCK_CENTER_Y = STAND_HEIGHT + 0.003 + PREVIEW_BLOCK.height / 2;
+export const PREVIEW_BLOCK_FRONT_X = -PREVIEW_BLOCK.length / 2;
+export const PREVIEW_BLOCK_BACK_X = PREVIEW_BLOCK.length / 2;
+
 /**
  * A lab stand with a translucent 10% gelatin block on it, so the studio has a
  * subject from the first ticket. The real target models replace the block later.
@@ -44,7 +49,7 @@ export function createTargetStand(): THREE.Group {
       clearcoatRoughness: 0.1,
     }),
   );
-  gel.position.y = STAND_HEIGHT + 0.003 + PREVIEW_BLOCK.height / 2;
+  gel.position.y = PREVIEW_BLOCK_CENTER_Y;
   gel.castShadow = true;
   gel.name = 'gel-block-preview';
   group.add(gel);

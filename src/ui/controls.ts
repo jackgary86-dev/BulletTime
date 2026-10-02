@@ -1,0 +1,87 @@
+/** Slow-motion presets, as simulated seconds per real second. */
+export const RATE_PRESETS = [
+  { label: '1×', rate: 1 },
+  { label: '1/100', rate: 1 / 100 },
+  { label: '1/1,000', rate: 1 / 1000 },
+  { label: '1/10,000', rate: 1 / 10_000 },
+  { label: '1/100,000', rate: 1 / 100_000 },
+] as const;
+
+const MIN_EXPONENT = -5; // 1/100,000×
+
+export interface ControlsPanel {
+  /** Updates the live readout of simulated time and bullet speed. */
+  setReadout(timeS: number, speed: number): void;
+}
+
+export interface ControlsOptions {
+  initialRate: number;
+  onFire(): void;
+  onRateChange(rate: number): void;
+}
+
+/**
+ * The shot panel: a Fire button, slow-motion presets, a logarithmic rate slider
+ * and a small readout of simulated time and speed.
+ */
+export function mountControls(root: HTMLElement, options: ControlsOptions): ControlsPanel {
+  const panel = document.createElement('section');
+  panel.className = 'panel controls';
+  panel.innerHTML = `
+    <button class="fire" type="button">Fire</button>
+    <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
+    <div class="presets" role="group" aria-label="Slow-motion presets"></div>
+    <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="0" step="0.01" />
+    <dl class="readout">
+      <div><dt>Sim time</dt><dd class="readout-time">0 µs</dd></div>
+      <div><dt>Velocity</dt><dd class="readout-speed">0 m/s</dd></div>
+    </dl>
+  `;
+  root.append(panel);
+
+  const fire = panel.querySelector<HTMLButtonElement>('.fire')!;
+  const slider = panel.querySelector<HTMLInputElement>('#rate-slider')!;
+  const rateValue = panel.querySelector<HTMLOutputElement>('.rate-value')!;
+  const presets = panel.querySelector<HTMLDivElement>('.presets')!;
+  const timeOut = panel.querySelector<HTMLElement>('.readout-time')!;
+  const speedOut = panel.querySelector<HTMLElement>('.readout-speed')!;
+
+  const presetButtons = RATE_PRESETS.map((preset) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = preset.label;
+    button.addEventListener('click', () => setRate(preset.rate));
+    presets.append(button);
+    return { button, rate: preset.rate };
+  });
+
+  function setRate(rate: number) {
+    slider.value = String(Math.log10(rate));
+    rateValue.textContent = formatRate(rate);
+    for (const { button, rate: presetRate } of presetButtons) {
+      button.classList.toggle('active', Math.abs(Math.log10(presetRate) - Math.log10(rate)) < 0.01);
+    }
+    options.onRateChange(rate);
+  }
+
+  slider.addEventListener('input', () => setRate(10 ** Number(slider.value)));
+  fire.addEventListener('click', () => options.onFire());
+  setRate(options.initialRate);
+
+  return {
+    setReadout(timeS, speed) {
+      timeOut.textContent = formatTime(timeS);
+      speedOut.textContent = `${speed.toFixed(0)} m/s`;
+    },
+  };
+}
+
+function formatRate(rate: number): string {
+  if (rate >= 0.999) return '1×';
+  return `1/${Math.round(1 / rate).toLocaleString('en-US')}×`;
+}
+
+function formatTime(seconds: number): string {
+  const us = seconds * 1e6;
+  return us < 1000 ? `${us.toFixed(0)} µs` : `${(us / 1000).toFixed(3)} ms`;
+}
