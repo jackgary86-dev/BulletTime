@@ -161,32 +161,117 @@ export function burlapTexture(): THREE.Texture {
   });
 }
 
-/** Rolled steel: fine horizontal brushing, optionally with blue-grey mill scale. */
-export function steelTexture(kind: 'mill' | 'painted'): THREE.Texture {
-  return cached(`steel:${kind}`, () => {
-    const [c, ctx] = canvas(512, 512);
+/** Colour, roughness and normal maps for a target surface. */
+export interface MaterialMaps {
+  map: THREE.Texture;
+  roughnessMap: THREE.Texture;
+  normalMap: THREE.Texture;
+}
+
+/** Builds a set of maps once, then serves each from the texture cache. */
+export function cachedMaps(key: string, make: () => MaterialMaps): MaterialMaps {
+  let built: MaterialMaps | null = null;
+  const get = () => (built ??= make());
+  return {
+    map: cached(`${key}:map`, () => get().map),
+    roughnessMap: cached(`${key}:rough`, () => get().roughnessMap),
+    normalMap: cached(`${key}:normal`, () => get().normalMap),
+  };
+}
+
+/**
+ * Steel plate surfaces (#58).
+ * - 'mill': hot-rolled mill scale, blue-black and patchy with flaked areas of
+ *   grey steel and specks of rust.
+ * - 'painted': the off-white target paint on an AR500 plate, rolled on with a
+ *   slight orange peel, with old hits painted over as faint raised discs.
+ */
+export function steelPlateMaps(kind: 'mill' | 'painted'): MaterialMaps {
+  return cachedMaps(`steel-plate:${kind}`, () => {
+    const size = 512;
     const rand = seededRandom(kind === 'mill' ? 31 : 37);
-    ctx.fillStyle = kind === 'mill' ? '#8a9099' : '#d8d4c8';
-    ctx.fillRect(0, 0, c.width, c.height);
-    for (let i = 0; i < 1400; i++) {
-      const y = rand() * c.height;
-      const light = rand() > 0.5;
-      ctx.strokeStyle = light ? `rgba(255,255,255,${rand() * 0.07})` : `rgba(0,0,0,${rand() * 0.08})`;
-      ctx.lineWidth = 0.5 + rand();
-      ctx.beginPath();
-      ctx.moveTo(rand() * c.width * 0.3, y);
-      ctx.lineTo(c.width * (0.7 + rand() * 0.3), y + (rand() - 0.5) * 2);
-      ctx.stroke();
-    }
+    const [colour, cctx] = canvas(size, size);
+    const [rough, rctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
     if (kind === 'mill') {
-      for (let i = 0; i < 40; i++) {
-        ctx.fillStyle = `rgba(60, 75, 95, ${0.15 + rand() * 0.2})`;
-        ctx.beginPath();
-        ctx.ellipse(rand() * c.width, rand() * c.height, 10 + rand() * 50, 6 + rand() * 25, rand() * 3, 0, Math.PI * 2);
-        ctx.fill();
+      cctx.fillStyle = '#3b4149';
+      rctx.fillStyle = 'rgb(120, 120, 120)';
+    } else {
+      cctx.fillStyle = '#f0e9d6';
+      rctx.fillStyle = 'rgb(165, 165, 165)';
+    }
+    cctx.fillRect(0, 0, size, size);
+    rctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = 'rgb(128, 128, 128)';
+    hctx.fillRect(0, 0, size, size);
+
+    // Fine grain everywhere: rolling marks on bare scale, roller stipple in paint.
+    for (let i = 0; i < 18000; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const v = rand() > 0.5 ? 255 : 0;
+      hctx.fillStyle = `rgba(${v}, ${v}, ${v}, ${kind === 'mill' ? 0.08 : 0.14})`;
+      hctx.fillRect(x, y, kind === 'mill' ? 3 + rand() * 6 : 1.5, 1.5);
+    }
+
+    if (kind === 'mill') {
+      // Patches where the scale has flaked off to grey steel, and blue-black islands of thick scale.
+      for (let i = 0; i < 70; i++) {
+        const x = rand() * size;
+        const y = rand() * size;
+        const rx = 8 + rand() * 40;
+        const ry = 5 + rand() * 22;
+        const flake = rand() > 0.55;
+        cctx.fillStyle = flake ? `rgba(120, 126, 134, ${0.25 + rand() * 0.35})` : `rgba(30, 40, 58, ${0.3 + rand() * 0.4})`;
+        rctx.fillStyle = flake ? 'rgba(80, 80, 80, 0.5)' : 'rgba(150, 150, 150, 0.4)';
+        for (const ctx of [cctx, rctx]) {
+          ctx.beginPath();
+          ctx.ellipse(x, y, rx, ry, rand() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // Rust specks and a few runs.
+      for (let i = 0; i < 600; i++) {
+        cctx.fillStyle = `rgba(${120 + rand() * 50}, ${55 + rand() * 25}, 25, ${0.2 + rand() * 0.4})`;
+        const s = 0.8 + rand() * 2.2;
+        const x = rand() * size;
+        const y = rand() * size;
+        cctx.fillRect(x, y, s, s);
+        rctx.fillStyle = 'rgba(235, 235, 235, 0.6)';
+        rctx.fillRect(x, y, s, s);
+      }
+    } else {
+      // Old hits painted over: faint raised discs with a slightly grey tint under the fresh coat.
+      for (let i = 0; i < 9; i++) {
+        const x = size * (0.2 + rand() * 0.6);
+        const y = size * (0.2 + rand() * 0.6);
+        const r = 6 + rand() * 12;
+        cctx.fillStyle = `rgba(150, 148, 140, ${0.12 + rand() * 0.1})`;
+        cctx.beginPath();
+        cctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+        cctx.fill();
+        const g = hctx.createRadialGradient(x, y, 0, x, y, r * 1.6);
+        g.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+        g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        hctx.fillStyle = g;
+        hctx.fillRect(x - r * 2, y - r * 2, r * 4, r * 4);
+      }
+      // Faint runs and roller lap lines.
+      for (let i = 0; i < 12; i++) {
+        cctx.strokeStyle = `rgba(200, 196, 186, ${0.2 + rand() * 0.2})`;
+        cctx.lineWidth = 6 + rand() * 10;
+        const x = rand() * size;
+        cctx.beginPath();
+        cctx.moveTo(x, 0);
+        cctx.lineTo(x + (rand() - 0.5) * 20, size);
+        cctx.stroke();
       }
     }
-    return toTexture(c);
+    return {
+      map: toTexture(colour),
+      roughnessMap: toTexture(rough, false),
+      normalMap: toTexture(normalMapFromHeight(height, kind === 'mill' ? 1.2 : 0.8), false),
+    };
   });
 }
 

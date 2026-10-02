@@ -17,7 +17,9 @@ import type { ParticleSystem } from './particles';
  */
 
 const CONCRETE = { fresh: 0x9e9b94, dust: 0x8a8781, grit: 0x7d7a74, hole: 0x161616, crack: 0x2a2a2a };
-const STEEL = { bright: 0xe4e8ec, lead: 0x8c9096, spark: 0xffb347, hole: 0x050505 };
+const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505 };
+/** A perforation's rim glows hot and cools over about this long, in seconds. */
+const GLOW_COOL_S = 2.5e-3;
 
 export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], particles: ParticleSystem, holes: HoleMarks): void {
   let seed = 101;
@@ -32,7 +34,10 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
     if (!track || track.kind === 'fragment') continue;
     const ctx = makeContext(track, e);
     if (medium.behaviour === 'concrete') concreteEvent(ctx, e, frontShell, particles, holes, seed++);
-    else if (medium.behaviour === 'steel') steelEvent(ctx, e, particles, holes, seed++);
+    else if (medium.behaviour === 'steel') {
+      const perforated = timeline.events.some((x) => x.type === 'exit' && x.layer === e.layer && x.trackId === e.trackId);
+      steelEvent(ctx, e, medium.look === 'ar500', perforated, particles, holes, seed++);
+    }
   }
 }
 
@@ -114,9 +119,33 @@ function concreteEvent(c: Context, e: ShotEvent, frontShell: boolean, particles:
   }
 }
 
-function steelEvent(c: Context, e: ShotEvent, particles: ParticleSystem, holes: HoleMarks, seed: number): void {
+function steelEvent(
+  c: Context,
+  e: ShotEvent,
+  painted: boolean,
+  perforated: boolean,
+  particles: ParticleSystem,
+  holes: HoleMarks,
+  seed: number,
+): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
   if (e.type === 'impact' || e.type === 'enter') {
+    if (painted) {
+      // The hit blasts the paint off in a ragged disc of bare steel, with lead sprayed in rays across it.
+      holes.add({
+        t: e.t,
+        pos: e.pos,
+        normal,
+        radius: d,
+        ragged: 0.5,
+        color: STEEL.bare,
+        noOpening: true,
+        noHalo: true,
+        crater: { radius: d * (2.6 + 2 * k), color: STEEL.bare, roughness: 0.5, metalness: 0.35, irregularity: 0.7 },
+        streaks: { count: 18, length: [d * 2, d * (4 + 4 * k)], width: d * 0.35, color: STEEL.lead },
+        seed: seed + 900,
+      });
+    }
     // A grey lead splatter with a bright, polished dent at its centre; the opening only appears if the plate is perforated.
     holes.add({
       t: e.t,
@@ -140,6 +169,7 @@ function steelEvent(c: Context, e: ShotEvent, particles: ParticleSystem, holes: 
       noOpening: true,
       noHalo: true,
       crater: { radius: d * (0.5 + 0.3 * k), color: STEEL.bright, roughness: 0.3, metalness: 0.6, irregularity: 0.15 },
+      glow: perforated ? { radius: d * 1.3, cool: GLOW_COOL_S } : undefined,
       seed,
     });
     particles.add(sparks(e.t, origin, normal, c.dir, 120 * w * (0.4 + k)));
@@ -173,6 +203,7 @@ function steelEvent(c: Context, e: ShotEvent, particles: ParticleSystem, holes: 
       color: STEEL.hole,
       crater: { radius: d * 1.1, color: STEEL.bright, roughness: 0.3, metalness: 0.6, irregularity: 0.2 },
       rim: { count: 8, length: [d * 0.3, d * 0.6], width: d * 0.5, color: STEEL.bright, lift: 1.1 },
+      glow: { radius: d * 1.5, cool: GLOW_COOL_S },
       seed,
     });
     // Spall: hot steel flakes thrown off the back face.
