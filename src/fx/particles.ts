@@ -71,6 +71,10 @@ interface Particle {
   landPos: THREE.Vector3 | null;
   /** Sparks skip off the floor rather than stopping: velocity just after the bounce. */
   bounceV: THREE.Vector3 | null;
+  /** Which way the surface it landed on faces: the floor (y) or the board (z). */
+  landNormal: 'y' | 'z';
+  /** Liquid that can spatter on the board as well as the floor. */
+  wall: boolean;
   color: THREE.Color;
 }
 
@@ -101,7 +105,7 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
     // Opaque wet blobs: these still show inside transmissive gel, where transparent droplets would vanish.
     blob: {
       geometry: new THREE.SphereGeometry(0.5, 10, 8),
-      material: new THREE.MeshPhysicalMaterial({ roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.1 }),
+      material: new THREE.MeshPhysicalMaterial({ roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 0.4, sheenColor: new THREE.Color(0xffd0d0) }),
       cap: 2500,
     },
     // Soft, lit puffs: camera-facing cards with a billowy alpha, fading out as they spread.
@@ -131,6 +135,7 @@ const tmpDir = new THREE.Vector3();
 const tmpSpin = new THREE.Quaternion();
 const X = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
+const Y = new THREE.Vector3(0, 1, 0);
 
 export class ParticleSystem {
   readonly group = new THREE.Group();
@@ -217,7 +222,7 @@ export class ParticleSystem {
       const spinAxis = randomUnit(rand);
       // Long bits leave along their flight path, then tumble; chips start in any orientation.
       const start = (spec.stretch ?? 1) > 1 ? new THREE.Quaternion().setFromUnitVectors(X, dir.clone().normalize()) : new THREE.Quaternion().setFromAxisAngle(randomUnit(rand), rand() * Math.PI * 2);
-      const aspect = solid ? new THREE.Vector3(0.7 + 0.6 * rand(), 0.6 + 0.6 * rand(), 0.7 + 0.6 * rand()) : new THREE.Vector3(1, 1, 1);
+      const aspect = solid || spec.look === 'droplet' ? new THREE.Vector3(0.7 + 0.6 * rand(), 0.6 + 0.6 * rand(), 0.7 + 0.6 * rand()) : new THREE.Vector3(1, 1, 1);
       const size = lerp(spec.size, rand());
       const q: Particle = {
         t0: spec.t0 + (spec.duration ?? 0) * rand(),
@@ -237,9 +242,13 @@ export class ParticleSystem {
         landAge: Infinity,
         landPos: null,
         bounceV: null,
+        landNormal: 'y',
+        wall: spec.look === 'droplet',
         color: base.clone().multiplyScalar(shade),
       };
-      if (solid || spec.look === 'spark') land(q);
+      if (solid || spec.look === 'spark' || spec.look === 'droplet') land(q);
+      // A drop that lands leaves its splat for the rest of the shot.
+      if (spec.look === 'droplet' && q.landPos) q.life = Math.max(q.life, q.landAge + SPLAT_LIFE_S);
       if (spec.look === 'spark' && q.landPos) {
         // Skip off the floor, losing most of the vertical speed and some of the rest.
         const decay = Math.exp(-q.drag * q.landAge);
@@ -295,7 +304,17 @@ export class ParticleSystem {
           n++;
           continue;
         }
-        if (look === 'spark') {
+        if (look === 'droplet' && landed) {
+          // A splat: flattened against the surface it hit, spread wide, with a random outline turn.
+          const spread = size * SPLAT_SPREAD * q.aspect.x;
+          if (q.landNormal === 'y') {
+            tmpQuat.setFromAxisAngle(Y, q.spin);
+            tmpScale.set(spread * q.stretch, size * 0.12, spread);
+          } else {
+            tmpQuat.setFromAxisAngle(Z, q.spin);
+            tmpScale.set(spread * q.stretch, spread, size * 0.12);
+          }
+        } else if (look === 'spark') {
           // A streak as long as the spark travels in a short exposure, so fast sparks are long and slowing ones shrink to dots.
           const v = landed && q.bounceV ? tmpDir.copy(q.bounceV).multiplyScalar(Math.exp(-q.drag * (age - q.landAge))) : velocityAt(q, age, tmpDir);
           const streak = Math.min(q.stretch * 1.5, Math.max(1, (v.length() * SPARK_EXPOSURE_S) / size));
@@ -328,6 +347,12 @@ export class ParticleSystem {
 
 const tmpColor = new THREE.Color();
 const tmpLand = new THREE.Vector3();
+/** The measurement board behind the target (see studio.ts): liquid spatters on it. */
+const BOARD = { z: -0.35, x: 0, halfWidth: 0.6, top: 0.5 };
+/** A landed drop spreads into a thin splat this many times its size. */
+const SPLAT_SPREAD = 2.2;
+/** Landed drops stay this long, so spatter is still there at the end of the shot. */
+const SPLAT_LIFE_S = 1;
 /** The streak a spark draws is its travel over this long, as a camera shutter would smear it. */
 const SPARK_EXPOSURE_S = 80e-6;
 /** Glowing steel cooling: white-hot, yellow, orange, dull red, then nearly dark. */
@@ -369,19 +394,38 @@ function positionAt(q: Particle, age: number, out: THREE.Vector3): THREE.Vector3
 /** Finds when (if ever, within its life) a bit reaches the floor, so it can come to rest there. */
 function land(q: Particle): void {
   const rest = FLOOR_Y + q.size * 0.3;
-  if (positionAt(q, q.life, tmpLand).y > rest) return;
-  // Height is monotonic once falling, and the bits start above the floor, so bisect.
-  let lo = 0;
-  let hi = q.life;
-  if (positionAt(q, 0, tmpLand).y <= rest) hi = 0;
-  for (let i = 0; i < 24 && hi > 0; i++) {
-    const mid = (lo + hi) / 2;
-    if (positionAt(q, mid, tmpLand).y > rest) lo = mid;
-    else hi = mid;
+  if (positionAt(q, q.life, tmpLand).y <= rest) {
+    // Height is monotonic once falling, and the bits start above the floor, so bisect.
+    const hit = positionAt(q, 0, tmpLand).y <= rest ? 0 : firstAge(q, (p) => p.y <= rest);
+    q.landAge = hit;
+    q.landPos = positionAt(q, hit, new THREE.Vector3());
+    q.landPos.y = rest;
+    q.landNormal = 'y';
   }
-  q.landAge = hi;
-  q.landPos = positionAt(q, hi, new THREE.Vector3());
-  q.landPos.y = rest;
+  // Liquid can also reach the grid board behind the target and spatter on it.
+  if (q.wall) {
+    const face = BOARD.z + q.size * 0.3;
+    const end = positionAt(q, Math.min(q.life, q.landAge), tmpLand);
+    if (end.z <= face && Math.abs(end.x - BOARD.x) < BOARD.halfWidth && end.y < BOARD.top && positionAt(q, 0, tmpLand).z > face) {
+      const hit = firstAge(q, (p) => p.z <= face);
+      q.landAge = hit;
+      q.landPos = positionAt(q, hit, new THREE.Vector3());
+      q.landPos.z = face;
+      q.landNormal = 'z';
+    }
+  }
+}
+
+/** Earliest age within the particle's life at which `reached` holds, assuming it stays true after. */
+function firstAge(q: Particle, reached: (p: THREE.Vector3) => boolean): number {
+  let lo = 0;
+  let hi = Math.min(q.life, q.landAge);
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (reached(positionAt(q, mid, tmpLand))) hi = mid;
+    else lo = mid;
+  }
+  return hi;
 }
 
 function randomUnit(rand: () => number): THREE.Vector3 {
