@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import type { MediumSpec } from '../data/media';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
+import { createSupport, SHARED_STAND_MATERIALS } from './stands';
 import { burlapTexture, concreteTexture, steelTexture, woodTexture } from './textures';
+
+export { standSteel } from './stands';
 
 /** Height of the shot line above the floor, in metres. Every target is centred on it. */
 export const SHOT_Y = 0.16;
@@ -17,8 +20,6 @@ export const BONE_ROD_NAME = 'bone-rod';
 
 /** Synthetic bone simulant: off-white, slightly yellow. */
 export const BONE_COLOR = 0xe9dfc8;
-
-export const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
 
 /**
  * A target ready to place in the scene: its front face is at the group origin,
@@ -50,9 +51,7 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number): THREE
     const body = buildBody(spec, thickness);
     body.position.x = thickness / 2;
     layer.add(body);
-    const bottom = SHOT_Y - spec.heightM / 2;
-    if (bottom > 0.03) layer.add(createStand(spec, thickness, bottom));
-    else layer.add(createFeet(spec, thickness));
+    layer.add(createSupport(spec, thickness, SHOT_Y));
     group.add(layer);
   });
 
@@ -71,7 +70,7 @@ export function disposeTarget(group: THREE.Group): void {
     if (!(obj instanceof THREE.Mesh)) return;
     obj.geometry.dispose();
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const m of materials) if (m !== standSteel) m.dispose();
+    for (const m of materials) if (!SHARED_STAND_MATERIALS.has(m)) m.dispose();
   });
 }
 
@@ -316,39 +315,4 @@ function createSandbag(t: number, h: number, w: number): THREE.Mesh {
   geometry.computeVertexNormals();
   const map = burlapTexture();
   return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 1 }));
-}
-
-/** A lab bench stand: tray under the target and four legs to the floor. */
-function createStand(spec: MediumSpec, t: number, bottom: number): THREE.Group {
-  const stand = new THREE.Group();
-  const trayLength = Math.max(t + 0.02, 0.12);
-  const trayWidth = spec.widthM + 0.02;
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(trayLength, 0.006, trayWidth), standSteel);
-  tray.position.set(t / 2, -spec.heightM / 2 - 0.003, 0);
-  stand.add(tray);
-
-  const legHeight = bottom - 0.006;
-  const legGeometry = new THREE.CylinderGeometry(0.008, 0.008, legHeight, 16);
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeometry, standSteel);
-      leg.position.set(t / 2 + sx * (trayLength / 2 - 0.02), -SHOT_Y + legHeight / 2, sz * (trayWidth / 2 - 0.02));
-      stand.add(leg);
-    }
-  }
-  return stand;
-}
-
-/** Floor clamps that hold a tall panel upright. */
-function createFeet(spec: MediumSpec, t: number): THREE.Group {
-  const feet = new THREE.Group();
-  const footLength = 0.16;
-  for (const sz of [-1, 1]) {
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(footLength, 0.012, 0.03), standSteel);
-    foot.position.set(t / 2, -SHOT_Y + 0.006, sz * (spec.widthM / 2 - 0.03));
-    const clamp = new THREE.Mesh(new THREE.BoxGeometry(t + 0.016, 0.04, 0.03), standSteel);
-    clamp.position.set(t / 2, -SHOT_Y + 0.012 + 0.02, sz * (spec.widthM / 2 - 0.03));
-    feet.add(foot, clamp);
-  }
-  return feet;
 }
