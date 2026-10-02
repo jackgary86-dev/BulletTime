@@ -2,6 +2,7 @@
   "name": "bullettime",
   "private": true,
   "version": "0.1.0",
+  "license": "UNLICENSED",
   "type": "module",
   "description": "BulletTime: a slow-motion 3D bullet impact simulator in the browser",
   "scripts": {

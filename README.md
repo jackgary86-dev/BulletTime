@@ -141,3 +141,7 @@ Tune `resistancePa` and `dragCoefficient` until a reference round behaves as pub
 - **Compare mode** fires both setups fresh from t = 0 on every Fire, so they stay in step.
 - **The 20 mm HEI shell** is in the list as a clearly-marked fun option.
 - **Deployment:** GitHub Pages from `main`, with one pull request per ticket.
+
+## License
+
+BulletTime is proprietary: all rights reserved, see [LICENSE](LICENSE). The open-source parts it ships with (three.js, MIT; the Inter, Barlow Condensed and JetBrains Mono fonts, SIL OFL 1.1) keep their own licenses, listed in [THIRD_PARTY_LICENSES.txt](public/THIRD_PARTY_LICENSES.txt) and in the in-game About dialog.
