@@ -17,9 +17,10 @@ export class Playback {
   private simTime = 0;
   private playing = false;
 
-  start(timeline: Timeline): void {
+  /** Plays `timeline` from `from` seconds (a later shot on a multi-shot timeline starts part-way in). */
+  start(timeline: Timeline, from = 0): void {
     this.timeline = timeline;
-    this.simTime = 0;
+    this.simTime = from;
     this.playing = true;
   }
 

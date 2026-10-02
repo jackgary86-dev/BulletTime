@@ -1,3 +1,4 @@
+import { activeShot } from './session';
 import type { Keyframe, Timeline, Track } from './types';
 
 /**
@@ -36,7 +37,8 @@ export function sampleTrack(track: Track, t: number): Keyframe | null {
   };
 }
 
-/** The main projectile's state at time `t` (the bullet, or the first pellet). */
+/** The main projectile's state at time `t` (the bullet, or the first pellet) for the shot playing then. */
 export function samplePrimary(timeline: Timeline, t: number): Keyframe | null {
-  return sampleTrack(timeline.tracks[0], Math.min(t, timeline.tracks[0].keyframes.at(-1)!.t));
+  const track = timeline.tracks[activeShot(timeline, t).primaryId];
+  return sampleTrack(track, Math.min(t, track.keyframes.at(-1)!.t));
 }
