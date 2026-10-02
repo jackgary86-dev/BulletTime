@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShockwavePass } from './shockwavePass';
+import { GradePass } from './gradePass';
 
 export interface PostFx {
   composer: EffectComposer;
@@ -15,6 +16,8 @@ export interface PostFx {
   depthOfField: BokehPass;
   /** The muzzle blast's refracting shell (#65); enabled only while it is in the air. */
   shockwave: ShockwavePass;
+  /** The final colour grade, vignette, grain and lens fringing (#73). */
+  grade: GradePass;
   /** Sets the depth-of-field focus distance in metres from the camera. */
   setFocus(distance: number): void;
   setSize(width: number, height: number): void;
@@ -23,8 +26,8 @@ export interface PostFx {
 
 /**
  * Post-processing chain: scene render, then ambient occlusion, then bloom for muzzle flash and sparks,
- * then a subtle depth of field, then tone mapping and sRGB conversion.
- * Motion blur is optional in the brief and left for the performance ticket.
+ * then a subtle depth of field, the muzzle blast refraction, tone mapping and sRGB conversion,
+ * and finally the colour grade.
  */
 export function createPostFx(
   renderer: THREE.WebGLRenderer,
@@ -59,6 +62,9 @@ export function createPostFx(
 
   composer.addPass(new OutputPass());
 
+  const grade = new GradePass();
+  composer.addPass(grade);
+
   const focusUniform = (depthOfField.uniforms as Record<string, THREE.IUniform<number>>).focus;
 
   return {
@@ -67,6 +73,7 @@ export function createPostFx(
     bloom,
     depthOfField,
     shockwave,
+    grade,
     setFocus(distance) {
       focusUniform.value = distance;
     },
@@ -76,6 +83,7 @@ export function createPostFx(
       bloom.resolution.set(width, height);
     },
     render() {
+      grade.tick(performance.now() / 1000);
       composer.render();
     },
   };
