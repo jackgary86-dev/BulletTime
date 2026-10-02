@@ -31,6 +31,26 @@ export interface HoleSpec {
     /** How far the fins lean out of the face, radians from flat (π/2 = straight out). */
     lift: number;
   };
+  /** A shallow pit or dent around the opening, drawn under it (concrete crater, steel dent). */
+  crater?: {
+    radius: number;
+    color: THREE.ColorRepresentation;
+    roughness?: number;
+    metalness?: number;
+    /** Edge irregularity, 0–1 (default 0.45). */
+    irregularity?: number;
+  };
+  /** Thin cracks radiating from the hole (concrete). */
+  cracks?: {
+    count: number;
+    length: [number, number];
+    width: number;
+    color: THREE.ColorRepresentation;
+  };
+  /** Draw only the crater and cracks, not a dark opening (a dent or a pit that did not go through). */
+  noOpening?: boolean;
+  /** Skip the soft dark bruise ring around the hole. */
+  noHalo?: boolean;
   seed: number;
 }
 
@@ -65,11 +85,72 @@ export class HoleMarks {
       const r = spec.radius * (1 + spec.ragged * (rand() - 0.35) * 0.9);
       points.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r * stretch));
     }
-    const hole = new THREE.Mesh(
-      new THREE.ShapeGeometry(new THREE.Shape(points)),
-      new THREE.MeshStandardMaterial({ color: spec.color, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2 }),
-    );
-    object.add(hole);
+    if (!spec.noOpening) {
+      const hole = new THREE.Mesh(
+        new THREE.ShapeGeometry(new THREE.Shape(points)),
+        new THREE.MeshStandardMaterial({ color: spec.color, roughness: 1, polygonOffset: true, polygonOffsetFactor: -3 }),
+      );
+      object.add(hole);
+    }
+
+    if (spec.crater) {
+      const c = spec.crater;
+      const rim: THREE.Vector2[] = [];
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * Math.PI * 2;
+        const jag = c.irregularity ?? 0.45;
+        const r = c.radius * (1 - jag * 0.55 + jag * rand());
+        rim.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r * stretch));
+      }
+      const crater = new THREE.Mesh(
+        new THREE.ShapeGeometry(new THREE.Shape(rim)),
+        new THREE.MeshStandardMaterial({
+          color: c.color,
+          roughness: c.roughness ?? 1,
+          metalness: c.metalness ?? 0,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        }),
+      );
+      object.add(crater);
+    }
+
+    if (spec.cracks) {
+      const c = spec.cracks;
+      // Each crack is a short zig-zag of thin flat segments heading outward.
+      const segments: THREE.Matrix4[] = [];
+      for (let i = 0; i < c.count; i++) {
+        let a = (i / c.count) * Math.PI * 2 + rand() * 0.6;
+        const total = c.length[0] + (c.length[1] - c.length[0]) * rand();
+        let r = spec.radius * 0.8;
+        while (r < total) {
+          const step = Math.min(total - r, total * (0.15 + 0.2 * rand()));
+          const a2 = a + (rand() - 0.5) * 0.5;
+          const x1 = Math.cos(a) * r;
+          const y1 = Math.sin(a) * r;
+          const x2 = Math.cos(a2) * (r + step);
+          const y2 = Math.sin(a2) * (r + step);
+          const len = Math.hypot(x2 - x1, y2 - y1);
+          const width = c.width * (1 - (r / total) * 0.7);
+          segments.push(
+            new THREE.Matrix4().compose(
+              new THREE.Vector3((x1 + x2) / 2, (y1 + y2) / 2, 0),
+              new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(y2 - y1, x2 - x1)),
+              new THREE.Vector3(len, width, 1),
+            ),
+          );
+          r += step;
+          a = a2;
+        }
+      }
+      const cracks = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ color: c.color, polygonOffset: true, polygonOffsetFactor: -2 }),
+        segments.length,
+      );
+      segments.forEach((m, i) => cracks.setMatrixAt(i, m));
+      object.add(cracks);
+    }
 
     // A soft scorch/bruise ring around the opening.
     const halo = new THREE.Mesh(
@@ -78,7 +159,7 @@ export class HoleMarks {
     );
     halo.scale.y = stretch;
     halo.position.z = -OFFSET * 0.5;
-    object.add(halo);
+    if (!spec.noHalo) object.add(halo);
 
     if (spec.rim) {
       const rim = spec.rim;
@@ -112,6 +193,8 @@ export class HoleMarks {
     }
 
     object.visible = false;
+    object.renderOrder = this.holes.length;
+    object.traverse((o) => (o.renderOrder = this.holes.length));
     this.group.add(object);
     this.holes.push({ t: spec.t, object });
   }
