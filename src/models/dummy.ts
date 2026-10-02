@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { DUMMY_REGIONS, getRegion, regionLayers, type DummyRegion, type DummyRegionId } from '../data/dummy';
 import { stackOffsets } from '../data/stacks';
 import { addOrganicInserts, BONE_COLOR, GEL_BODY_NAME, layerGroupName, standSteel, TARGET_FRONT_X } from './targets';
@@ -95,16 +94,144 @@ function gelMaterial(thickness: number): THREE.MeshPhysicalMaterial {
   });
 }
 
-/** The gel body: head, neck and torso, plain rounded shapes. */
+/** One cross-section of a lofted body part: height, front and back (x) and half-width (z). */
+interface Section {
+  y: number;
+  front: number;
+  back: number;
+  half: number;
+}
+
+/**
+ * A smooth body part lofted through cross-sections: rounded-box (superellipse)
+ * slices, eased between the given sections, closed at both ends. `roundness`
+ * 2 is an ellipse; higher is squarer.
+ */
+function loft(sections: Section[], roundness: number, slices = 64, around = 56): THREE.BufferGeometry {
+  const at = (y: number): Section => {
+    let i = 1;
+    while (i < sections.length - 1 && sections[i].y < y) i++;
+    const a = sections[i - 1];
+    const b = sections[i];
+    const k = THREE.MathUtils.clamp((y - a.y) / (b.y - a.y), 0, 1);
+    const e = k * k * (3 - 2 * k);
+    return { y, front: a.front + (b.front - a.front) * e, back: a.back + (b.back - a.back) * e, half: a.half + (b.half - a.half) * e };
+  };
+  const y0 = sections[0].y;
+  const y1 = sections[sections.length - 1].y;
+  const positions: number[] = [];
+  const index: number[] = [];
+  const p = 2 / roundness;
+  for (let j = 0; j <= slices; j++) {
+    const s = at(y0 + ((y1 - y0) * j) / slices);
+    const cx = (s.front + s.back) / 2;
+    const rx = (s.back - s.front) / 2;
+    for (let i = 0; i < around; i++) {
+      const a = (i / around) * Math.PI * 2;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      positions.push(cx + rx * Math.sign(c) * Math.abs(c) ** p, s.y, s.half * Math.sign(sn) * Math.abs(sn) ** p);
+    }
+  }
+  for (let j = 0; j < slices; j++) {
+    for (let i = 0; i < around; i++) {
+      const a = j * around + i;
+      const b = j * around + ((i + 1) % around);
+      index.push(a, a + around, b, b, a + around, b + around);
+    }
+  }
+  // Fans close the bottom and top.
+  for (const [ring, up] of [
+    [0, false],
+    [slices, true],
+  ] as const) {
+    const s = at(ring === 0 ? y0 : y1);
+    const centre = positions.length / 3;
+    positions.push((s.front + s.back) / 2, s.y, 0);
+    for (let i = 0; i < around; i++) {
+      const a = ring * around + i;
+      const b = ring * around + ((i + 1) % around);
+      if (up) index.push(a, b, centre);
+      else index.push(b, a, centre);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * The gel body (#67), sculpted like a clinical test dummy: a tapered torso
+ * with a waist and sloping shoulders, a neck, and a head with a jaw and chin,
+ * a nose bridge and ears. The front surface stays on x = 0 across the chest
+ * and abdomen, and the head's on x = 0.01, where the regions' layers start.
+ */
 function buildShell(body: THREE.Group): void {
-  const torso = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.4, 0.34, 5, 0.05), gelMaterial(0.3));
-  torso.position.set(0.12, 0.4, 0);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 32), gelMaterial(0.09));
-  neck.position.set(0.11, 0.63, 0);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), gelMaterial(0.16));
-  head.scale.set(0.09, 0.115, 0.08);
-  head.position.set(0.1, 0.75, 0);
-  body.add(torso, neck, head);
+  const torso = new THREE.Mesh(
+    loft(
+      [
+        { y: 0.19, front: 0.06, back: 0.18, half: 0.07 },
+        { y: 0.205, front: 0.012, back: 0.228, half: 0.135 },
+        { y: 0.235, front: 0, back: 0.24, half: 0.152 },
+        { y: 0.3, front: 0, back: 0.24, half: 0.15 },
+        { y: 0.39, front: 0, back: 0.238, half: 0.138 },
+        { y: 0.49, front: 0, back: 0.24, half: 0.16 },
+        { y: 0.555, front: 0.006, back: 0.236, half: 0.176 },
+        { y: 0.6, front: 0.03, back: 0.222, half: 0.182 },
+        { y: 0.625, front: 0.058, back: 0.195, half: 0.14 },
+        { y: 0.64, front: 0.08, back: 0.165, half: 0.07 },
+        { y: 0.646, front: 0.095, back: 0.145, half: 0.03 },
+      ],
+      2.8,
+    ),
+    gelMaterial(0.3),
+  );
+  const neck = new THREE.Mesh(
+    loft(
+      [
+        { y: 0.6, front: 0.07, back: 0.165, half: 0.05 },
+        { y: 0.64, front: 0.075, back: 0.158, half: 0.044 },
+        { y: 0.7, front: 0.07, back: 0.16, half: 0.046 },
+      ],
+      2.2,
+      12,
+      40,
+    ),
+    gelMaterial(0.09),
+  );
+  const head = new THREE.Mesh(
+    loft(
+      [
+        { y: 0.638, front: 0.035, back: 0.085, half: 0.02 },
+        { y: 0.652, front: 0.018, back: 0.115, half: 0.05 },
+        { y: 0.685, front: 0.012, back: 0.15, half: 0.066 },
+        { y: 0.72, front: 0.006, back: 0.183, half: 0.077 },
+        { y: 0.75, front: 0.01, back: 0.19, half: 0.08 },
+        { y: 0.79, front: 0.014, back: 0.19, half: 0.079 },
+        { y: 0.83, front: 0.034, back: 0.176, half: 0.068 },
+        { y: 0.855, front: 0.068, back: 0.142, half: 0.044 },
+        { y: 0.866, front: 0.098, back: 0.116, half: 0.01 },
+      ],
+      2.2,
+    ),
+    gelMaterial(0.16),
+  );
+  // Nose bridge: a narrow ridge running down from the brow, below the head's shot line.
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), gelMaterial(0.02));
+  nose.scale.set(0.012, 0.03, 0.011);
+  nose.rotation.z = -0.25;
+  nose.position.set(0.008, 0.705, 0);
+  body.add(torso, neck, head, nose);
+  // Ears: flat, rounded flaps on either side, level with the nose.
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), gelMaterial(0.02));
+    ear.scale.set(0.016, 0.03, 0.008);
+    ear.rotation.z = 0.2;
+    ear.position.set(0.112, 0.73, side * 0.079);
+    body.add(ear);
+  }
 }
 
 /**
@@ -170,11 +297,35 @@ function buildOrgans(body: THREE.Group): void {
   body.add(cutaway([0.065, 0.075, 0.15], [0.095, 0.3, 0], 0x8f4218, 0xa0522a));
 }
 
-/** A lab stand: base plate and a pole up into the pelvis. */
+/**
+ * A mannequin stand: a heavy round base on a rubber ring, a pole with a
+ * height collar and clamp knob, and a saddle bracket cradling the pelvis.
+ */
 function buildStand(body: THREE.Group): void {
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.012, 0.26), standSteel);
-  base.position.set(0.12, 0.006, 0);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.21, 20), standSteel);
-  pole.position.set(0.12, 0.105, 0);
-  body.add(base, pole);
+  const x = 0.12;
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.9 });
+  const saddleSteel = new THREE.MeshStandardMaterial({ color: 0x2f343b, roughness: 0.42, metalness: 0.75, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.006, 10, 64), rubber);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, 0.006, 0);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.128, 0.134, 0.016, 64), standSteel);
+  base.position.set(x, 0.012, 0);
+  const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.02, 32), standSteel);
+  boss.position.set(x, 0.03, 0);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.15, 24), standSteel);
+  pole.position.set(x, 0.115, 0);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.022, 24), standSteel);
+  collar.position.set(x, 0.15, 0);
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 12), standSteel);
+  knob.rotation.z = Math.PI / 2;
+  knob.position.set(x - 0.03, 0.15, 0);
+  const grip = new THREE.Mesh(new THREE.SphereGeometry(0.009, 16, 12), rubber);
+  grip.position.set(x - 0.046, 0.15, 0);
+  // Saddle: a curved plate the pelvis sits in.
+  const saddle = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.11, 32, 1, true, Math.PI * 1.25, Math.PI * 0.5), saddleSteel);
+  saddle.rotation.z = Math.PI / 2;
+  saddle.position.set(x, 0.27, 0);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 16), standSteel);
+  post.position.set(x, 0.196, 0);
+  body.add(ring, base, boss, pole, collar, knob, grip, saddle, post);
 }
