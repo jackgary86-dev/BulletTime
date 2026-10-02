@@ -28,6 +28,7 @@ export type MediumLook =
   | 'oak'
   | 'drywall'
   | 'concrete'
+  | 'cinderBlock'
   | 'mildSteel'
   | 'ar500'
   | 'sandbag'
@@ -67,6 +68,8 @@ export interface MediumSpec {
   ricochetAngleDeg?: number;
   /** Distance scale for the yaw neck relative to 10% gel (1 = same as gel). */
   yawNeckScale: number;
+  /** Hollow targets: wall thickness of the front and back shells, in metres; the rest is air. */
+  shellM?: number;
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -169,6 +172,24 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.7,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
+  },
+  {
+    id: 'cinder-block',
+    name: 'Cinder block (hollow)',
+    description: 'A hollow concrete masonry block. The bullet punches the front shell, crosses the open core in a swirl of dust, then blasts a plume of grit out of the back shell.',
+    behaviour: 'concrete',
+    look: 'cinderBlock',
+    density: 2100,
+    thickness: { min: 0.14, max: 0.24, default: 0.19 },
+    heightM: 0.3,
+    widthM: 0.19,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 300e6, // slightly weaker block concrete than solid cast
+    hardness: 0.65,
+    ricochetAngleDeg: 65,
+    yawNeckScale: 0.1,
+    shellM: 0.032,
   },
   {
     id: 'steel-mild',

@@ -73,24 +73,28 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
     case 'waterTank': {
       const tank = new THREE.Group();
       const wall = 0.005;
+      // Thin walls use plain alpha blending rather than transmission: three.js transmissive
+      // surfaces can't see other transmissive surfaces, so the water would vanish behind them.
       const glass = new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
+        color: 0xe6f6ff,
         roughness: 0.02,
-        transmission: 1,
-        thickness: wall,
-        ior: 1.5,
+        transparent: true,
+        opacity: 0.12,
         specularIntensity: 1,
+        clearcoat: 1,
+        depthWrite: false,
       });
       const water = new THREE.Mesh(
         new THREE.BoxGeometry(t - wall * 2, h * 0.88 - wall, w - wall * 2),
         new THREE.MeshPhysicalMaterial({
-          color: 0xdff2ff,
+          color: 0xcfeaff,
           roughness: 0.03,
-          transmission: 1,
+          transmission: 0.97,
           thickness: w,
           ior: 1.33,
-          attenuationColor: new THREE.Color(0x5fb4e0),
-          attenuationDistance: 0.9,
+          attenuationColor: new THREE.Color(0x3f9fd0),
+          attenuationDistance: 0.3,
+          specularIntensity: 1,
         }),
       );
       water.position.y = -h * 0.06;
@@ -137,6 +141,27 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
       );
     }
 
+    case 'cinderBlock': {
+      // Front and back shells joined by top and bottom webs; the core is open toward the camera.
+      const map = concreteTexture();
+      const material = new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 3, roughness: 1, color: 0xb4b0a8 });
+      const shell = Math.min(spec.shellM ?? 0.032, t / 3);
+      const web = 0.035;
+      const block = new THREE.Group();
+      const parts: [number, number, number, number, number][] = [
+        [shell, h, w, -t / 2 + shell / 2, 0],
+        [shell, h, w, t / 2 - shell / 2, 0],
+        [t - shell * 2, web, w, 0, h / 2 - web / 2],
+        [t - shell * 2, web, w, 0, -h / 2 + web / 2],
+      ];
+      for (const [sx, sy, sz, px, py] of parts) {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+        part.position.set(px, py, 0);
+        block.add(part);
+      }
+      return block;
+    }
+
     case 'mildSteel':
     case 'ar500': {
       const painted = spec.look === 'ar500';
@@ -145,8 +170,10 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
         new THREE.BoxGeometry(t, h, w),
         new THREE.MeshStandardMaterial({
           map,
-          metalness: painted ? 0.15 : 0.9,
-          roughness: painted ? 0.7 : 0.42,
+          metalness: painted ? 0.15 : 0.7,
+          roughness: painted ? 0.7 : 0.38,
+          // The studio is dark, so lift bare steel's reflections enough to read as metal.
+          envMapIntensity: painted ? 1 : 3,
         }),
       );
     }

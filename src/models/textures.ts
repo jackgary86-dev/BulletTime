@@ -147,7 +147,7 @@ export function steelTexture(kind: 'mill' | 'painted'): THREE.Texture {
   return cached(`steel:${kind}`, () => {
     const [c, ctx] = canvas(512, 512);
     const rand = seededRandom(kind === 'mill' ? 31 : 37);
-    ctx.fillStyle = kind === 'mill' ? '#5d636b' : '#d8d4c8';
+    ctx.fillStyle = kind === 'mill' ? '#8a9099' : '#d8d4c8';
     ctx.fillRect(0, 0, c.width, c.height);
     for (let i = 0; i < 1400; i++) {
       const y = rand() * c.height;
