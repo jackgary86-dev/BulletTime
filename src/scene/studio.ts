@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { TARGET_FOCUS } from './camera';
+import { createLabSet } from './labSet';
 
 /** Background tone of the high-speed camera lab. */
 const BACKGROUND = new THREE.Color(0x07080a);
@@ -21,13 +22,14 @@ export interface Studio {
 const HIGHSPEED_BACKGROUND = new THREE.Color(0xc9ccd0);
 
 /**
- * Builds the high-speed camera lab: dark backdrop, key light with soft shadow,
- * two coloured rim lights, a dim environment for reflections, a floor that
- * catches shadows, and a measurement grid board behind the target.
+ * Builds the high-speed camera lab: the lab room (#53), key light with soft
+ * shadow, two coloured rim lights, a dim environment for reflections, and a
+ * measurement grid board behind the target.
  */
 export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Studio {
   scene.background = BACKGROUND;
-  scene.fog = new THREE.Fog(BACKGROUND, 3, 9);
+  // Far enough that the lab walls read, close enough that the room falls into shadow.
+  scene.fog = new THREE.Fog(BACKGROUND, 4, 14);
 
   // Low-intensity image-based lighting so metals and gel have something to reflect.
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -40,15 +42,15 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
   scene.add(group);
 
   const lights = addLights(group);
-  const floor = createFloor();
-  group.add(floor);
+  const lab = createLabSet();
+  group.add(lab.group);
 
   const labGrid = createLabGrid();
   group.add(labGrid);
   const gridMaterial = labGrid.material as THREE.MeshStandardMaterial;
   const darkGrid = gridMaterial.map;
   const brightGrid = gridTexture(true);
-  const floorMaterial = floor.material as THREE.MeshStandardMaterial;
+  const floorMaterial = lab.floor.material;
 
   const setLightingMode = (mode: LightingMode) => {
     const bright = mode === 'highspeed';
@@ -64,7 +66,9 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
     gridMaterial.emissive.set(bright ? 0xffffff : 0x000000);
     gridMaterial.emissiveIntensity = bright ? 0.55 : 0;
     gridMaterial.needsUpdate = true;
-    floorMaterial.color.set(bright ? 0x8a8d92 : 0x0b0c0f);
+    // The high-speed look is a bright seamless backdrop: the room goes, the floor brightens.
+    lab.room.visible = !bright;
+    floorMaterial.color.set(bright ? 0xe2e4e8 : 0x6a6a6a);
   };
 
   const setShadowMapSize = (size: number) => {
@@ -114,17 +118,6 @@ function addLights(group: THREE.Group): { key: THREE.SpotLight; fill: THREE.Hemi
   back.target.position.copy(TARGET_FOCUS);
   group.add(back, back.target);
   return { key, fill, back };
-}
-
-function createFloor(): THREE.Mesh {
-  const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(4, 64),
-    new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.7, metalness: 0.0 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  floor.name = 'floor';
-  return floor;
 }
 
 /**
