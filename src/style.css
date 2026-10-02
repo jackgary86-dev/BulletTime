@@ -1072,3 +1072,57 @@ body {
 .comparing .camera-hud {
   top: 118px;
 }
+
+/* The Sounds window (#108): a label and a play button per sound. */
+.sound-board {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.sound-board h3 {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sound-board ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sound-board li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sound-board li:last-child {
+  border-bottom: none;
+}
+
+.sound-board .sound-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+}
+
+.sound-board button:hover {
+  background: var(--control-hover);
+}
+
+.sound-board .sound-play:active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sound-board button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

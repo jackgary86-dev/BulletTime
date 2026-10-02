@@ -1,12 +1,14 @@
+import { mountSoundBoard } from './soundBoard';
+
 /**
- * Mounts the heads-up overlay: the app title with an About note, and a hint
+ * Mounts the heads-up overlay: the app title with About and Sounds windows, and a hint
  * about camera controls. The other panels mount themselves into the same root.
  */
 export function mountOverlay(root: HTMLElement): void {
   root.innerHTML = `
     <header class="brand">
       <h1>BulletTime</h1>
-      <p>Slow-motion bullet impact simulator <button type="button" class="about-open">About</button></p>
+      <p>Slow-motion bullet impact simulator <button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button></p>
     </header>
     <p class="hint">Drag to orbit · scroll to zoom · right-drag to pan</p>
     <dialog class="about" aria-labelledby="about-title">
@@ -36,4 +38,5 @@ export function mountOverlay(root: HTMLElement): void {
   dialog.addEventListener('click', (e) => {
     if (e.target === dialog) dialog.close();
   });
+  mountSoundBoard(root, root.querySelector<HTMLElement>('.sounds-open')!);
 }
