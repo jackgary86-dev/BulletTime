@@ -75,3 +75,101 @@ body {
   color: var(--muted);
   white-space: nowrap;
 }
+
+.panel {
+  position: absolute;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.controls {
+  top: 16px;
+  right: 16px;
+  width: min(300px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.controls button {
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.controls .fire {
+  padding: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #1a1206;
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.controls .fire:hover {
+  background: #f0b35a;
+}
+
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rate-value {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.presets button {
+  padding: 6px 0;
+  font-size: 11px;
+}
+
+.presets button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#rate-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.readout dt {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.readout dd {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
