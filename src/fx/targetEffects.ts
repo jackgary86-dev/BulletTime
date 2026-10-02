@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { MediumSpec } from '../data/media';
-import { GEL_BODY_NAME } from '../models/targets';
+import { GEL_BODY_NAME, WATER_BODY_NAME } from '../models/targets';
 import type { Timeline } from '../sim/types';
 import { GelEffect } from './gelEffect';
 import { HoleMarks } from './holes';
 import { loadHardEffect } from './hardEffect';
 import { loadPanelEffect } from './panelEffect';
+import { loadSandEffect } from './sandEffect';
 import { ParticleSystem } from './particles';
 
 /**
@@ -29,6 +30,11 @@ export class TargetEffects {
       if (medium.behaviour === 'gel') {
         const body = target.getObjectByName(GEL_BODY_NAME);
         if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer);
+      } else if (medium.behaviour === 'water') {
+        const body = target.getObjectByName(WATER_BODY_NAME);
+        if (body instanceof THREE.Mesh) this.gel.load(timeline, body, layer, 'water');
+      } else if (medium.behaviour === 'sand') {
+        loadSandEffect(timeline, layer, this.particles, this.holes);
       } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall') {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }

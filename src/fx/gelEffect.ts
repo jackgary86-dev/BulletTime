@@ -36,6 +36,9 @@ const SPLASH_S = 0.8e-3;
 
 const RING_SEGMENTS = 40;
 
+/** 'gel': crinkled amber cavity in a bulging block. 'water': a silvery air cavity that closes into bubbles. */
+export type CavityStyle = 'gel' | 'water';
+
 interface Ring {
   centre: THREE.Vector3;
   t: number;
@@ -57,9 +60,21 @@ export class GelEffect {
   private exitT = Infinity;
   private exitSpeed = 0;
   private readonly material: THREE.MeshPhysicalMaterial;
+  private readonly waterMaterial: THREE.MeshPhysicalMaterial;
+  private style: CavityStyle = 'gel';
 
   constructor(private readonly particles: ParticleSystem) {
     this.group.name = 'gel-effect';
+    // An air cavity in water looks silvery: its wall reflects like a mirror (total internal reflection).
+    this.waterMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x7d8d98,
+      roughness: 0.35,
+      metalness: 0.35,
+      envMapIntensity: 1,
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.4,
+      side: THREE.DoubleSide,
+    });
     const normalMap = crinkleNormalMap();
     normalMap.repeat.set(10, 3);
     this.material = new THREE.MeshPhysicalMaterial({
@@ -78,8 +93,9 @@ export class GelEffect {
    * Sets up the effect for a shot. `block` is the gel mesh (centred at its own
    * origin, thickness along x) and `layer` the gel's index in the target stack.
    */
-  load(timeline: Timeline, block: THREE.Mesh, layer: number): void {
+  load(timeline: Timeline, block: THREE.Mesh, layer: number, style: CavityStyle = 'gel'): void {
     this.clear();
+    this.style = style;
     const samples = timeline.cavity.filter((c) => c.layer === layer);
     if (samples.length < 2) return;
 
@@ -94,7 +110,8 @@ export class GelEffect {
 
     const allRings: Ring[] = [];
     for (const path of byTrack) {
-      const rings = path.map((c) => toRing(c));
+      // Water closes up completely behind the bullet: no permanent channel, just a trail of bubbles.
+      const rings = path.map((c) => toRing(c, style === 'water' ? 0 : undefined));
       // Close the entry end with a zero-radius ring at the face.
       const first = rings[0];
       rings.unshift({ ...first, centre: first.centre.clone().setX(this.blockCentre.x - this.half.x), peak: 0, channel: 0 });
@@ -111,7 +128,8 @@ export class GelEffect {
       this.exitT = exit.t;
       this.exitSpeed = exit.speed;
     }
-    this.addDebris(timeline, layer);
+    if (style === 'water') this.addWaterDebris(timeline, layer, samples);
+    else this.addDebris(timeline, layer);
   }
 
   clear(): void {
@@ -135,7 +153,7 @@ export class GelEffect {
   update(t: number): void {
     if (!this.rings.length) return;
     this.updateRadii(t);
-    this.deformBlock(t);
+    if (this.style === 'gel') this.deformBlock(t);
     for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
   }
 
@@ -246,7 +264,7 @@ export class GelEffect {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geometry.setIndex(index);
-    const mesh = new THREE.Mesh(geometry, this.material);
+    const mesh = new THREE.Mesh(geometry, this.style === 'water' ? this.waterMaterial : this.material);
     mesh.frustumCulled = false;
     mesh.userData.rings = rings;
     // Per-vertex wrinkle offsets so the silhouette crumples, not just the shading.
@@ -281,6 +299,74 @@ export class GelEffect {
     pos.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
     mesh.visible = visible;
+  }
+
+  private addWaterDebris(timeline: Timeline, layer: number, samples: CavitySample[]): void {
+    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer && e.trackId === 0);
+    const waterColour = 0x8fb4c8;
+    if (impact) {
+      // Splash: a jet of water squirts back out of the entry hole.
+      this.particles.add({
+        look: 'droplet',
+        t0: impact.t + 60e-6,
+        duration: 1.5e-3,
+        origin: new THREE.Vector3(impact.pos.x - 0.004, impact.pos.y, impact.pos.z),
+        axis: new THREE.Vector3(-1, 0.1, 0),
+        spread: 0.35,
+        count: 140,
+        speed: [3, 12 + impact.speed * 0.02],
+        size: [0.0015, 0.004],
+        life: [3e-3, 9e-3],
+        drag: 80,
+        gravity: 9.8,
+        color: waterColour,
+      });
+    }
+    // The surface heaves above the cavity and throws up a sheet of spray.
+    const surfaceY = this.blockCentre.y + this.half.y;
+    let peak = samples[0];
+    for (const s of samples) if (s.radius > peak.radius) peak = s;
+    const reach = peak.radius - (surfaceY - peak.pos.y) * 0.5;
+    if (reach > 0) {
+      this.particles.add({
+        look: 'droplet',
+        t0: peak.t + RISE_BASE_S + RISE_PER_M_S * peak.radius * 0.6,
+        duration: 2e-3,
+        origin: new THREE.Vector3(peak.pos.x, surfaceY, peak.pos.z),
+        originJitter: Math.min(0.08, peak.radius * 1.5),
+        axis: new THREE.Vector3(0, 1, 0),
+        spread: 0.5,
+        count: Math.round(Math.min(400, 3000 * reach)),
+        speed: [1, 3 + 120 * reach],
+        size: [0.002, 0.006],
+        life: [4e-3, 10e-3],
+        drag: 20,
+        gravity: 9.8,
+        color: waterColour,
+      });
+    }
+    // Cavitation bubbles left along the path after the cavity collapses, drifting up slowly.
+    for (const s of samples) {
+      if (s.radius < 0.002) continue;
+      this.particles.add({
+        look: 'droplet',
+        t0: s.t + 2.2 * (RISE_BASE_S + RISE_PER_M_S * s.radius),
+        duration: 1e-3,
+        origin: new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z),
+        originJitter: Math.min(0.03, s.radius * 0.8),
+        axis: new THREE.Vector3(0, 1, 0),
+        spread: Math.PI,
+        count: Math.round(Math.min(18, 2 + s.radius * 300)),
+        speed: [0.05, 0.6],
+        size: [0.0008, 0.003],
+        life: [20e-3, 40e-3],
+        drag: 5,
+        gravity: -2,
+        color: 0x8fa0aa,
+        colorJitter: 0.15,
+        seed: Math.round(s.depth * 1e4) + 17,
+      });
+    }
   }
 
   private addDebris(timeline: Timeline, layer: number): void {
@@ -327,12 +413,12 @@ export class GelEffect {
   }
 }
 
-function toRing(c: CavitySample): Ring {
+function toRing(c: CavitySample, channel?: number): Ring {
   return {
     centre: new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z),
     t: c.t,
     peak: c.radius,
-    channel: c.channelRadius,
+    channel: channel ?? c.channelRadius,
     rise: RISE_BASE_S + RISE_PER_M_S * c.radius,
   };
 }
