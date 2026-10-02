@@ -27,6 +27,12 @@ export function mountOverlay(root: HTMLElement): void {
         Organic targets are lab simulants: gel, fake blood packs and synthetic bone, as used in
         television and lab tests.
       </p>
+      <h3>Credits &amp; licenses</h3>
+      <p class="about-credits">
+        Built with <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT).
+        Fonts: Inter, Barlow Condensed and JetBrains Mono (SIL Open Font License 1.1).
+        <a href="${import.meta.env.BASE_URL}THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener">Full license texts</a>
+      </p>
       <form method="dialog"><button type="submit">Close</button></form>
     </dialog>
   `;
