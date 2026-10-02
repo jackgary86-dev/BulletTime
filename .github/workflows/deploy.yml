@@ -26,6 +26,14 @@ jobs:
       - run: npm test
       # Typechecks, then builds with the /BulletTime/ base path (see vite.config.ts).
       - run: npm run build
+      # The itch.io upload: a relative-path build zipped with index.html at the root (#110).
+      - run: npm run build:itch
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bullettime-web-itch
+          path: release/bullettime-web-*.zip
+          if-no-files-found: error
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
