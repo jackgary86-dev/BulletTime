@@ -80,7 +80,7 @@ export const BULLETS: BulletSpec[] = [
     muzzleVelocityMs: 330,
     behaviour: 'intact',
     shape: 'roundNose',
-    noseDragFactor: 0.75,
+    noseDragFactor: 2.2,
   },
   {
     id: '9mm-fmj',
@@ -93,7 +93,7 @@ export const BULLETS: BulletSpec[] = [
     muzzleVelocityMs: 360,
     behaviour: 'intact',
     shape: 'roundNose',
-    noseDragFactor: 0.7,
+    noseDragFactor: 0.75,
   },
   {
     id: '9mm-jhp',
@@ -106,7 +106,7 @@ export const BULLETS: BulletSpec[] = [
     muzzleVelocityMs: 360,
     behaviour: 'expand',
     shape: 'hollowPoint',
-    noseDragFactor: 0.9,
+    noseDragFactor: 0.35,
     expansionRatio: 1.72, // recovered diameter about 15.5 mm
     expansionThresholdMs: 250,
   },
@@ -121,7 +121,7 @@ export const BULLETS: BulletSpec[] = [
     muzzleVelocityMs: 255,
     behaviour: 'intact',
     shape: 'roundNose',
-    noseDragFactor: 0.75,
+    noseDragFactor: 0.32,
   },
   {
     id: '357mag-jsp',
@@ -134,7 +134,7 @@ export const BULLETS: BulletSpec[] = [
     muzzleVelocityMs: 376,
     behaviour: 'expand',
     shape: 'truncatedCone',
-    noseDragFactor: 0.85,
+    noseDragFactor: 0.8,
     expansionRatio: 1.5,
     expansionThresholdMs: 290,
   },
@@ -210,7 +210,7 @@ export const BULLETS: BulletSpec[] = [
     shape: 'buckshot',
     pellets: 9,
     spreadPerMetre: 0.03,
-    noseDragFactor: 0.95,
+    noseDragFactor: 0.8,
   },
   {
     id: '50bmg-fmj',

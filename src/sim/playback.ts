@@ -1,4 +1,4 @@
-import { sampleTimeline, type Keyframe, type Timeline } from './timeline';
+import type { Timeline } from './types';
 
 /**
  * Plays a precomputed timeline back at a slow-motion rate. `rate` is simulated
@@ -7,7 +7,7 @@ import { sampleTimeline, type Keyframe, type Timeline } from './timeline';
  */
 export class Playback {
   rate = 1 / 1000;
-  private timeline: Timeline | null = null;
+  timeline: Timeline | null = null;
   private simTime = 0;
   private playing = false;
 
@@ -27,8 +27,12 @@ export class Playback {
     return this.playing;
   }
 
-  /** Advances by `realDeltaS` seconds of wall-clock time and returns the current frame. */
-  update(realDeltaS: number): Keyframe | null {
+  get time(): number {
+    return this.simTime;
+  }
+
+  /** Advances by `realDeltaS` seconds of wall-clock time and returns the current simulated time. */
+  update(realDeltaS: number): number | null {
     if (!this.timeline) return null;
     if (this.playing) {
       this.simTime += realDeltaS * this.rate;
@@ -37,6 +41,6 @@ export class Playback {
         this.playing = false;
       }
     }
-    return sampleTimeline(this.timeline, this.simTime);
+    return this.simTime;
   }
 }

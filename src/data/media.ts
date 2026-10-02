@@ -70,6 +70,15 @@ export interface MediumSpec {
   yawNeckScale: number;
   /** Hollow targets: wall thickness of the front and back shells, in metres; the rest is air. */
   shellM?: number;
+  /**
+   * Gel-like media only: effective pressure that sets the temporary cavity size from the
+   * energy deposited per metre (radius = √(dE/dx ÷ π·p)). Lower = bigger cavity.
+   */
+  cavityPressurePa?: number;
+  /** Whether hollow and soft points can open in this medium (soft, wet media). */
+  allowsExpansion: boolean;
+  /** Extra random deflection of the path on leaving a layer (brittle panes), in degrees. */
+  exitDeflectionDeg?: number;
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -85,9 +94,11 @@ export const MEDIA: MediumSpec[] = [
     widthM: 0.15,
     angleAdjustable: false,
     dragCoefficient: 0.3,
-    resistancePa: 2.0e6, // with Cd 0.3: 9mm JHP ≈ 33 cm
+    resistancePa: 6.0e6, // with Cd 0.3 these give 9mm FMJ ≈ 65 cm, 9mm JHP ≈ 35 cm, .22 LR ≈ 28 cm
     hardness: 0.02,
     yawNeckScale: 1,
+    cavityPressurePa: 0.9e6, // 9mm JHP ≈ 8 cm peak cavity
+    allowsExpansion: true,
   },
   {
     id: 'water',
@@ -104,6 +115,8 @@ export const MEDIA: MediumSpec[] = [
     resistancePa: 0.2e6, // water has no shear strength; drag dominates
     hardness: 0.01,
     yawNeckScale: 0.6,
+    cavityPressurePa: 0.6e6, // water cavitates more freely than gel
+    allowsExpansion: true,
   },
   {
     id: 'pine',
@@ -117,10 +130,11 @@ export const MEDIA: MediumSpec[] = [
     widthM: 0.14,
     angleAdjustable: true,
     dragCoefficient: 0.4,
-    resistancePa: 25e6,
+    resistancePa: 50e6, // 9mm FMJ ≈ 15 cm of pine
     hardness: 0.15,
     ricochetAngleDeg: 80,
     yawNeckScale: 0.5,
+    allowsExpansion: false, // hollow points clog with wood fibre
   },
   {
     id: 'oak',
@@ -134,10 +148,11 @@ export const MEDIA: MediumSpec[] = [
     widthM: 0.14,
     angleAdjustable: true,
     dragCoefficient: 0.45,
-    resistancePa: 45e6,
+    resistancePa: 90e6,
     hardness: 0.25,
     ricochetAngleDeg: 78,
     yawNeckScale: 0.45,
+    allowsExpansion: false,
   },
   {
     id: 'drywall',
@@ -155,6 +170,7 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.1,
     ricochetAngleDeg: 85,
     yawNeckScale: 0.5,
+    allowsExpansion: false, // gypsum plugs hollow points
   },
   {
     id: 'concrete',
@@ -172,6 +188,7 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.7,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
+    allowsExpansion: false,
   },
   {
     id: 'cinder-block',
@@ -190,6 +207,7 @@ export const MEDIA: MediumSpec[] = [
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
     shellM: 0.032,
+    allowsExpansion: false,
   },
   {
     id: 'steel-mild',
@@ -207,6 +225,7 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.75,
     ricochetAngleDeg: 60,
     yawNeckScale: 0.05,
+    allowsExpansion: false,
   },
   {
     id: 'steel-ar500',
@@ -224,6 +243,7 @@ export const MEDIA: MediumSpec[] = [
     hardness: 1.0,
     ricochetAngleDeg: 55,
     yawNeckScale: 0.05,
+    allowsExpansion: false,
   },
   {
     id: 'sandbag',
@@ -240,6 +260,7 @@ export const MEDIA: MediumSpec[] = [
     resistancePa: 40e6,
     hardness: 0.35,
     yawNeckScale: 0.15,
+    allowsExpansion: true,
   },
   {
     id: 'glass',
@@ -257,6 +278,8 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.6,
     ricochetAngleDeg: 82,
     yawNeckScale: 0.2,
+    allowsExpansion: false,
+    exitDeflectionDeg: 4,
   },
   {
     id: 'ice',
@@ -273,6 +296,7 @@ export const MEDIA: MediumSpec[] = [
     resistancePa: 15e6,
     hardness: 0.3,
     yawNeckScale: 0.5,
+    allowsExpansion: false,
   },
 ];
 
