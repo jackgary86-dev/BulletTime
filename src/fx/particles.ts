@@ -28,6 +28,8 @@ export interface BurstSpec {
   /** Cone axis (unit) and half-angle in radians. */
   axis: THREE.Vector3;
   spread: number;
+  /** Leaves the middle of the cone empty out to this half-angle, for hollow crowns of spray. */
+  innerSpread?: number;
   count: number;
   speed: [number, number];
   size: [number, number];
@@ -197,7 +199,8 @@ export class ParticleSystem {
     const w = new THREE.Vector3().crossVectors(axis, u);
     for (let i = 0; i < count; i++) {
       // Uniform direction inside the cone.
-      const cosA = 1 - rand() * (1 - Math.cos(spec.spread));
+      const cosInner = Math.cos(spec.innerSpread ?? 0);
+      const cosA = cosInner - rand() * (cosInner - Math.cos(spec.spread));
       const sinA = Math.sqrt(1 - cosA * cosA);
       const phi = rand() * Math.PI * 2;
       const dir = axis
