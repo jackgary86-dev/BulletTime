@@ -1,3 +1,4 @@
+import { reducedGore, setReducedGore } from '../data/content';
 import { mountSoundBoard } from './soundBoard';
 
 /**
@@ -29,6 +30,14 @@ export function mountOverlay(root: HTMLElement): void {
         Organic targets are lab simulants: gel, fake blood packs and synthetic bone, as used in
         television and lab tests.
       </p>
+      <h3>Content</h3>
+      <p>
+        Contains simulated blood and human-shaped ballistic test dummies. Intended for ages 17 and over.
+      </p>
+      <label class="about-option">
+        <input type="checkbox" class="reduced-gore" />
+        Reduced gore: show blood as a clear blue simulant
+      </label>
       <h3>Credits &amp; licenses</h3>
       <p class="about-credits">
         Built with <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT).
@@ -39,7 +48,12 @@ export function mountOverlay(root: HTMLElement): void {
     </dialog>
   `;
   const dialog = root.querySelector<HTMLDialogElement>('.about')!;
-  root.querySelector('.about-open')!.addEventListener('click', () => dialog.showModal());
+  const gore = dialog.querySelector<HTMLInputElement>('.reduced-gore')!;
+  gore.addEventListener('change', () => setReducedGore(gore.checked));
+  root.querySelector('.about-open')!.addEventListener('click', () => {
+    gore.checked = reducedGore();
+    dialog.showModal();
+  });
   // Clicking the backdrop closes it too.
   dialog.addEventListener('click', (e) => {
     if (e.target === dialog) dialog.close();
