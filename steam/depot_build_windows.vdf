@@ -1,0 +1,12 @@
+"DepotBuild"
+{
+	"DepotID" "1000001"
+	"FileMapping"
+	{
+		// The unpacked windows app from `npm run dist:steam` on windows (or the matching steam-<OS> artifact from the release workflow).
+		"LocalPath" "windows\*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "*.pdb"
+}

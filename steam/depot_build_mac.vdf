@@ -1,0 +1,12 @@
+"DepotBuild"
+{
+	"DepotID" "1000002"
+	"FileMapping"
+	{
+		// The unpacked mac app from `npm run dist:steam` on mac (or the matching steam-<OS> artifact from the release workflow).
+		"LocalPath" "mac\*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "*.pdb"
+}
