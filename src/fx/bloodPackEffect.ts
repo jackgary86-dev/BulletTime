@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PACK_BURST_MIN_CAVITY_M, PACK_BURST_SQUEEZE_M, PACK_DRAIN_S } from '../data/organic';
 import { BLOOD_PACK_PREFIX, BONE_ROD_NAME } from '../models/targets';
+import { activeShot } from '../sim/session';
 import type { CavitySample, Timeline } from '../sim/types';
 import { cavityRiseTime, type GelEffect } from './gelEffect';
 import type { ParticleSystem } from './particles';
@@ -50,8 +51,15 @@ export class BloodPackEffect {
     const samples = timeline.cavity.filter((c) => c.layer === layer).sort((a, b) => a.t - b.t);
     const result: OrganicResult = { packs: packs.length, hit: 0, burstByCavity: 0, bone: !!bone, boneStruck: false };
     gel.updateWorldMatrix(true, true);
-    const entry = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer && e.trackId === 0);
-    const exit = timeline.events.find((e) => e.type === 'exit' && e.layer === layer && e.trackId === 0);
+    // The entry and exit holes of the shot that burst a pack, for the sprays.
+    const holesFor = (t: number) => {
+      const id = activeShot(timeline, t).primaryId;
+      const ofShot = timeline.events.filter((e) => e.layer === layer && e.trackId === id);
+      return {
+        entry: ofShot.find((e) => e.type === 'impact' || e.type === 'enter'),
+        exit: ofShot.find((e) => e.type === 'exit'),
+      };
+    };
 
     for (const mesh of packs) {
       const rest = mesh.userData.rest as THREE.Vector3;
@@ -62,6 +70,7 @@ export class BloodPackEffect {
       if (burst.direct) result.hit++;
       else result.burstByCavity++;
       this.bursts.push({ mesh, t: burst.t });
+      const { entry, exit } = holesFor(burst.sample.t);
       this.spill(burst.t, rest, burst.sample, samples, entry?.pos, exit?.pos);
     }
 
@@ -132,7 +141,9 @@ export class BloodPackEffect {
     this.gelEffect.addStain(at.pos.x, t, along * 1.5);
     for (const s of samples) {
       const d = Math.abs(s.pos.x - at.pos.x);
-      if (d > along || s.channelRadius <= 0) continue;
+      // Only this shot's channel: other shots' paths run elsewhere in the block.
+      const offPath = Math.hypot(s.pos.y - at.pos.y, s.pos.z - at.pos.z) > 0.02;
+      if (d > along || s.channelRadius <= 0 || offPath) continue;
       this.particles.add({
         look: 'blob',
         t0: t + d / SQUEEZE_SPEED,

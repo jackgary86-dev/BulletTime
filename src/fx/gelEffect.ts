@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { CavitySample, Timeline } from '../sim/types';
+import { isPrimary } from '../sim/session';
+import type { CavitySample, ShotEvent, Timeline } from '../sim/types';
 import { crinkleNormalMap } from './crinkleTexture';
 import type { ParticleSystem } from './particles';
 
@@ -56,9 +57,9 @@ export class GelEffect {
   /** Block-local transform: world x of the block centre. */
   private blockCentre = new THREE.Vector3();
   private half = { x: 0, y: 0, z: 0 };
-  private impactT = Infinity;
-  private exitT = Infinity;
-  private exitSpeed = 0;
+  /** Each shot's entry splash and exit cone, positioned in the block's own frame. */
+  private entries: { t: number; y: number; z: number }[] = [];
+  private exits: { t: number; speed: number; y: number; z: number }[] = [];
   private readonly material: THREE.MeshPhysicalMaterial;
   private readonly waterMaterial: THREE.MeshPhysicalMaterial;
   private style: CavityStyle = 'gel';
@@ -124,13 +125,9 @@ export class GelEffect {
     this.rings = allRings.sort((a, b) => a.centre.x - b.centre.x);
     this.radii = new Float32Array(this.rings.length);
 
-    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer);
-    const exit = timeline.events.find((e) => e.type === 'exit' && e.layer === layer && e.trackId === 0);
-    this.impactT = impact?.t ?? Infinity;
-    if (exit) {
-      this.exitT = exit.t;
-      this.exitSpeed = exit.speed;
-    }
+    const local = (e: ShotEvent) => ({ y: e.pos.y - this.blockCentre.y, z: e.pos.z - this.blockCentre.z });
+    for (const e of primaryEvents(timeline, layer, 'entry')) this.entries.push({ t: e.t, ...local(e) });
+    for (const e of primaryEvents(timeline, layer, 'exit')) this.exits.push({ t: e.t, speed: e.speed, ...local(e) });
     if (style === 'water') this.addWaterDebris(timeline, layer, samples);
     else this.addDebris(timeline, layer);
   }
@@ -150,8 +147,8 @@ export class GelEffect {
     this.blockRest = null;
     this.rings = [];
     this.stains = [];
-    this.impactT = Infinity;
-    this.exitT = Infinity;
+    this.entries = [];
+    this.exits = [];
   }
 
   update(t: number): void {
@@ -222,9 +219,10 @@ export class GelEffect {
     const arr = pos.array as Float32Array;
     const halfMin = Math.min(this.half.y, this.half.z);
 
-    const splashAge = t - this.impactT;
-    const splash = splashAge > 0 && splashAge < SPLASH_S ? SPLASH_DEPTH * Math.sin((Math.PI * splashAge) / SPLASH_S) : 0;
-    const cone = this.coneLength(t);
+    const splashes = this.entries
+      .map((e) => ({ ...e, depth: t - e.t > 0 && t - e.t < SPLASH_S ? SPLASH_DEPTH * Math.sin((Math.PI * (t - e.t)) / SPLASH_S) : 0 }))
+      .filter((e) => e.depth > 0);
+    const cones = this.exits.map((e) => ({ ...e, length: coneLength(e.t, e.speed, t) })).filter((e) => e.length > 0);
 
     for (let i = 0; i < arr.length; i += 3) {
       const x = rest[i];
@@ -233,11 +231,12 @@ export class GelEffect {
       const bulge = this.bulgeAt(this.radiusAtX(x));
       const s = 1 + bulge / halfMin;
       let nx = x;
-      const rho = Math.hypot(y, z);
-      if (x <= -this.half.x + 1e-5 && splash > 0) {
-        nx -= splash * Math.max(0, 1 - rho / (CONE_RADIUS * 0.8)) ** 2;
-      } else if (x >= this.half.x - 1e-5 && cone > 0) {
-        nx += cone * Math.max(0, 1 - rho / CONE_RADIUS) ** 2.2;
+      if (x <= -this.half.x + 1e-5) {
+        for (const sp of splashes) nx -= sp.depth * Math.max(0, 1 - Math.hypot(y - sp.y, z - sp.z) / (CONE_RADIUS * 0.8)) ** 2;
+      } else if (x >= this.half.x - 1e-5) {
+        let pull = 0;
+        for (const c of cones) pull = Math.max(pull, c.length * Math.max(0, 1 - Math.hypot(y - c.y, z - c.z) / CONE_RADIUS) ** 2.2);
+        nx += pull;
       }
       arr[i] = nx;
       arr[i + 1] = y * s;
@@ -245,17 +244,6 @@ export class GelEffect {
     }
     pos.needsUpdate = true;
     block.geometry.computeVertexNormals();
-  }
-
-  /** Exit cone length: shoots out with the bullet, holds, then springs back with a wobble. */
-  private coneLength(t: number): number {
-    const age = t - this.exitT;
-    if (age <= 0) return 0;
-    const peak = Math.min(CONE_MAX, 0.00012 * this.exitSpeed + 0.03);
-    const grow = Math.min(1, (age * this.exitSpeed * 0.5) / peak);
-    if (age < CONE_SPRING_S) return peak * grow;
-    const after = (age - CONE_SPRING_S) / CONE_SPRING_S;
-    return peak * Math.exp(-after * 1.5) * (0.6 + 0.4 * Math.cos(after * Math.PI * 2));
   }
 
   private buildCavityMesh(rings: Ring[]): THREE.Mesh {
@@ -334,9 +322,8 @@ export class GelEffect {
   }
 
   private addWaterDebris(timeline: Timeline, layer: number, samples: CavitySample[]): void {
-    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer && e.trackId === 0);
     const waterColour = 0x8fb4c8;
-    if (impact) {
+    for (const impact of primaryEvents(timeline, layer, 'entry')) {
       // Splash: a jet of water squirts back out of the entry hole.
       this.particles.add({
         look: 'droplet',
@@ -402,10 +389,9 @@ export class GelEffect {
   }
 
   private addDebris(timeline: Timeline, layer: number): void {
-    const impact = timeline.events.find((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === layer && e.trackId === 0);
     const gelColour = 0xe8c48a;
-    if (impact) {
-      const energy = 0.5 * timeline.tracks[0].massKg * impact.speed ** 2;
+    for (const impact of primaryEvents(timeline, layer, 'entry')) {
+      const energy = 0.5 * timeline.tracks[impact.trackId].massKg * impact.speed ** 2;
       const scale = Math.min(1, Math.sqrt(energy / 3000));
       this.particles.add({
         look: 'droplet',
@@ -423,8 +409,7 @@ export class GelEffect {
         color: gelColour,
       });
     }
-    if (this.exitT < Infinity) {
-      const exit = timeline.events.find((e) => e.type === 'exit' && e.layer === layer && e.trackId === 0)!;
+    for (const exit of primaryEvents(timeline, layer, 'exit')) {
       this.particles.add({
         look: 'droplet',
         t0: exit.t + 100e-6,
@@ -463,6 +448,27 @@ export function cavityRadiusAt(peak: number, channel: number, bornT: number, t: 
   const envelope = Math.exp(-after / PULSE_DECAY);
   const wave = 0.5 + 0.5 * Math.cos((Math.PI * 2 * after) / PULSE_PERIOD);
   return channel + (peak - channel) * envelope * wave;
+}
+
+/** Exit cone length: shoots out with the bullet, holds, then springs back with a wobble. */
+function coneLength(exitT: number, exitSpeed: number, t: number): number {
+  const age = t - exitT;
+  if (age <= 0) return 0;
+  const peak = Math.min(CONE_MAX, 0.00012 * exitSpeed + 0.03);
+  const grow = Math.min(1, (age * exitSpeed * 0.5) / peak);
+  if (age < CONE_SPRING_S) return peak * grow;
+  const after = (age - CONE_SPRING_S) / CONE_SPRING_S;
+  return peak * Math.exp(-after * 1.5) * (0.6 + 0.4 * Math.cos(after * Math.PI * 2));
+}
+
+/** Each shot's main projectile entering (or leaving) this layer. */
+export function primaryEvents(timeline: Timeline, layer: number, which: 'entry' | 'exit'): ShotEvent[] {
+  return timeline.events.filter(
+    (e) =>
+      e.layer === layer &&
+      (which === 'exit' ? e.type === 'exit' : e.type === 'impact' || e.type === 'enter') &&
+      isPrimary(timeline, e.trackId),
+  );
 }
 
 function toRing(c: CavitySample, channel?: number): Ring {

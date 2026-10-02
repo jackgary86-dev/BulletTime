@@ -44,6 +44,37 @@ export interface ShotSetup {
   impactPoint: Vec3;
   /** Distance from the muzzle point to the target face, in metres. */
   standOffM: number;
+  /** Damage already in the target from earlier shots (#22): channels, holes, craters and dents. */
+  damage?: PriorDamage[];
+}
+
+/** A point of earlier damage in a layer: the new shot meets less resistance near it. */
+export interface PriorDamage {
+  layer: number;
+  pos: Vec3;
+  /** Radius of the hole or channel there, in metres. */
+  radius: number;
+}
+
+/** Following an existing hole or channel, the medium offers this fraction of its strength. */
+const DAMAGED_CHANNEL_FACTOR = 0.3;
+/** Each earlier hit within this distance weakens the material around it (cracks, spall, fatigue). */
+const WEAKENED_RADIUS_M = 0.06;
+const WEAKEN_PER_HIT = 0.15;
+const MIN_WEAKENED_FACTOR = 0.4;
+
+/** How much of the medium's strength is left at this point, given earlier shots' damage. */
+function damageFactor(ctx: Context, pos: Vec3, layer: number, bodyRadius: number): number {
+  const damage = ctx.setup.damage;
+  if (!damage?.length) return 1;
+  let near = 0;
+  for (const d of damage) {
+    if (d.layer !== layer) continue;
+    const dist = Math.hypot(pos.x - d.pos.x, pos.y - d.pos.y, pos.z - d.pos.z);
+    if (dist < d.radius * 1.5 + bodyRadius) return DAMAGED_CHANNEL_FACTOR;
+    if (dist < WEAKENED_RADIUS_M) near++;
+  }
+  return Math.max(MIN_WEAKENED_FACTOR, 1 - WEAKEN_PER_HIT * Math.min(near, 4));
 }
 
 /** Splits hollow media (cinder block) into their solid shells; other media are one layer. */
@@ -149,13 +180,27 @@ export function simulate(setup: ShotSetup): Timeline {
   const primary = ctx.tracks[0];
   const impact = ctx.events.find((e) => e.type === 'impact');
   const lastEnd = ctx.tracks.reduce((m, tr) => Math.max(m, tr.endT), 0);
+  const summary = summarise(ctx, primary);
+  const impactTime = impact?.t ?? primary.endT;
   return {
     tracks: ctx.tracks,
     events: ctx.events.sort((a, b2) => a.t - b2.t),
     cavity: ctx.cavity,
-    summary: summarise(ctx, primary),
+    summary,
     duration: lastEnd + P.holdAfterS,
-    impactTime: impact?.t ?? primary.endT,
+    impactTime,
+    shots: [
+      {
+        start: 0,
+        impactTime,
+        primaryId: primary.id,
+        firstTrack: 0,
+        trackCount: ctx.tracks.length,
+        bulletId: b.id,
+        aim: { y: setup.impactPoint.y, z: setup.impactPoint.z },
+        summary,
+      },
+    ],
   };
 }
 
@@ -288,7 +333,9 @@ function integrate(ctx: Context, body: Body): void {
 
     let force: number;
     if (medium) {
-      force = 0.5 * medium.density * medium.dragCoefficient * noseFactor * area * body.speed ** 2 + medium.resistancePa * area;
+      force =
+        0.5 * medium.density * medium.dragCoefficient * noseFactor * area * body.speed ** 2 +
+        medium.resistancePa * area * damageFactor(ctx, body.pos, layerIndex, body.diameter / 2);
     } else {
       force = 0.5 * P.airDensity * P.airDragCoefficient * area * body.speed ** 2;
     }

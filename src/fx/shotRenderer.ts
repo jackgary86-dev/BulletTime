@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BulletSpec } from '../data/bullets';
+import { getBullet } from '../data/bullets';
 import { createBulletModel, disposeBulletModel, type BulletModel } from '../models/bullet';
 import { BULLET_MATERIALS } from '../models/materials';
 import { sampleTrack } from '../sim/sample';
@@ -26,7 +26,7 @@ const tmpPos = new THREE.Vector3();
 export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
-  private bullet: BulletModel | null = null;
+  private bullets: { model: BulletModel; trackId: number }[] = [];
   private pellets: THREE.Mesh[] = [];
   private readonly fragments: THREE.InstancedMesh;
   private readonly pelletGeometry = new THREE.SphereGeometry(0.5, 20, 14);
@@ -43,33 +43,37 @@ export class ShotRenderer {
     this.group.add(this.fragments);
   }
 
-  /** Prepares models for a new shot of `spec`. */
-  load(timeline: Timeline, spec: BulletSpec): void {
+  /** Prepares models for every shot on the timeline (each shot may be a different round). */
+  load(timeline: Timeline): void {
     this.clear();
     this.timeline = timeline;
-    const shot = spec.behaviour === 'shot';
-    if (shot) {
-      for (const track of timeline.tracks) {
-        if (track.kind !== 'pellet') continue;
-        const pellet = new THREE.Mesh(this.pelletGeometry, BULLET_MATERIALS.lead);
-        pellet.scale.setScalar(track.baseDiameter);
-        pellet.castShadow = true;
-        pellet.userData.trackId = track.id;
-        this.pellets.push(pellet);
-        this.group.add(pellet);
+    for (const shot of timeline.shots) {
+      const spec = getBullet(shot.bulletId);
+      if (spec.behaviour === 'shot') {
+        for (let id = shot.firstTrack; id < shot.firstTrack + shot.trackCount; id++) {
+          const track = timeline.tracks[id];
+          if (track.kind !== 'pellet') continue;
+          const pellet = new THREE.Mesh(this.pelletGeometry, BULLET_MATERIALS.lead);
+          pellet.scale.setScalar(track.baseDiameter);
+          pellet.castShadow = true;
+          pellet.userData.trackId = track.id;
+          this.pellets.push(pellet);
+          this.group.add(pellet);
+        }
+      } else {
+        const model = createBulletModel(spec);
+        this.group.add(model.group);
+        this.bullets.push({ model, trackId: shot.primaryId });
       }
-    } else {
-      this.bullet = createBulletModel(spec);
-      this.group.add(this.bullet.group);
     }
   }
 
   clear(): void {
-    if (this.bullet) {
-      this.group.remove(this.bullet.group);
-      disposeBulletModel(this.bullet);
-      this.bullet = null;
+    for (const { model } of this.bullets) {
+      this.group.remove(model.group);
+      disposeBulletModel(model);
     }
+    this.bullets = [];
     for (const pellet of this.pellets) this.group.remove(pellet);
     this.pellets = [];
     this.fragments.count = 0;
@@ -80,12 +84,12 @@ export class ShotRenderer {
     const timeline = this.timeline;
     if (!timeline) return;
 
-    if (this.bullet) {
-      const frame = sampleTrack(timeline.tracks[0], t);
-      this.bullet.group.visible = !!frame;
+    for (const { model, trackId } of this.bullets) {
+      const frame = sampleTrack(timeline.tracks[trackId], t);
+      model.group.visible = !!frame;
       if (frame) {
-        place(this.bullet.group, frame);
-        this.bullet.setDiameter(frame.diameter);
+        place(model.group, frame);
+        model.setDiameter(frame.diameter);
       }
     }
 

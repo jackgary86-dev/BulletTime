@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { samplePrimary } from '../sim/sample';
+import { activeShot } from '../sim/session';
 import type { Timeline } from '../sim/types';
 
 export type CameraMode = 'auto' | 'side' | 'tracking' | 'closeup' | 'orbit';
@@ -105,8 +106,9 @@ export class CameraDirector {
   private resolveMode(t: number | null, timeline: Timeline | null): Exclude<CameraMode, 'auto' | 'orbit'> {
     if (this.mode !== 'auto') return this.mode as Exclude<CameraMode, 'auto' | 'orbit'>;
     if (t === null || !timeline) return 'side';
-    if (t < timeline.impactTime - CLOSEUP_LEAD_S) return 'tracking';
-    if (t < timeline.impactTime + CLOSEUP_HOLD_S) return 'closeup';
+    const impactTime = activeShot(timeline, t).impactTime;
+    if (t < impactTime - CLOSEUP_LEAD_S) return 'tracking';
+    if (t < impactTime + CLOSEUP_HOLD_S) return 'closeup';
     return 'side';
   }
 

@@ -110,11 +110,31 @@ export interface ShotSummary {
   velocityVsDepth: VelocityDepthPoint[];
 }
 
+/** One shot within a timeline: a single fire, or one round of a group or burst (#22). */
+export interface ShotInfo {
+  /** Sim time the round leaves the muzzle. */
+  start: number;
+  impactTime: number;
+  /** Id of the main projectile's track (the bullet, or the first pellet). */
+  primaryId: number;
+  /** This shot's tracks are ids firstTrack … firstTrack + trackCount − 1. */
+  firstTrack: number;
+  trackCount: number;
+  bulletId: string;
+  /** Where the shot was aimed on the target face, relative to the centre, in metres. */
+  aim: { y: number; z: number };
+  summary: ShotSummary;
+}
+
 export interface Timeline {
   tracks: Track[];
   events: ShotEvent[];
   cavity: CavitySample[];
+  /** Summary of the most recent shot. */
   summary: ShotSummary;
   duration: number;
+  /** Impact time of the first shot. */
   impactTime: number;
+  /** Every shot on this timeline, in firing order. */
+  shots: ShotInfo[];
 }
