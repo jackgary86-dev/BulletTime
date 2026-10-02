@@ -6,7 +6,7 @@ import { seededRandom } from '../sim/random';
  * deterministic (seeded) so a medium always looks the same.
  */
 
-function canvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+export function canvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
   c.width = width;
   c.height = height;
@@ -15,7 +15,7 @@ function canvas(width: number, height: number): [HTMLCanvasElement, CanvasRender
   return [c, ctx];
 }
 
-function toTexture(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
+export function toTexture(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(c);
   if (srgb) texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
@@ -24,7 +24,7 @@ function toTexture(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
 }
 
 const cache = new Map<string, THREE.Texture>();
-function cached(key: string, make: () => THREE.Texture): THREE.Texture {
+export function cached(key: string, make: () => THREE.Texture): THREE.Texture {
   let texture = cache.get(key);
   if (!texture) {
     texture = make();
