@@ -16,6 +16,7 @@ import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel } from './ui/shotsPanel';
 import { mountComparePanel } from './ui/comparePanel';
+import { mountCameraHud } from './ui/cameraHud';
 import { physicsLayers } from './data/stacks';
 import { faceLimits, Lane } from './lane';
 import type { LightingMode } from './scene/studio';
@@ -39,6 +40,7 @@ function bootstrap(): void {
   const playback = new Playback();
   mountOverlay(overlay);
 
+  const hud = mountCameraHud(overlay);
   const scrubber = mountScrubber(overlay, playback);
   const results = mountShotResults(overlay, 'lane-a');
   const resultsB = mountShotResults(overlay, 'lane-b');
@@ -198,8 +200,9 @@ function bootstrap(): void {
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
+      hud.set(t, playback.fps, playback.shutterS);
       scrubber.sync();
-    }
+    } else hud.hide();
     director.update(delta, t, playback.timeline);
 
     const { width, height } = size;

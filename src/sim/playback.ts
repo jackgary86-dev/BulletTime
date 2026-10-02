@@ -22,6 +22,12 @@ export class Playback {
   get shutterS(): number {
     return DISPLAY_FRAME_S * this.rate * 0.5;
   }
+
+  /** The frame rate this slow-motion rate implies: one displayed frame per this much sim time (#75). */
+  get fps(): number {
+    return 1 / (DISPLAY_FRAME_S * this.rate);
+  }
+
   timeline: Timeline | null = null;
   private simTime = 0;
   private playing = false;

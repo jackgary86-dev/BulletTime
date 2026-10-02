@@ -5,7 +5,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
  * The final look (#73), applied to the finished, tone-mapped frame: a
  * lift/gamma/gain grade with cool shadows and warm highlights, a gentle
  * vignette, fine animated film grain, and a touch of chromatic aberration
- * toward the frame edges, as from a real lens.
+ * toward the frame edges, as from a real lens. The muzzle flash briefly
+ * overloads it, as it does a high-speed camera's sensor (#75).
  */
 export interface Grade {
   lift: [number, number, number];
@@ -45,6 +46,18 @@ export const HIGHSPEED_GRADE: Grade = {
   aberration: 0.004,
 };
 
+/**
+ * How hard the muzzle flash overloads the camera, `since` seconds after the
+ * shot, counted in footage frames (#75): nothing on the trigger frame, a peak
+ * on the next, then a fade over a few frames, at any slow-motion rate. A frame
+ * lasts twice the 180° shutter.
+ */
+export function flashExposure(since: number, shutterS: number): number {
+  if (shutterS <= 0 || since < 0) return 0;
+  const frames = since / (2 * shutterS);
+  return frames > 12 ? 0 : frames * Math.exp(1 - frames);
+}
+
 const v3 = (c: [number, number, number]) => new THREE.Vector3(...c);
 
 export class GradePass extends ShaderPass {
@@ -62,6 +75,7 @@ export class GradePass extends ShaderPass {
         grain: { value: LAB_GRADE.grain },
         aberration: { value: LAB_GRADE.aberration },
         time: { value: 0 },
+        flash: { value: 0 },
       },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
@@ -81,6 +95,7 @@ export class GradePass extends ShaderPass {
         uniform float grain;
         uniform float aberration;
         uniform float time;
+        uniform float flash;
         varying vec2 vUv;
 
         float hash(vec2 p) {
@@ -103,7 +118,10 @@ export class GradePass extends ShaderPass {
           col *= mix(shadowTint, highlightTint, smoothstep(0.05, 0.75, l));
           col = mix(vec3(l), col, saturation);
 
-          col *= 1.0 - vignette * smoothstep(0.08, 0.5, r2);
+          // The muzzle flash overloads the sensor (#75): exposure jumps, then the frame washes white.
+          col = mix(col * (1.0 + 1.6 * flash), vec3(1.0), 0.4 * flash);
+
+          col *= 1.0 - vignette * (1.0 - flash) * smoothstep(0.08, 0.5, r2);
 
           // Grain: finer and stronger in the mid-tones, fresh every frame.
           float n = hash(gl_FragCoord.xy + fract(time * 17.0) * 113.0) - 0.5;
@@ -124,6 +142,11 @@ export class GradePass extends ShaderPass {
     u.vignette.value = grade.vignette;
     u.grain.value = grade.grain;
     u.aberration.value = grade.aberration;
+  }
+
+  /** Sensor overload from the muzzle flash, 0–1. */
+  setFlash(amount: number): void {
+    (this.uniforms as Record<string, THREE.IUniform>).flash.value = amount;
   }
 
   tick(seconds: number): void {
