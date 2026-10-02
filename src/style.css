@@ -290,3 +290,74 @@ body {
   line-height: 1.45;
   color: #b9c0cb;
 }
+
+.scrubber {
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.scrubber[hidden] {
+  display: none;
+}
+
+.scrubber button {
+  font: inherit;
+  font-size: 14px;
+  width: 34px;
+  height: 30px;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  flex: none;
+}
+
+.scrubber button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.scrubber .track {
+  position: relative;
+  flex: 1;
+  min-width: 80px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.scrubber .markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scrubber .marker {
+  position: absolute;
+  top: 3px;
+  width: 2px;
+  height: 7px;
+  margin-left: -1px;
+  border-radius: 1px;
+  opacity: 0.9;
+}
+
+.scrubber .playhead {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.scrubber .time {
+  flex: none;
+  min-width: 150px;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}

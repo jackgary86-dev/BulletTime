@@ -1,3 +1,5 @@
+import { formatTime } from './format';
+
 /** Slow-motion presets, as simulated seconds per real second. */
 export const RATE_PRESETS = [
   { label: '1×', rate: 1 },
@@ -79,9 +81,4 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
 function formatRate(rate: number): string {
   if (rate >= 0.999) return '1×';
   return `1/${Math.round(1 / rate).toLocaleString('en-US')}×`;
-}
-
-function formatTime(seconds: number): string {
-  const us = seconds * 1e6;
-  return us < 1000 ? `${us.toFixed(0)} µs` : `${(us / 1000).toFixed(3)} ms`;
 }

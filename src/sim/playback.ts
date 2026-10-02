@@ -1,9 +1,15 @@
 import type { Timeline } from './types';
 
+/** One display frame at 60 fps, the unit for frame-by-frame stepping. */
+const DISPLAY_FRAME_S = 1 / 60;
+/** Never step by less than the engine's own timestep. */
+const MIN_STEP_S = 1e-6;
+
 /**
  * Plays a precomputed timeline back at a slow-motion rate. `rate` is simulated
  * seconds per real second, so 1/1000 means one millisecond of the shot takes a
- * full second on screen.
+ * full second on screen. Because the timeline is precomputed, pausing, stepping
+ * and scrubbing are just changes to the playhead.
  */
 export class Playback {
   rate = 1 / 1000;
@@ -29,6 +35,38 @@ export class Playback {
 
   get time(): number {
     return this.simTime;
+  }
+
+  get duration(): number {
+    return this.timeline?.duration ?? 0;
+  }
+
+  pause(): void {
+    this.playing = false;
+  }
+
+  /** Resumes playback, restarting from the beginning if the shot has finished. */
+  play(): void {
+    if (!this.timeline) return;
+    if (this.simTime >= this.timeline.duration) this.simTime = 0;
+    this.playing = true;
+  }
+
+  toggle(): void {
+    if (this.playing) this.pause();
+    else this.play();
+  }
+
+  /** Moves the playhead to `t` (clamped) and pauses. */
+  seek(t: number): void {
+    if (!this.timeline) return;
+    this.simTime = Math.min(this.timeline.duration, Math.max(0, t));
+    this.playing = false;
+  }
+
+  /** Steps by `frames` display frames at the current slow-motion rate (negative steps back). */
+  step(frames: number): void {
+    this.seek(this.simTime + frames * Math.max(MIN_STEP_S, DISPLAY_FRAME_S * this.rate));
   }
 
   /** Advances by `realDeltaS` seconds of wall-clock time and returns the current simulated time. */
