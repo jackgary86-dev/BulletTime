@@ -9,6 +9,7 @@ export const TARGET_FRONT_X = -0.2;
 
 /** Name of the gel block mesh, so effects can find and deform it. */
 export const GEL_BODY_NAME = 'gel-body';
+export const WATER_BODY_NAME = 'water-body';
 
 const standSteel = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.35, metalness: 0.9 });
 
@@ -105,6 +106,7 @@ function buildBody(spec: MediumSpec, t: number): THREE.Object3D {
         }),
       );
       water.position.y = -h * 0.06;
+      water.name = WATER_BODY_NAME;
       // Five-sided open-top tank.
       const panels: [number, number, number, number, number, number][] = [
         [wall, h, w, -t / 2 + wall / 2, 0, 0],
