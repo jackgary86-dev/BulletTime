@@ -1,4 +1,5 @@
 import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
+import { QUALITY_LEVELS, type QualityLevel } from '../scene/quality';
 import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
 
@@ -25,12 +26,14 @@ export interface ControlsPanel {
 export interface ControlsOptions {
   initialRate: number;
   initialCamera: CameraMode;
+  initialQuality: QualityLevel;
   onFire(): void;
   onReplay(): void;
   onReset(): void;
   onRateChange(rate: number): void;
   onCameraChange(mode: CameraMode): void;
   onLightingChange(mode: LightingMode): void;
+  onQualityChange(level: QualityLevel): void;
 }
 
 /**
@@ -48,10 +51,20 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     </div>
     <span class="field-label">Camera</span>
     <div class="camera-modes" role="group" aria-label="Camera presets"></div>
-    <span class="field-label">Lighting</span>
-    <div class="lighting-modes" role="group" aria-label="Lighting">
-      <button type="button" class="active" data-mode="lab">Lab</button>
-      <button type="button" data-mode="highspeed">High-speed</button>
+    <div class="view-options">
+      <div>
+        <span class="field-label">Lighting</span>
+        <div class="lighting-modes" role="group" aria-label="Lighting">
+          <button type="button" class="active" data-mode="lab">Lab</button>
+          <button type="button" data-mode="highspeed">High-speed</button>
+        </div>
+      </div>
+      <div>
+        <label class="field-label" for="quality-select">Quality</label>
+        <select id="quality-select" title="Lower quality uses fewer particles, no glow and no shadows, for smoother playback">
+          ${QUALITY_LEVELS.map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
+        </select>
+      </div>
     </div>
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
@@ -95,6 +108,10 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
       options.onLightingChange(button.dataset.mode as LightingMode);
     });
   }
+
+  const quality = panel.querySelector<HTMLSelectElement>('#quality-select')!;
+  quality.value = options.initialQuality;
+  quality.addEventListener('change', () => options.onQualityChange(quality.value as QualityLevel));
 
   const presetButtons = RATE_PRESETS.map((preset) => {
     const button = document.createElement('button');

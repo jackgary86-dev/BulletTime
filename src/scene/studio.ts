@@ -13,6 +13,8 @@ export interface Studio {
   /** The vertical measurement board behind the target. */
   labGrid: THREE.Mesh;
   setLightingMode(mode: LightingMode): void;
+  /** Key light shadow resolution in texels (the quality setting, #16). */
+  setShadowMapSize(size: number): void;
 }
 
 /** Bright, flat backdrop of the high-speed look. */
@@ -65,10 +67,19 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
     floorMaterial.color.set(bright ? 0x8a8d92 : 0x0b0c0f);
   };
 
-  return { group, labGrid, setLightingMode };
+  const setShadowMapSize = (size: number) => {
+    const shadow = lights.key.shadow;
+    if (shadow.mapSize.x === size) return;
+    shadow.mapSize.set(size, size);
+    // The map is reallocated at the new size on the next shadow render.
+    shadow.map?.dispose();
+    shadow.map = null;
+  };
+
+  return { group, labGrid, setLightingMode, setShadowMapSize };
 }
 
-function addLights(group: THREE.Group): { fill: THREE.HemisphereLight; back: THREE.DirectionalLight } {
+function addLights(group: THREE.Group): { key: THREE.SpotLight; fill: THREE.HemisphereLight; back: THREE.DirectionalLight } {
   // Key: a soft overhead spot that casts the floor shadow.
   const key = new THREE.SpotLight(0xfff4e6, 28, 6, Math.PI / 7, 0.6, 1.6);
   key.position.set(0.6, 2.2, 1.0);
@@ -102,7 +113,7 @@ function addLights(group: THREE.Group): { fill: THREE.HemisphereLight; back: THR
   back.position.set(0, 0.6, -2);
   back.target.position.copy(TARGET_FOCUS);
   group.add(back, back.target);
-  return { fill, back };
+  return { key, fill, back };
 }
 
 function createFloor(): THREE.Mesh {

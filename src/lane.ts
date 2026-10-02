@@ -8,6 +8,7 @@ import { TargetEffects } from './fx/targetEffects';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { createPostFx, type PostFx } from './scene/postfx';
+import { QUALITY, type QualitySettings } from './scene/quality';
 import { createStudio, type LightingMode, type Studio } from './scene/studio';
 import { simulate } from './sim/engine';
 import { seededRandom } from './sim/random';
@@ -40,6 +41,8 @@ export class Lane {
   /** Where the last Fire starts on the session timeline. */
   lastFireStart = 0;
   private targetGroup: THREE.Group | null = null;
+  private lighting: LightingMode = 'lab';
+  private quality: QualitySettings = QUALITY.medium;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -74,9 +77,29 @@ export class Lane {
   }
 
   setLightingMode(mode: LightingMode): void {
+    this.lighting = mode;
     this.studio.setLightingMode(mode);
+    this.applyPostFx();
+  }
+
+  /** Particle budget, post-processing and shadows for a quality level (#16). New shots use the new particle budget. */
+  setQuality(quality: QualitySettings): void {
+    this.quality = quality;
+    this.effects.particles.density = quality.particleDensity;
+    this.effects.particles.capScale = quality.particleCap;
+    this.studio.setShadowMapSize(Math.max(quality.shadowMapSize, 256));
+    this.applyPostFx();
+    // Shadow on/off changes the shaders every lit material needs.
+    this.scene.traverse((obj) => {
+      const material = (obj as THREE.Mesh).material;
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) m.needsUpdate = true;
+    });
+  }
+
+  private applyPostFx(): void {
     // A bright scene would bloom everywhere; keep bloom for genuinely hot highlights.
-    this.postFx.bloom.enabled = mode !== 'highspeed';
+    this.postFx.bloom.enabled = this.quality.bloom && this.lighting !== 'highspeed';
+    this.postFx.depthOfField.enabled = this.quality.depthOfField;
   }
 
   clear(): void {

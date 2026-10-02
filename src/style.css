@@ -763,3 +763,108 @@ body {
 .comparing .results-chart {
   max-width: 240px;
 }
+
+.view-options {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 8px;
+}
+
+.view-options > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#quality-select {
+  font: inherit;
+  font-size: 11px;
+  padding: 5px 4px;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+#quality-select option {
+  background: #15171b;
+}
+
+/* Laptops and landscape tablets (#16): narrower side columns, a compact round card, and the
+   bottom panels kept between the columns so nothing stacks on top of anything else. */
+@media (max-width: 1180px) {
+  .bullet-panel,
+  .controls,
+  .medium-panel,
+  .shots-panel {
+    width: 260px;
+  }
+
+  .bullet-panel .bullet-preview,
+  .bullet-panel .scale-note,
+  .bullet-panel .bullet-description {
+    display: none;
+  }
+
+  .medium-panel .medium-description {
+    font-size: 11px;
+  }
+
+  :not(.comparing) > .shot-results,
+  .scrubber {
+    left: 288px;
+    right: 288px;
+    width: auto;
+    transform: none;
+  }
+
+  .shot-results .results-main {
+    grid-template-columns: 1fr;
+  }
+
+  .results-chart {
+    max-width: 260px;
+  }
+
+  .hint {
+    display: none;
+  }
+}
+
+/* Short landscape screens: the results chart folds away under Details, keeping the target clear. */
+@media (max-width: 1180px) and (max-height: 820px) {
+  .shot-results .results-chart {
+    display: none;
+  }
+}
+
+/* Portrait tablets: the target panel joins the left column, the shots panel the right one,
+   and the results and timeline span the bottom. */
+@media (max-width: 900px) {
+  .medium-panel {
+    top: 300px;
+    left: 16px;
+    right: auto;
+  }
+
+  .shots-panel {
+    top: 396px;
+    bottom: auto;
+    left: auto;
+    right: 16px;
+  }
+
+  :not(.comparing) > .shot-results,
+  .scrubber {
+    left: 16px;
+    right: 16px;
+  }
+
+  .shot-results .results-main {
+    grid-template-columns: 1fr 220px;
+  }
+
+  .shot-results .results-chart {
+    display: block;
+  }
+}

@@ -110,6 +110,10 @@ export class ParticleSystem {
   private readonly particles = new Map<ParticleLook, Particle[]>();
   /** Multiplies every burst's particle count (the quality setting, #16). */
   density = 1;
+  /** Fraction of each look's instance capacity that bursts may fill (the quality setting, #16). */
+  capScale = 1;
+  /** The time the instances were last laid out for, so a paused frame costs nothing. */
+  private shownT = NaN;
 
   constructor() {
     this.group.name = 'particles';
@@ -137,13 +141,15 @@ export class ParticleSystem {
   clear(): void {
     for (const list of this.particles.values()) list.length = 0;
     for (const mesh of this.meshes.values()) mesh.count = 0;
+    this.shownT = NaN;
   }
 
   add(spec: BurstSpec): void {
     const list = this.particles.get(spec.look)!;
-    const cap = this.meshes.get(spec.look)!.instanceMatrix.count;
+    const cap = Math.floor(this.meshes.get(spec.look)!.instanceMatrix.count * this.capScale);
     const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + list.length * 7919);
-    const count = Math.min(Math.round(spec.count * this.density), cap - list.length);
+    const count = Math.max(0, Math.min(Math.round(spec.count * this.density), cap - list.length));
+    this.shownT = NaN;
     const base = new THREE.Color(spec.color);
     const axis = spec.axis.clone().normalize();
     const helper = Math.abs(axis.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
@@ -180,6 +186,8 @@ export class ParticleSystem {
   }
 
   update(t: number): void {
+    if (t === this.shownT) return;
+    this.shownT = t;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
       let n = 0;
