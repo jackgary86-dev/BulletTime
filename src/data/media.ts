@@ -31,6 +31,9 @@ export type MediumLook =
   | 'concrete'
   | 'cinderBlock'
   | 'mildSteel'
+  /** Car door skins (#60): mild steel physics, painted outer and primed inner panel. */
+  | 'carDoorOuter'
+  | 'carDoorInner'
   | 'ar500'
   | 'sandbag'
   | 'glass'

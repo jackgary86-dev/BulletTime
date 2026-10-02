@@ -1,5 +1,5 @@
 import { layersFor, type TargetLayer } from '../sim/engine';
-import { getMedium, type MediumSpec } from './media';
+import { getMedium, type MediumLook, type MediumSpec } from './media';
 
 /** One layer of a target stack (#24): a medium, its thickness, and the air gap in front of it. */
 export interface StackLayer {
@@ -8,6 +8,8 @@ export interface StackLayer {
   thickness: number;
   /** Air gap between the previous layer's back face and this layer's front face, in metres (0 for the first). */
   gapM: number;
+  /** Draws the layer with another look than its medium's own (a car door's skins are mild steel). */
+  look?: MediumLook;
 }
 
 export const MAX_STACK_LAYERS = 4;
@@ -16,7 +18,7 @@ export const MAX_GAP_M = 0.4;
 export interface StackPreset {
   id: string;
   name: string;
-  layers: { medium: string; thickness?: number; gapM?: number }[];
+  layers: { medium: string; thickness?: number; gapM?: number; look?: MediumLook }[];
 }
 
 /** Classic barrier tests: something in front of a gel block. */
@@ -37,8 +39,8 @@ export const STACK_PRESETS: StackPreset[] = [
     name: 'Car door + gel',
     // Outer skin, the hollow door, inner skin, then the gel.
     layers: [
-      { medium: 'steel-mild', thickness: 0.0009 },
-      { medium: 'steel-mild', thickness: 0.0009, gapM: 0.1 },
+      { medium: 'steel-mild', thickness: 0.0009, look: 'carDoorOuter' },
+      { medium: 'steel-mild', thickness: 0.0009, gapM: 0.1, look: 'carDoorInner' },
       { medium: 'gel10', gapM: 0.1, thickness: 0.4 },
     ],
   },
@@ -57,7 +59,7 @@ export const STACK_PRESETS: StackPreset[] = [
 export function presetLayers(preset: StackPreset): StackLayer[] {
   return preset.layers.map((l, i) => {
     const medium = getMedium(l.medium);
-    return { medium, thickness: l.thickness ?? medium.thickness.default, gapM: i === 0 ? 0 : (l.gapM ?? 0.1) };
+    return { medium, thickness: l.thickness ?? medium.thickness.default, gapM: i === 0 ? 0 : (l.gapM ?? 0.1), look: l.look };
   });
 }
 

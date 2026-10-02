@@ -455,3 +455,132 @@ export function waterRippleNormalMap(): THREE.Texture {
     return toTexture(normalMapFromHeight(height, 2), false);
   });
 }
+
+/**
+ * Wood surfaces (#60): the plank's face grain with a matching normal map
+ * (latewood bands sit lower), and the end grain on its cut ends, with
+ * growth rings round a pith off to one side and a few drying checks.
+ */
+export function woodMaps(kind: 'pine' | 'oak'): MaterialMaps & { endGrain: THREE.Texture } {
+  const face = woodTexture(kind);
+  const maps = cachedMaps(`wood-pbr:${kind}`, () => {
+    const image = face.image as HTMLCanvasElement;
+    // Darker latewood is denser and harder: slightly glossier and lower.
+    return {
+      map: face,
+      roughnessMap: toTexture(image, false),
+      normalMap: toTexture(normalMapFromHeight(image, kind === 'oak' ? 1.6 : 1.1), false),
+    };
+  });
+  const endGrain = cached(`wood-end:${kind}`, () => {
+    const size = 256;
+    const rand = seededRandom(kind === 'pine' ? 71 : 73);
+    const [c, ctx] = canvas(size, size);
+    ctx.fillStyle = kind === 'pine' ? '#c99a62' : '#87582e';
+    ctx.fillRect(0, 0, size, size);
+    // Rings round a pith below and to one side of the board.
+    const cx = size * (0.3 + rand() * 0.4);
+    const cy = size * 1.6;
+    const spacing = kind === 'pine' ? 9 : 5;
+    for (let r = spacing; r < size * 2.6; r += spacing * (0.7 + rand() * 0.6)) {
+      ctx.strokeStyle = kind === 'pine' ? `rgba(130, 75, 30, ${0.35 + rand() * 0.3})` : `rgba(55, 30, 12, ${0.35 + rand() * 0.3})`;
+      ctx.lineWidth = 1 + rand() * (kind === 'pine' ? 3 : 1.5);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Saw marks across the cut and a couple of radial drying checks.
+    for (let i = 0; i < 40; i++) {
+      ctx.strokeStyle = `rgba(255, 240, 210, ${rand() * 0.08})`;
+      ctx.lineWidth = 1;
+      const y = rand() * size;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size, y + (rand() - 0.5) * 10);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 2; i++) {
+      const a = -Math.PI / 2 + (rand() - 0.5) * 0.8;
+      ctx.strokeStyle = 'rgba(30, 15, 5, 0.8)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * size * 1.2, cy + Math.sin(a) * size * 1.2);
+      ctx.lineTo(cx + Math.cos(a) * size * 1.6, cy + Math.sin(a) * size * 1.6);
+      ctx.stroke();
+    }
+    return toTexture(c);
+  });
+  return { ...maps, endGrain };
+}
+
+/**
+ * Drywall paper (#60). The front is smooth ivory face paper; the back is
+ * grey-brown liner paper with the board's spec printed along it.
+ */
+export function drywallPaperMaps(side: 'front' | 'back'): MaterialMaps {
+  return cachedMaps(`drywall:${side}`, () => {
+    const size = 512;
+    const rand = seededRandom(side === 'front' ? 251 : 257);
+    const [colour, cctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
+    cctx.fillStyle = side === 'front' ? '#ece7da' : '#a59c88';
+    cctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = 'rgb(128, 128, 128)';
+    hctx.fillRect(0, 0, size, size);
+    // Paper fibres: short random strokes, visible in grazing light.
+    for (let i = 0; i < 9000; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const a = rand() * Math.PI;
+      const l = 2 + rand() * 6;
+      const v = rand() > 0.5 ? 255 : 0;
+      hctx.strokeStyle = `rgba(${v}, ${v}, ${v}, 0.18)`;
+      cctx.strokeStyle = side === 'front' ? `rgba(200, 192, 175, ${rand() * 0.25})` : `rgba(120, 110, 92, ${rand() * 0.3})`;
+      for (const ctx of [hctx, cctx]) {
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+        ctx.stroke();
+      }
+    }
+    if (side === 'back') {
+      cctx.fillStyle = 'rgba(40, 60, 110, 0.55)';
+      cctx.font = 'bold 22px ui-sans-serif, Arial, sans-serif';
+      cctx.save();
+      cctx.translate(size * 0.5, size * 0.5);
+      cctx.rotate(-Math.PI / 2);
+      cctx.fillText('GYPSUM BOARD  12.7 MM  TYPE X', -size * 0.42, 0);
+      cctx.restore();
+    }
+    return {
+      map: toTexture(colour),
+      roughnessMap: toTexture(colour, false),
+      normalMap: toTexture(normalMapFromHeight(height, 0.8), false),
+    };
+  });
+}
+
+/** A fine metallic-flake normal map for car paint under its clear coat. */
+export function paintFlakeNormalMap(): THREE.Texture {
+  return cached('paint-flake', () => {
+    const size = 256;
+    const rand = seededRandom(263);
+    const [c, ctx] = canvas(size, size);
+    const image = ctx.createImageData(size, size);
+    for (let i = 0; i < size * size; i++) {
+      // Each flake tilts a little at random.
+      const nx = (rand() - 0.5) * 0.5;
+      const ny = (rand() - 0.5) * 0.5;
+      const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+      image.data[i * 4] = (nx * 0.5 + 0.5) * 255;
+      image.data[i * 4 + 1] = (ny * 0.5 + 0.5) * 255;
+      image.data[i * 4 + 2] = (nz * 0.5 + 0.5) * 255;
+      image.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = toTexture(c, false);
+    texture.repeat.set(6, 6);
+    return texture;
+  });
+}

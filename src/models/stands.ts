@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MediumSpec } from '../data/media';
+import type { MediumLook, MediumSpec } from '../data/media';
 import { woodTexture } from './textures';
 
 /**
@@ -30,9 +30,12 @@ export const SHARED_STAND_MATERIALS: ReadonlySet<THREE.Material> = new Set([
 ]);
 
 /** Builds the holder that suits the medium. */
-export function createSupport(spec: MediumSpec, t: number, shotY: number): THREE.Group {
+export function createSupport(spec: MediumSpec, t: number, shotY: number, look: MediumLook = spec.look): THREE.Group {
   const bottom = shotY - spec.heightM / 2;
-  switch (spec.look) {
+  switch (look) {
+    case 'carDoorOuter':
+    case 'carDoorInner':
+      return createFrame(spec, t, shotY, standSteel, false);
     case 'mildSteel':
     case 'ar500':
       return createHanger(spec, t, shotY);

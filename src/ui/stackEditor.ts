@@ -165,7 +165,8 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   });
   select.addEventListener('change', () => {
     const medium = getMedium(select.value);
-    setup.layers[selected] = { ...setup.layers[selected], medium, thickness: medium.thickness.default };
+    // A new material drops any look the preset gave the old one.
+    setup.layers[selected] = { ...setup.layers[selected], medium, thickness: medium.thickness.default, look: undefined };
     changed();
   });
   thicknessSlider.addEventListener('input', () => {
