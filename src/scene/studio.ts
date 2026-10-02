@@ -14,6 +14,10 @@ export interface Studio {
   group: THREE.Group;
   /** The vertical measurement board behind the target. */
   labGrid: THREE.Mesh;
+  /** Soft baked shadow under the target, for quality levels without shadows or occlusion (#55). */
+  contactShadow: THREE.Mesh;
+  /** Sizes the contact shadow to the target's footprint. */
+  fitContactShadow(target: THREE.Object3D): void;
   setLightingMode(mode: LightingMode): void;
   /** Key light shadow resolution in texels (the quality setting, #16). */
   setShadowMapSize(size: number): void;
@@ -82,7 +86,18 @@ export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer):
     shadow.map = null;
   };
 
-  return { group, labGrid, setLightingMode, setShadowMapSize };
+  const contactShadow = createContactShadow();
+  group.add(contactShadow);
+  const box = new THREE.Box3();
+  const fitContactShadow = (target: THREE.Object3D) => {
+    box.setFromObject(target);
+    if (box.isEmpty()) return;
+    // A little larger than the footprint, since the shadow fades out toward its edges.
+    contactShadow.scale.set(box.max.x - box.min.x + 0.2, box.max.z - box.min.z + 0.2, 1);
+    contactShadow.position.set((box.min.x + box.max.x) / 2, 0.002, (box.min.z + box.max.z) / 2);
+  };
+
+  return { group, labGrid, contactShadow, fitContactShadow, setLightingMode, setShadowMapSize };
 }
 
 /** How strongly the baked room lights the scene in the dark lab look. */
@@ -157,6 +172,27 @@ function addLights(group: THREE.Group): StudioLights {
   back.target.position.copy(TARGET_FOCUS);
   group.add(back, back.target);
   return { key, softboxes, fill, back };
+}
+
+/** A unit square on the floor with a soft dark falloff, scaled to fit the target. */
+function createContactShadow(): THREE.Mesh {
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('2D canvas unavailable for the contact shadow');
+  ctx.filter = 'blur(14px)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+  ctx.fillRect(size * 0.22, size * 0.22, size * 0.56, size * 0.56);
+  const texture = new THREE.CanvasTexture(c);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.name = 'contact-shadow';
+  mesh.visible = false;
+  return mesh;
 }
 
 /**

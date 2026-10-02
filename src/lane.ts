@@ -73,6 +73,7 @@ export class Lane {
     }
     this.targetGroup = setup.dummy ? createDummy(setup.dummy) : createTargetStack(setup.layers, setup.angleDeg);
     this.scene.add(this.targetGroup);
+    this.studio.fitContactShadow(this.targetGroup);
     this.clear();
   }
 
@@ -100,6 +101,9 @@ export class Lane {
     // A bright scene would bloom everywhere; keep bloom for genuinely hot highlights.
     this.postFx.bloom.enabled = this.quality.bloom && this.lighting !== 'highspeed';
     this.postFx.depthOfField.enabled = this.quality.depthOfField;
+    this.postFx.ambientOcclusion.enabled = this.quality.ambientOcclusion;
+    // Without real shadows or occlusion, a baked soft shadow keeps the target on the floor.
+    this.studio.contactShadow.visible = !this.quality.ambientOcclusion && this.quality.shadowMapSize === 0;
   }
 
   clear(): void {
