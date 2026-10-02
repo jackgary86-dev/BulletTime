@@ -10,12 +10,14 @@ import {
   PREVIEW_BLOCK_CENTER_Y,
   PREVIEW_BLOCK_FRONT_X,
 } from './models/targetStand';
-import { createBulletModel } from './models/bullet';
+import { createBulletModel, disposeBulletModel } from './models/bullet';
+import { bulletMassKg, DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
 import { simulateShot } from './sim/timeline';
 import { Playback } from './sim/playback';
-import { SLICE_BULLET, SLICE_GEL, SLICE_STAND_OFF_M } from './data/sliceShot';
+import { SLICE_GEL, SLICE_STAND_OFF_M } from './data/sliceShot';
 import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
+import { mountBulletSelector } from './ui/bulletSelector';
 
 function bootstrap(): void {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
@@ -28,21 +30,43 @@ function bootstrap(): void {
   createStudio(scene, renderer);
   scene.add(createTargetStand());
 
-  const bullet = createBulletModel();
-  bullet.group.position.y = PREVIEW_BLOCK_CENTER_Y;
-  bullet.group.visible = false;
-  scene.add(bullet.group);
+  let spec = getBullet(DEFAULT_BULLET_ID);
+  let bullet = createBulletModel(spec);
+  const placeBullet = () => {
+    bullet.group.position.set(PREVIEW_BLOCK_FRONT_X - SLICE_STAND_OFF_M, PREVIEW_BLOCK_CENTER_Y, 0);
+    bullet.group.visible = false;
+    scene.add(bullet.group);
+  };
+  placeBullet();
 
   const playback = new Playback();
   const postFx = createPostFx(renderer, scene, camera);
   mountOverlay(overlay);
+  mountBulletSelector(overlay, {
+    initialId: spec.id,
+    onChange: (next: BulletSpec) => {
+      spec = next;
+      scene.remove(bullet.group);
+      disposeBulletModel(bullet);
+      bullet = createBulletModel(spec);
+      placeBullet();
+      playback.stop();
+    },
+  });
 
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
     onRateChange: (rate) => (playback.rate = rate),
     onFire: () => {
+      const diameterM = spec.caliberMm / 1000;
+      // Crude stand-in until the physics engine (#5): expanding rounds open to their full ratio.
+      const expands = spec.behaviour === 'expand' && spec.muzzleVelocityMs >= (spec.expansionThresholdMs ?? 0);
       const timeline = simulateShot({
-        ...SLICE_BULLET,
+        massKg: bulletMassKg(spec),
+        diameterM,
+        muzzleVelocity: spec.muzzleVelocityMs,
+        expandedDiameterM: expands ? diameterM * (spec.expansionRatio ?? 1) : diameterM,
+        expansionDistanceM: 0.02,
         startX: PREVIEW_BLOCK_FRONT_X - SLICE_STAND_OFF_M,
         targetFrontX: PREVIEW_BLOCK_FRONT_X,
         targetBackX: PREVIEW_BLOCK_BACK_X,

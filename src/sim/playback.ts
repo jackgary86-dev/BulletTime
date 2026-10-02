@@ -17,6 +17,12 @@ export class Playback {
     this.playing = true;
   }
 
+  /** Clears the current shot. */
+  stop(): void {
+    this.timeline = null;
+    this.playing = false;
+  }
+
   get isPlaying(): boolean {
     return this.playing;
   }
