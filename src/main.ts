@@ -9,6 +9,8 @@ import { layersFor, simulate } from './sim/engine';
 import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { ShotRenderer } from './fx/shotRenderer';
+import { MuzzleEffect } from './fx/muzzle';
+import { CameraDirector } from './scene/cameraDirector';
 import { DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
@@ -35,6 +37,11 @@ function bootstrap(): void {
   mountOverlay(overlay);
 
   const scrubber = mountScrubber(overlay, playback);
+  const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
+  const muzzle = new MuzzleEffect();
+  muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0));
+  scene.add(muzzle.group);
+
   let spec = getBullet(DEFAULT_BULLET_ID);
   const shot = new ShotRenderer();
   scene.add(shot.group);
@@ -43,15 +50,31 @@ function bootstrap(): void {
     initialId: spec.id,
     onChange: (next: BulletSpec) => {
       spec = next;
-      playback.stop();
-      shot.clear();
-      scrubber.hide();
+      clearShot();
     },
   });
 
+  const clearShot = () => {
+    playback.stop();
+    shot.clear();
+    scrubber.hide();
+    panel.setHasShot(false);
+  };
+
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
+    initialCamera: 'auto',
     onRateChange: (rate) => (playback.rate = rate),
+    onCameraChange: (mode) => director.setMode(mode),
+    onReplay: () => {
+      if (!playback.timeline) return;
+      playback.start(playback.timeline);
+      scrubber.sync();
+    },
+    onReset: () => {
+      clearShot();
+      director.reset();
+    },
     onFire: () => {
       const { medium, thickness, angleDeg } = target;
       const timeline = simulate({
@@ -64,6 +87,7 @@ function bootstrap(): void {
       shot.load(timeline, spec);
       playback.start(timeline);
       scrubber.load(timeline);
+      panel.setHasShot(true);
     },
   });
 
@@ -75,12 +99,12 @@ function bootstrap(): void {
     }
     targetGroup = createTarget(setup.medium, setup.thickness, setup.angleDeg);
     scene.add(targetGroup);
-    playback.stop();
-    shot.clear();
-    scrubber.hide();
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, SHOT_Y, 0), setup.thickness);
+    clearShot();
   };
   const target = mountMediumSelector(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
   rebuildTarget(target);
+  director.reset();
 
   watchResize((width, height) => {
     renderer.setSize(width, height, false);
@@ -103,8 +127,9 @@ function bootstrap(): void {
       scrubber.sync();
     }
 
-    controls.update();
-    postFx.setFocus(camera.position.distanceTo(controls.target));
+    director.update(delta, t, playback.timeline);
+    muzzle.update(t, camera);
+    postFx.setFocus(director.focusDistance);
     postFx.render();
   });
 }
