@@ -69,15 +69,28 @@ export class GelEffect {
   constructor(private readonly particles: ParticleSystem) {
     this.group.name = 'gel-effect';
     // An air cavity in water looks silvery: its wall reflects like a mirror (total internal reflection).
+    // Seen face-on you look straight through the thin wall into the water; toward the edges it turns to a
+    // silver mirror, with a frothy, churned surface. It stays opaque so the water's refraction still shows it,
+    // so the see-through middle is painted in the colour of the water behind it.
+    const froth = crinkleNormalMap();
+    froth.repeat.set(14, 4);
     this.waterMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x7d8d98,
-      roughness: 0.35,
-      metalness: 0.35,
-      envMapIntensity: 1,
-      clearcoat: 0.2,
-      clearcoatRoughness: 0.4,
+      color: 0xd4dde2,
+      roughness: 0.12,
+      metalness: 1,
+      envMapIntensity: 1.3,
+      normalMap: froth,
+      normalScale: new THREE.Vector2(0.6, 0.6),
       side: THREE.DoubleSide,
     });
+    this.waterMaterial.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `float facing = abs(dot(normal, normalize(vViewPosition)));
+outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0 - facing, 1.4)));
+#include <opaque_fragment>`,
+      );
+    };
     const normalMap = crinkleNormalMap();
     normalMap.repeat.set(10, 3);
     this.material = new THREE.MeshPhysicalMaterial({
@@ -331,7 +344,26 @@ export class GelEffect {
   private addWaterDebris(timeline: Timeline, layer: number, samples: CavitySample[]): void {
     const waterColour = 0x8fb4c8;
     for (const impact of primaryEvents(timeline, layer, 'entry')) {
-      // Splash: a jet of water squirts back out of the entry hole.
+      // A crown of spray thrown back off the tank wall round the hole, drawn out into streaks and sheets.
+      this.particles.add({
+        look: 'droplet',
+        t0: impact.t + 20e-6,
+        duration: 600e-6,
+        origin: new THREE.Vector3(impact.pos.x - 0.003, impact.pos.y, impact.pos.z),
+        originJitter: 0.006,
+        axis: new THREE.Vector3(-1, 0, 0),
+        spread: 1.25,
+        innerSpread: 0.75,
+        count: 180,
+        speed: [4, 10 + impact.speed * 0.03],
+        size: [0.0007, 0.002],
+        life: [3e-3, 9e-3],
+        drag: 60,
+        gravity: 9.8,
+        color: waterColour,
+        stretch: 3,
+      });
+      // Then a jet of water squirts straight back out of the entry hole.
       this.particles.add({
         look: 'droplet',
         t0: impact.t + 60e-6,
@@ -341,11 +373,12 @@ export class GelEffect {
         spread: 0.35,
         count: 140,
         speed: [3, 12 + impact.speed * 0.02],
-        size: [0.0015, 0.004],
+        size: [0.001, 0.0028],
         life: [3e-3, 9e-3],
         drag: 80,
         gravity: 9.8,
         color: waterColour,
+        stretch: 1.8,
       });
     }
     // The surface heaves above the cavity and throws up a sheet of spray.
@@ -369,6 +402,7 @@ export class GelEffect {
         drag: 20,
         gravity: 9.8,
         color: waterColour,
+        stretch: 2.5,
       });
     }
     // Cavitation bubbles left along the path after the cavity collapses, drifting up slowly.
@@ -388,8 +422,8 @@ export class GelEffect {
         life: [20e-3, 40e-3],
         drag: 5,
         gravity: -2,
-        color: 0x8fa0aa,
-        colorJitter: 0.15,
+        color: 0xc4d0d6,
+        colorJitter: 0.25,
         seed: Math.round(s.depth * 1e4) + 17,
       });
     }
