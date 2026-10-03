@@ -102,10 +102,12 @@ export type ArmorEventType =
   | 'plug'
   | 'perforate'
   | 'stop'
-  // Long rod (#162): the rod stops eroding and digs on as a rigid body; the crater stops deepening while the rod
-  // erodes against its floor; the rod is used up; the last of the plate breaks out of the rear face.
+  // Long rod (#162): the rod digs as a rigid body (at impact or once it stops eroding); the rod cannot dig and erodes
+  // at the face from impact; part-way through, the crater stops deepening while the rod erodes against its floor;
+  // the rod is used up; the last of the plate breaks out of the rear face.
   | 'rigid'
   | 'no-penetration'
+  | 'crater-stalls'
   | 'rod-consumed'
   | 'breakout';
 
@@ -152,8 +154,9 @@ export interface ArmorEnergy {
   /**
    * For an eroding penetrator (long rod #162): the kinetic energy the rod
    * material carried as it was eroded away at the crater bottom. It lines the
-   * crater as debris and ends up as heat there. Absent for a shot that does
-   * not erode.
+   * crater as debris and ends up as heat there (less any share that went
+   * into a breakout disc, which is then in `ejectaJ`). Absent for a shot that
+   * does not erode.
    */
   erodedRodJ?: number;
 }

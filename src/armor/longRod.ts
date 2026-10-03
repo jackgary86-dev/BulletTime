@@ -30,10 +30,10 @@
  * Without strength (Yp = Rt = 0) the depth is the hydrodynamic limit
  * L·√(ρp/ρt); with the plate stronger than the rod it is always less.
  *
- * The crater width, the breakout allowance at the rear face, the momentum
- * shared with the breakout disc and the rear bulge are illustrative lab
- * heuristics chosen for the teaching model, not figures from the cited
- * sources.
+ * The crater width, the breakout allowance at the rear face, how the
+ * breakout disc's kinetic energy is paid for (out of the energy already spent
+ * at the crater bottom, so the rod keeps its tail speed) and the rear bulge are illustrative lab heuristics
+ * chosen for the teaching model, not figures from the cited sources.
  *
  * Impact physics only: the rod is its state at the plate (from `munitions.ts`).
  * All values are a simplified teaching model, not engineering data.
@@ -141,7 +141,7 @@ export interface TatePenetration {
   penetrationM: number;
   /** Rod length left at the end, m. */
   residualLengthM: number;
-  /** Rod speed at the end, m/s (at breakout, before it shares momentum with the breakout disc). */
+  /** Rod (tail) speed at the end, m/s (0 when stopped). */
   residualVelocity: number;
   /** Time the run ended, s. */
   endTime: number;
@@ -374,25 +374,41 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
   const tTate = run.endTime;
   const xBreak = run.penetrationM;
   let plateWorkJ = run.plateWorkJ;
+  let erodedRodJ = run.erodedRodJ;
   let ejectaJ = 0;
   let vResidual = 0;
   let residualLength = 0;
   let plug: ArmorEjecta | undefined;
   let tExit = Infinity;
   if (perforated) {
-    // The last of the plate breaks out as a disc as wide as the crater. The rod pushes it out and they share the rod's
-    // momentum (as the plug in #161, after Recht & Ipson); the kinetic energy lost in that sharing is plate work.
+    // The last of the plate breaks out as a disc as wide as the crater and flies off with the rod at the rod's tail
+    // speed, which is the residual velocity. The disc's kinetic energy is paid for by the impact energy already spent
+    // at the crater bottom: first out of the eroded rod material's (the eroding head is what pushes the plate ahead of
+    // it), then out of plate work. Only when the plate is so thin that both together cannot cover it (a plate about
+    // two rod diameters thick or less) does the rod pay the rest: rod and disc then leave at the common speed that
+    // closes the budget, ½(m_rod + m_disc)·v_r² = ½·m_rod·v² + E_eroded + W_plate (lab heuristic).
     residualLength = run.residualLengthM;
     const mRod = massOf(residualLength);
-    const vBreak = run.residualVelocity;
+    const vTail = run.residualVelocity;
     const thicknessM = tLos - xBreak;
     const massKg = material.density * Math.PI * craterRadius ** 2 * thicknessM;
-    vResidual = (mRod * vBreak) / (mRod + massKg);
+    const discJ = 0.5 * massKg * vTail ** 2;
+    if (run.erodedRodJ + run.plateWorkJ >= discJ) {
+      vResidual = vTail;
+      const fromEroded = Math.min(run.erodedRodJ, discJ);
+      erodedRodJ = run.erodedRodJ - fromEroded;
+      plateWorkJ = run.plateWorkJ - (discJ - fromEroded);
+    } else {
+      vResidual = Math.sqrt((mRod * vTail ** 2 + 2 * (run.erodedRodJ + run.plateWorkJ)) / (mRod + massKg));
+      erodedRodJ = 0;
+      plateWorkJ = 0;
+    }
     plug = { massKg, velocity: vResidual, thicknessM, diameterM: 2 * craterRadius };
     ejectaJ = 0.5 * massKg * vResidual ** 2;
-    plateWorkJ += 0.5 * mRod * vBreak ** 2 - 0.5 * (mRod + massKg) * vResidual ** 2;
     tExit = tTate + thicknessM / vResidual;
   }
+  // Share of the work done during the dig that stays in the plate (the rest leaves with the breakout disc).
+  const keptShare = run.plateWorkJ > 0 ? plateWorkJ / run.plateWorkJ : 1;
   const residualMassKg = perforated ? massOf(residualLength) : 0;
   const residualEnergyJ = 0.5 * residualMassKg * vResidual ** 2;
   const endTime = perforated ? tExit : tTate;
@@ -446,7 +462,7 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
       speed = lerp(a.velocity, b.velocity, f);
       penetrationRate = Math.min(speed, lerp(a.interfaceSpeed, b.interfaceSpeed, f));
       penetratorLength = lerp(a.length, b.length, f);
-      energyDepositedJ = lerp(a.plateWorkJ, b.plateWorkJ, f);
+      energyDepositedJ = keptShare * lerp(a.plateWorkJ, b.plateWorkJ, f);
     }
     const depth = Math.min(tLos, travel);
     const through = perforated && t >= tExit;
@@ -466,11 +482,15 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
 
   const events: ArmorEvent[] = [{ t: 0, type: 'impact', depth: 0, speed: v0, label: 'Impact' }];
   // Regime changes: at impact when the rod does not start out eroding, and whenever it switches as it slows.
+  // A switch to no penetration part-way through is its own event type ('crater-stalls'), so it is not mistaken for
+  // the 'No penetration' outcome of a rod that never dug.
   let previous: TateRegime = 'hydrodynamic';
   for (const sample of samples) {
     if (sample.regime !== previous && sample.regime !== 'hydrodynamic' && sample.velocity > 0) {
       const labels = REGIME_EVENT_LABEL[sample.regime];
-      events.push({ t: sample.t, type: sample.regime, depth: sample.penetration, speed: sample.velocity, label: sample.t === 0 ? labels.atImpact : labels.later });
+      const atImpact = sample.t === 0;
+      const type = sample.regime === 'no-penetration' && !atImpact ? 'crater-stalls' : sample.regime;
+      events.push({ t: sample.t, type, depth: sample.penetration, speed: sample.velocity, label: atImpact ? labels.atImpact : labels.later });
     }
     previous = sample.regime;
   }
@@ -480,7 +500,8 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
   } else if (run.outcome === 'rod-consumed') {
     events.push({ t: tTate, type: 'rod-consumed', depth: run.penetrationM, speed: 0, label: 'Rod consumed' });
   } else {
-    events.push({ t: tTate, type: 'stop', depth: run.penetrationM, speed: 0, label: 'Rod stops in the plate' });
+    const label = run.penetrationM > 0 ? 'Rod stops in the plate' : 'Rod stops at the face';
+    events.push({ t: tTate, type: 'stop', depth: run.penetrationM, speed: 0, label });
   }
 
   const duration = timelineDuration(endTime);
@@ -502,7 +523,7 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
       fragments: 0,
       impactEnergyJ,
       residualEnergyJ,
-      energy: { plateWorkJ, ejectaJ, erodedRodJ: run.erodedRodJ },
+      energy: { plateWorkJ, ejectaJ, erodedRodJ },
     },
     duration,
   };

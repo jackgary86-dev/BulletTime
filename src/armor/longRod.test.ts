@@ -136,6 +136,7 @@ describe('120 mm-class rod', () => {
   });
 
   it('gets 550–750 mm into RHA at 1,650 m/s (about 607 mm)', () => {
+    expect(run(120, 1650, 20).result.mechanism).toBe('Hydrodynamic erosion');
     const tl = run(120, 1650, 2000);
     expect(tl.result.perforated).toBe(false);
     expect(tl.result.penetrationM).toBeGreaterThan(0.55);
@@ -251,14 +252,36 @@ describe('special cases', () => {
     expect(tl.events[1]).toMatchObject({ t: 0, type: 'no-penetration', label: 'Rod erodes at the face without digging' });
     const stop = event(tl, 'stop')!;
     expect(stop.speed).toBe(0);
+    expect(stop.label).toBe('Rod stops at the face');
     // The rod stops when v² = v0² + (2Yp/ρp)·ln(L/L0) reaches 0: L = L0·exp(−ρp·v0²/(2Yp)).
     const stub = L0 * Math.exp(-(RHO_P * 500 ** 2) / (2 * YP));
     expect(tl.frames[tl.frames.length - 1].penetratorLength).toBeCloseTo(stub, 3);
   });
 
+  it('a rod that starts eroding and then goes rigid is reported by the regime that dug most', () => {
+    const soft = { ...getPlateMaterial('al-5083'), targetResistancePa: 0.3e9 };
+    const tl = longRodShot({ impact: impactState('apfsds', 120, 1000), material: soft, thicknessM: 20, obliquityDeg: 0 });
+    expect(event(tl, 'rigid')).toBeDefined();
+    expect(event(tl, 'rigid')!.t).toBeGreaterThan(0);
+    expect(tl.result.mechanism).toBe('Rigid-rod penetration');
+  });
+
+  it('a rod just above the used-up threshold counts as stopped, with its stub left', () => {
+    const rod: TateRod = { density: RHO_P, yieldPa: 0.05e9, length: 0.2, diameter: 0.01, velocity: 0 };
+    // At the face v² = v0² + (2Yp/ρp)·ln(L/L0): choose v0 so it stops with 0.07 D left.
+    rod.velocity = Math.sqrt((Math.log(0.2 / (0.07 * 0.01)) * 2 * rod.yieldPa) / RHO_P);
+    const tp = tatePenetration(rod, getPlateMaterial('rha'), Infinity);
+    expect(tp.residualLengthM / 0.01).toBeCloseTo(0.07, 3);
+    expect(tp.outcome).toBe('stopped');
+    expect(tp.residualVelocity).toBe(0);
+  });
+
   it('in RHA the rod erodes until the crater stops deepening, then is used up', () => {
     const tl = run(120, 1650, 2000);
-    const stalled = event(tl, 'no-penetration')!;
+    // A switch part-way through is 'crater-stalls', never the 'no-penetration' event of a rod that cannot dig at all.
+    expect(event(tl, 'no-penetration')).toBeUndefined();
+    const stalled = event(tl, 'crater-stalls')!;
+    expect(stalled.depth).toBeGreaterThan(0.5);
     expect(stalled.label).toBe('Crater stops deepening; the rod erodes against its floor');
     expect(stalled.speed).toBeLessThan(Math.sqrt((2 * (5.5e9 - YP)) / RHO_P));
     expect(event(tl, 'rod-consumed')).toBeDefined();
@@ -285,14 +308,20 @@ describe('perforation and breakout', () => {
     expect(disc.massKg).toBeCloseTo(7850 * Math.PI * 0.027 ** 2 * 0.027, 9);
     expect(disc.velocity).toBe(r.residualVelocity);
 
-    // The rod pushes it out and they share momentum.
+    // The residual velocity is the rod's tail speed at breakout; the disc's energy comes out of what was already spent
+    // at the crater bottom, not out of the rod.
     const residualLength = tl.frames[tl.frames.length - 1].penetratorLength;
     expect(residualLength).toBeGreaterThan(0.2);
     expect(residualLength).toBeLessThan(L0);
     expect(r.residualMassKg).toBeCloseTo(rodMass(residualLength), 12);
-    expect(rodMass(residualLength) * breakout.speed).toBeCloseTo((rodMass(residualLength) + disc.massKg) * r.residualVelocity, 6);
-    expect(r.residualVelocity).toBeGreaterThan(1300);
+    const tp = tatePenetration(tateRodOf(120, 1650), getPlateMaterial('rha'), 0.3);
+    expect(tp.outcome).toBe('breakout');
+    expect(r.residualVelocity).toBe(tp.residualVelocity);
+    expect(r.residualVelocity).toBe(breakout.speed);
+    expect(r.residualVelocity).toBeGreaterThan(1550);
     expect(r.residualVelocity).toBeLessThan(1650);
+    expect(r.energy.plateWorkJ).toBeCloseTo(tp.plateWorkJ, 6);
+    expect(r.energy.erodedRodJ!).toBeCloseTo(tp.erodedRodJ - 0.5 * disc.massKg * tp.residualVelocity ** 2, 6);
     expect(r.residualEnergyJ).toBeCloseTo(0.5 * r.residualMassKg * r.residualVelocity ** 2, 6);
 
     const exit = event(tl, 'perforate')!;
@@ -302,6 +331,36 @@ describe('perforation and breakout', () => {
     expect(exit.t).toBeCloseTo(breakout.t + 0.027 / r.residualVelocity, 12);
     expect(event(tl, 'rod-consumed')).toBeUndefined();
     expect(event(tl, 'stop')).toBeUndefined();
+  });
+
+  it('keeps the tail speed through deep breakouts too, taking the disc energy out of plate work once the eroded share is used', () => {
+    const tl = run(120, 1650, 580);
+    const tp = tatePenetration(tateRodOf(120, 1650), getPlateMaterial('rha'), 0.58);
+    expect(tl.result.residualVelocity).toBe(tp.residualVelocity);
+    expect(tl.result.plug!.velocity).toBe(tp.residualVelocity);
+    expect(tl.result.residualVelocity).toBeCloseTo(1421, 0);
+    const discJ = 0.5 * tl.result.plug!.massKg * tp.residualVelocity ** 2;
+    const fromEroded = Math.min(tp.erodedRodJ, discJ);
+    expect(tl.result.energy.erodedRodJ!).toBeCloseTo(tp.erodedRodJ - fromEroded, 6);
+    expect(tl.result.energy.plateWorkJ).toBeCloseTo(tp.plateWorkJ - (discJ - fromEroded), 6);
+  });
+
+  it('frames between breakout and exit push out at the residual velocity', () => {
+    const tl = run(120, 1650, 300);
+    const breakout = event(tl, 'breakout')!;
+    const exit = event(tl, 'perforate')!;
+    const between = tl.frames.filter((f) => f.t > breakout.t && f.t < exit.t);
+    expect(between.length).toBeGreaterThan(0);
+    for (const f of between) {
+      expect(f.penetrationRate).toBe(tl.result.residualVelocity);
+      expect(f.speed).toBe(tl.result.residualVelocity);
+    }
+  });
+
+  it('the breakout disc has the plate’s density', () => {
+    const tl = longRodShot({ impact: rodOf(120, 1650), material: getPlateMaterial('al-5083'), thicknessM: 0.3, obliquityDeg: 0 });
+    expect(tl.result.perforated).toBe(true);
+    expect(tl.result.plug!.massKg).toBeCloseTo(2660 * Math.PI * 0.027 ** 2 * 0.027, 9);
   });
 
   it('perforates exactly when the crater would get within one rod diameter of the rear face', () => {
@@ -317,6 +376,13 @@ describe('perforation and breakout', () => {
     expect(breakout.speed).toBe(1650);
     expect(tl.result.plug!.thicknessM).toBeCloseTo(0.02, 12);
     expect(tl.frames[tl.frames.length - 1].penetratorLength).toBeCloseTo(L0, 12);
+    // Nothing was spent at the crater bottom yet, so the rod pays for the disc: ½(m_rod + m_disc)·v_r² = ½·m_rod·v0².
+    const mDisc = tl.result.plug!.massKg;
+    expect(tl.result.residualVelocity).toBeCloseTo(1650 * Math.sqrt(rodMass(L0) / (rodMass(L0) + mDisc)), 9);
+    expect(tl.result.plug!.velocity).toBe(tl.result.residualVelocity);
+    expect(tl.result.energy.plateWorkJ).toBe(0);
+    expect(tl.result.energy.erodedRodJ).toBe(0);
+    expect(tl.result.mechanism).toBe('Hydrodynamic erosion');
   });
 
   it('after breakout rod and disc move on at the residual velocity, then fly on behind the plate through a hole 2 D wide', () => {
@@ -417,6 +483,25 @@ describe('energy', () => {
     expect(thin.energy.ejectaJ).toBeCloseTo(0.5 * thin.plug!.massKg * thin.residualVelocity ** 2, 6);
   });
 
+  it('eroded rod energy matches the closed form for a rod eroding at the face', () => {
+    const weak: TateRod = { density: RHO_P, yieldPa: 0.05e9, length: 0.2, diameter: 0.01, velocity: 500 };
+    const tp = tatePenetration(weak, getPlateMaterial('rha'), Infinity);
+    const Le = tp.residualLengthM;
+    const A = Math.PI * (0.01 / 2) ** 2;
+    // ∫½ρpA·v² dL with v² = v0² + (2Yp/ρp)·ln(L/L0).
+    const expected = 0.5 * RHO_P * A * (500 ** 2 * (0.2 - Le) + ((2 * weak.yieldPa) / RHO_P) * (-0.2 - ((Le > 0 ? Le * Math.log(Le / 0.2) : 0) - Le)));
+    expect(Math.abs(tp.erodedRodJ / expected - 1)).toBeLessThan(1e-3);
+  });
+
+  it('thin plates: the deposited energy never falls and ends at plate work, whichever share pays for the disc', () => {
+    for (let mm = 30; mm <= 120; mm += 2) {
+      const tl = run(120, 1650, mm);
+      expect(tl.result.perforated).toBe(true);
+      closes(tl);
+      for (let i = 1; i < tl.frames.length; i++) expect(tl.frames[i].energyDepositedJ).toBeGreaterThanOrEqual(tl.frames[i - 1].energyDepositedJ);
+    }
+  });
+
   it('closes for the rigid and no-penetration special cases too', () => {
     const check = (rod: TateRod, target: TateTarget) => {
       const tp = tatePenetration(rod, target, Infinity);
@@ -441,6 +526,13 @@ describe('integration and frames', () => {
         expect(Math.abs(coarse / fine - 1)).toBeLessThan(0.005);
       }
     }
+  });
+
+  it('keeps a fine integration history (step 0.1 µs)', () => {
+    expect(TATE_STEP_S).toBe(0.1e-6);
+    const tp = tatePenetration(tateRodOf(120, 1650), getPlateMaterial('rha'), Infinity);
+    expect(tp.samples.length).toBeGreaterThan(1000);
+    for (let i = 1; i < tp.samples.length; i++) expect(tp.samples[i].t - tp.samples[i - 1].t).toBeLessThanOrEqual(TATE_STEP_S * (1 + 1e-9));
   });
 
   it('frames are finite, evenly spaced, at least 120; depth never falls and the rod never grows', () => {
