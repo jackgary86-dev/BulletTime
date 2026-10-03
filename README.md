@@ -32,6 +32,7 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 - **Multiple shots:** aim anywhere on the face and fire single shots, groups or bursts. Each new shot meets the damage already in the target.
 - **Results:** impact speed and energy, penetration, exit speed, the bullet's final state, peak cavity, energy into the target, a velocity-vs-depth chart, and per-layer and blood-pack details.
 - **Compare:** two setups side by side on one synced clock.
+- **Range challenge:** a shot-placement game. Aim through a swaying scope (hold Space to steady it), score 1 to 10 on each of 10 shots over 5 stages, from 9 mm into gel to .50 BMG into concrete, and watch every hit replay in slow motion. Your best score is remembered.
 - **Quality:** Low, Medium and High, for laptops and tablets.
 
 | Layered and hollow targets | Clinical test dummy |
