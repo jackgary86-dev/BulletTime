@@ -10,6 +10,7 @@ import { TargetEffects } from './fx/targetEffects';
 import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
+import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
 import { createPostFx, type PostFx } from './scene/postfx';
 import { QUALITY, type QualitySettings } from './scene/quality';
@@ -165,11 +166,18 @@ export class Lane {
     return timeline;
   }
 
-  /** Frees the target and the post-processing buffers (lane B going away). */
-  dispose(): void {
+  /**
+   * Frees everything this lane put on the GPU (lane B going away, #133): its
+   * scene, shadow map and post-processing, except what `keep` (lane A's scene)
+   * shares with it.
+   */
+  dispose(keep: THREE.Object3D | null = null): void {
     this.clear();
+    this.shot.dispose();
     if (this.targetGroup) disposeTarget(this.targetGroup);
     this.targetGroup = null;
+    disposeTree(this.scene, keep);
+    for (const pass of this.postFx.composer.passes) pass.dispose();
     this.postFx.composer.dispose();
   }
 

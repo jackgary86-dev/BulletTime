@@ -28,7 +28,10 @@ export function createLabEnvironment(renderer: THREE.WebGLRenderer, softboxes: S
   }
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const texture = pmrem.fromScene(scene, 0.02, 0.05, 30, { position: TARGET_FOCUS }).texture;
+  const target = pmrem.fromScene(scene, 0.02, 0.05, 30, { position: TARGET_FOCUS });
+  const texture = target.texture;
+  // Freeing the map frees its framebuffer too (#133).
+  texture.addEventListener('dispose', () => target.dispose());
   pmrem.dispose();
   scene.traverse((obj) => {
     const mesh = obj as THREE.Mesh;

@@ -187,7 +187,7 @@ async function bootstrap(): Promise<void> {
         laneB.setLightingMode(lighting);
         laneB.setQuality(QUALITY[quality]);
       } else if (laneB) {
-        laneB.dispose();
+        laneB.dispose(laneA?.scene ?? null);
         laneB = null;
       }
       clearShot();
