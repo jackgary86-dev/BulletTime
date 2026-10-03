@@ -32,6 +32,11 @@ const WALL_MARGIN = 0.006;
 const CONE_RADIUS = 0.04;
 const CONE_MAX = 0.12;
 const CONE_SPRING_S = 1.6e-3;
+/** Movement smaller than this, in metres, counts as at rest. */
+const SETTLED_M = 1e-5;
+/** Blood stains spread along the cavity this fast, and soak to full colour in this long. */
+const STAIN_SPEED_M_S = 30;
+const STAIN_SOAK_S = 0.6e-3;
 /** Entry splash: crater depth on the front face and how long it lasts. */
 const SPLASH_DEPTH = 0.01;
 const SPLASH_S = 0.8e-3;
@@ -66,6 +71,10 @@ export class GelEffect {
   private style: CavityStyle = 'gel';
   /** Blood stains spreading along the cavity from burst packs: centre x (world), start time. */
   private stains: { x: number; t: number; reach: number }[] = [];
+  /** From this time on nothing moves any more (#144). */
+  private settleT = 0;
+  /** The time and gore setting last drawn, so frames that would draw the same are skipped. */
+  private drawn: { t: number; gore: boolean } | null = null;
 
   constructor(private readonly particles: ParticleSystem) {
     this.group.name = 'gel-effect';
@@ -109,6 +118,21 @@ export class GelEffect {
     for (const e of primaryEvents(timeline, layer, 'exit')) this.exits.push({ t: e.t, speed: e.speed, ...local(e) });
     if (style === 'water') this.addWaterDebris(timeline, layer, samples);
     else this.addDebris(timeline, layer);
+    this.updateSettleT();
+  }
+
+  /** When the cavities, splashes, cones and stains have all come to rest. */
+  private updateSettleT(): void {
+    let settle = 0;
+    for (const child of this.group.children) settle = Math.max(settle, (child.userData.settleT as number | undefined) ?? 0);
+    for (const e of this.entries) settle = Math.max(settle, e.t + SPLASH_S);
+    for (const e of this.exits) settle = Math.max(settle, e.t + CONE_SPRING_S * (1 + Math.log(CONE_MAX / SETTLED_M) / 1.5));
+    this.settleT = Math.max(settle, this.stainsSettleT());
+    this.drawn = null;
+  }
+
+  private stainsSettleT(): number {
+    return this.stains.reduce((m, s) => Math.max(m, s.t + Math.max(STAIN_SOAK_S, s.reach / STAIN_SPEED_M_S)), 0);
   }
 
   clear(): void {
@@ -128,13 +152,27 @@ export class GelEffect {
     this.stains = [];
     this.entries = [];
     this.exits = [];
+    this.settleT = 0;
+    this.drawn = null;
   }
 
   update(t: number): void {
     if (!this.rings.length) return;
+    // Paused, or every part has come to rest since the last frame: the meshes already show this (#144).
+    const gore = !reducedGore();
+    const last = this.drawn;
+    const same = last !== null && last.gore === gore;
+    if (same && (last.t === t || (t >= this.settleT && last.t >= this.settleT))) return;
+    this.drawn = { t, gore };
     this.updateRadii(t);
     if (this.style === 'gel') this.deformBlock(t);
-    for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
+    const stainsSettle = this.stainsSettleT();
+    for (const child of this.group.children) {
+      // Earlier shots' cavities that have come to rest stay as they are while a later one plays.
+      const settle = Math.max(child.userData.settleT as number, stainsSettle);
+      if (same && t >= settle && last.t >= settle) continue;
+      this.updateCavityMesh(child as THREE.Mesh, t);
+    }
   }
 
   /** Frees the cavity meshes; the materials are shared and kept. */
@@ -145,6 +183,7 @@ export class GelEffect {
   /** Blood from a pack burst at world x spreads along the cavity wall from time t, up to `reach` metres each way. */
   addStain(x: number, t: number, reach: number): void {
     this.stains.push({ x, t, reach });
+    this.updateSettleT();
   }
 
   /** How blood-stained the cavity is at world x and time t, 0–1. */
@@ -153,9 +192,9 @@ export class GelEffect {
     for (const s of this.stains) {
       const age = t - s.t;
       if (age <= 0) continue;
-      const front = Math.min(s.reach, age * 30);
+      const front = Math.min(s.reach, age * STAIN_SPEED_M_S);
       const d = Math.abs(x - s.x);
-      if (d < front) k = Math.max(k, Math.min(1, age / 0.6e-3) * (1 - (d / s.reach) ** 2));
+      if (d < front) k = Math.max(k, Math.min(1, age / STAIN_SOAK_S) * (1 - (d / s.reach) ** 2));
     }
     return k;
   }
@@ -257,6 +296,7 @@ export class GelEffect {
     const mesh = new THREE.Mesh(geometry, this.style === 'water' ? this.waterMaterial : this.material);
     mesh.frustumCulled = false;
     mesh.userData.rings = rings;
+    mesh.userData.settleT = rings.reduce((m, ring) => Math.max(m, ringSettleT(ring)), 0);
     // Per-vertex wrinkle offsets so the silhouette crumples, not just the shading.
     const wrinkle = new Float32Array(n * RING_SEGMENTS);
     for (let k = 0; k < wrinkle.length; k++) wrinkle[k] = Math.abs((Math.sin(k * 12.9898) * 43758.5453) % 1);
@@ -446,6 +486,13 @@ export function cavityRiseTime(peak: number): number {
  * Radius of one section of the temporary cavity at time t: it rises to its
  * peak after the bullet passes (at `bornT`), then pulses down to the channel.
  */
+/** When a ring's pulse has died down to less than `SETTLED_M`. */
+function ringSettleT(ring: Ring): number {
+  const rise = cavityRiseTime(ring.peak);
+  const swing = ring.peak - ring.channel;
+  return ring.t + rise * (1 + (swing > SETTLED_M ? PULSE_DECAY * Math.log(swing / SETTLED_M) : 0));
+}
+
 export function cavityRadiusAt(peak: number, channel: number, bornT: number, t: number): number {
   const rise = cavityRiseTime(peak);
   const age = t - bornT;
