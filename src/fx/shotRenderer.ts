@@ -99,6 +99,16 @@ export class ShotRenderer {
     this.timeline = null;
   }
 
+  /** Frees the spare wakes and streaks kept for later shots. */
+  dispose(): void {
+    this.clear();
+    for (const { wake, streak } of this.spareAir) {
+      wake.dispose();
+      streak.dispose();
+    }
+    this.spareAir = [];
+  }
+
   /** Places every projectile at sim time `t`; `shutterS` is one frame's exposure, for motion blur (#74). */
   update(t: number, shutterS = 0): void {
     const timeline = this.timeline;
