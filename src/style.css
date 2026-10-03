@@ -1468,3 +1468,33 @@ body {
     left: calc((100vw - min(340px, 45vw)) / 2);
   }
 }
+
+/* Follow-up to #140. Between 1181 and 1400 px the results stay between the side columns,
+   like the timeline. */
+@media (min-width: 1181px) and (max-width: 1400px) {
+  :not(.comparing) > .shot-results {
+    left: 332px;
+    right: 332px;
+    width: auto;
+    transform: none;
+  }
+}
+
+/* Narrow portrait windows (601–760 px) leave no room for Compare between the title and the
+   controls, so it joins the left column above the target panel. */
+@media (min-width: 601px) and (max-width: 760px) and (min-height: 821px) {
+  .compare-panel {
+    top: 290px;
+    left: 16px;
+    right: auto;
+    margin: 0;
+  }
+
+  /* The results and timeline span the bottom here, so the target panel stops above them and scrolls. */
+  .medium-panel {
+    top: 347px;
+    max-height: calc(100vh - 627px);
+    max-height: calc(100dvh - 627px);
+    overflow-y: auto;
+  }
+}
