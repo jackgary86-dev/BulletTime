@@ -18,6 +18,7 @@ import { createStudio, type LightingMode, type Studio } from './scene/studio';
 import { simulate } from './sim/engine';
 import { seededRandom } from './sim/random';
 import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
+import { patternSeed, roundOffsets } from './sim/firePattern';
 import type { Timeline } from './sim/types';
 import type { FirePlan } from './ui/shotsPanel';
 import type { TargetSetup } from './ui/stackEditor';
@@ -136,18 +137,15 @@ export class Lane {
     const layers = physicsLayers(this.setup.layers);
     const face = faceLimits(this.setup);
     const lineY = this.lineY;
-    const rounds = plan.mode === 'single' ? 1 : plan.count;
-    const rand = seededRandom(9001 + (this.session?.shots.length ?? 0));
+    const offsets = roundOffsets(plan.mode, plan.count, plan.spreadM, seededRandom(patternSeed(plan.mode, this.session?.shots.length ?? 0)));
     const limitY = face.y - 0.01;
     const limitZ = face.z - 0.01;
     const fireStart = this.session ? this.session.duration + SHOT_GAP_S : 0;
     let offset = fireStart;
-    for (let i = 0; i < rounds; i++) {
-      // Groups and bursts scatter around the aim point, uniformly over a disc of the spread radius.
-      const r = plan.mode === 'single' ? 0 : plan.spreadM * Math.sqrt(rand());
-      const a = rand() * Math.PI * 2;
-      const y = Math.max(-limitY, Math.min(limitY, plan.aimY + r * Math.sin(a)));
-      const z = Math.max(-limitZ, Math.min(limitZ, plan.aimZ + r * Math.cos(a)));
+    offsets.forEach((o, i) => {
+      // A group scatters round the aim point; a burst climbs with recoil (#153). Every round stays on the face.
+      const y = Math.max(-limitY, Math.min(limitY, plan.aimY + o.y));
+      const z = Math.max(-limitZ, Math.min(limitZ, plan.aimZ + o.z));
       const part = simulate({
         bullet: this.spec,
         layers,
@@ -161,7 +159,7 @@ export class Lane {
       part.shots[0].aim = { y: lineY - SHOT_Y + y, z };
       this.session = appendShot(this.session, part, offset);
       offset = plan.mode === 'burst' ? fireStart + ((i + 1) * 60) / plan.rpm : offset + part.duration + GROUP_GAP_S;
-    }
+    });
     const timeline = this.session!;
     this.lastFireStart = fireStart;
     this.shot.load(timeline);

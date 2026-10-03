@@ -113,6 +113,15 @@ export function mountScrubber(root: HTMLElement, playback: Playback): Scrubber {
         mark.title = `${e.type} at ${formatTime(e.t)}`;
         markers.append(mark);
       }
+      // Dead air between rounds that playback jumps over (#153), drawn as a hatched band.
+      for (const [from, to] of playback.skipped) {
+        if (from < 0 || from >= timeline.duration) continue;
+        const band = document.createElement('span');
+        band.className = 'skip-band';
+        band.style.left = `${(from / timeline.duration) * 100}%`;
+        band.style.width = `${((Math.min(to, timeline.duration) - from) / timeline.duration) * 100}%`;
+        markers.append(band);
+      }
       sync();
     },
     hide() {
