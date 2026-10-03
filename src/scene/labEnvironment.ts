@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TARGET_FOCUS } from './camera';
+import { disposeInstanceBuffers } from './dispose';
 import { createLabSet } from './labSet';
 import type { SoftboxSpec } from './softbox';
 
@@ -40,5 +41,7 @@ export function createLabEnvironment(renderer: THREE.WebGLRenderer, softboxes: S
     // Shared cached textures stay alive; only the materials go.
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.dispose();
   });
+  // The acoustic panels are instanced; without this, every lane leaked their instance buffer (#133).
+  disposeInstanceBuffers(scene);
   return texture;
 }

@@ -35,7 +35,7 @@ const GROUP_GAP_S = 1e-3;
  * beside it on the same clock and camera.
  */
 export class Lane {
-  readonly scene = new THREE.Scene();
+  readonly scene: THREE.Scene;
   readonly studio: Studio;
   readonly postFx: PostFx;
   readonly shot = new ShotRenderer();
@@ -49,12 +49,19 @@ export class Lane {
   private lighting: LightingMode = 'lab';
   private quality: QualitySettings = QUALITY.medium;
 
+  /**
+   * `scene` lets a new lane reuse the emptied scene of a disposed one: the
+   * renderer keeps per-scene buffers it never frees (the transmission pass that
+   * draws gel and glass), so a fresh scene each time would leak them (#133).
+   */
   constructor(
     renderer: THREE.WebGLRenderer,
     camera: THREE.PerspectiveCamera,
     public setup: TargetSetup,
     public spec: BulletSpec,
+    scene: THREE.Scene = new THREE.Scene(),
   ) {
+    this.scene = scene;
     this.studio = createStudio(this.scene, renderer);
     this.postFx = createPostFx(renderer, this.scene, camera);
     this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0));
@@ -179,6 +186,8 @@ export class Lane {
     disposeTree(this.scene, keep);
     for (const pass of this.postFx.composer.passes) pass.dispose();
     this.postFx.composer.dispose();
+    // Empty the scene so the next lane can reuse it.
+    this.scene.clear();
   }
 
   /** Advances the shot, effects and muzzle flash to sim time `t` (null when nothing is playing). */
