@@ -59,7 +59,12 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
 
   for (const p of STACK_PRESETS) preset.append(new Option(p.name, p.id));
   preset.append(new Option('Ballistic test dummy', DUMMY_PRESET_ID));
-  for (const medium of MEDIA.filter((m) => !m.dummyOnly)) select.append(new Option(medium.name, medium.id));
+  const materials = document.createElement('optgroup');
+  materials.label = 'Materials';
+  const objects = document.createElement('optgroup');
+  objects.label = 'Objects';
+  for (const medium of MEDIA.filter((m) => !m.dummyOnly)) (medium.shape ? objects : materials).append(new Option(medium.name, medium.id));
+  select.append(materials, objects);
 
   const initial = getMedium(options.initialId);
   const setup: TargetSetup = { layers: [{ medium: initial, thickness: initial.thickness.default, gapM: 0 }], angleDeg: 0 };
@@ -124,6 +129,10 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
     thicknessSlider.step = String((max - min) / 200);
     thicknessSlider.value = String(layer.thickness);
     q('.thickness-value').textContent = formatLength(layer.thickness);
+    // Objects of a fixed size (a bowling ball is always 21.6 cm) have nothing to adjust.
+    const fixed = min === max;
+    thicknessSlider.hidden = fixed;
+    q('label[for="thickness-slider"]').hidden = fixed;
     q('.gap-row').hidden = selected === 0;
     gapSlider.value = String(layer.gapM);
     q('.gap-value').textContent = formatLength(layer.gapM);

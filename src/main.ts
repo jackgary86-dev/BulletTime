@@ -266,7 +266,9 @@ async function bootstrap(): Promise<void> {
   renderer.setAnimationLoop((timestamp) => {
     timer.update(timestamp);
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
-    const delta = Math.min(timer.getDelta(), 0.1);
+    // Never negative: after a long stall (shaders compiling for a new target) the frame timestamps can
+    // step backwards, and a negative step blows up the camera spring into NaN.
+    const delta = Math.max(0, Math.min(timer.getDelta(), 0.1));
     // Read before update: the frame that reaches the end of the shot stops playback but still plays its sounds.
     const advancing = playback.isPlaying;
     const t = playback.update(delta);

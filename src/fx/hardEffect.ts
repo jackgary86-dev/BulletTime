@@ -30,6 +30,8 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
     if (e.layer === undefined) continue;
     const medium = layers[e.layer]?.medium;
     if (!medium) continue;
+    // A bowling ball is concrete to the physics but draws its own effect (objectEffect.ts, #156).
+    if (medium.shape && medium.behaviour === 'concrete') continue;
     // A hollow block's front shell: the next physics layer is the same block's back shell.
     const next = layers[e.layer + 1];
     const frontShell = !!next && next.stack === layers[e.layer].stack;

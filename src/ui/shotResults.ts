@@ -1,3 +1,4 @@
+import { energyIntoLayer, objectOutcome } from '../data/objects';
 import type { StackLayer } from '../data/stacks';
 import type { OrganicResult } from '../fx/bloodPackEffect';
 import type { TargetLayer } from '../sim/engine';
@@ -113,6 +114,11 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
       const parts: string[] = [];
       if (stack.length > 1) parts.push(layerTable(timeline, stack, layers));
       if (organic) parts.push(organicTable(organic));
+      // Showpiece objects (#156): what happened to the thing itself.
+      layers.forEach((l, i) => {
+        const line = objectOutcome(l.medium, energyIntoLayer(timeline, i), s.passedThrough);
+        if (line) parts.push(`<p class="object-line">${line}</p>`);
+      });
       extra.innerHTML = parts.join('');
       panel.hidden = false;
       layout();
@@ -148,7 +154,9 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
         ? 'Ricocheted off the face: no penetration.'
         : s.finalState === 'detonated'
           ? 'Detonated on contact: no penetration.'
-          : 'Stopped at the surface.';
+          : s.passedThrough
+            ? 'Straight through: too thin to chart.'
+            : 'Stopped at the surface.';
       return null;
     }
     svg.style.display = '';

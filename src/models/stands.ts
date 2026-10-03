@@ -38,7 +38,8 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
       return createFrame(spec, t, shotY, standSteel, false);
     case 'mildSteel':
     case 'ar500':
-      return createHanger(spec, t, shotY);
+    case 'gong':
+      return createHanger(spec, t, shotY, look === 'gong');
     case 'glass':
       return createFrame(spec, t, shotY, aluminium, false);
     case 'pine':
@@ -157,7 +158,7 @@ function createFrame(spec: MediumSpec, t: number, shotY: number, finish: THREE.M
 }
 
 /** A steel target hanger: a gallows frame with two chains holding the plate. */
-function createHanger(spec: MediumSpec, t: number, shotY: number): THREE.Group {
+function createHanger(spec: MediumSpec, t: number, shotY: number, round = false): THREE.Group {
   const hanger = new THREE.Group();
   hanger.name = 'stand-hanger';
   const floor = -shotY;
@@ -174,12 +175,14 @@ function createHanger(spec: MediumSpec, t: number, shotY: number): THREE.Group {
   hanger.add(box(0.03, 0.03, postZ * 2 + 0.05, standSteel, fx, beamY, 0));
   // Arms reaching forward from the beam to above the plate.
   for (const sz of [-1, 1]) {
-    const armZ = sz * (spec.widthM / 2 - 0.03);
+    // A round gong hangs from two chains close together, hooked into its rim.
+    const armZ = sz * (round ? spec.widthM * 0.2 : spec.widthM / 2 - 0.03);
+    const rimY = round ? Math.sqrt(plateTop ** 2 - armZ ** 2) : plateTop;
     const armLength = fx - t / 2;
     hanger.add(box(armLength + 0.015, 0.015, 0.015, standSteel, t / 2 + armLength / 2, beamY, armZ));
-    hanger.add(createChain(new THREE.Vector3(t / 2, beamY - 0.008, armZ), plateTop + 0.004));
+    hanger.add(createChain(new THREE.Vector3(t / 2, beamY - 0.008, armZ), rimY + 0.004));
     // The bolt tab on the plate the chain hooks into.
-    hanger.add(box(t + 0.004, 0.016, 0.02, chainSteel, t / 2, plateTop + 0.002, armZ));
+    hanger.add(box(t + 0.004, 0.016, 0.02, chainSteel, t / 2, rimY - 0.002, armZ));
   }
   return hanger;
 }

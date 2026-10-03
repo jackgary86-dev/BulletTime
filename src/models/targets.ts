@@ -4,7 +4,7 @@ import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { concreteMaps, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
+import { bowlingBallTexture, watermelonTexture, concreteMaps, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
 export { standSteel } from './stands';
 
@@ -18,6 +18,8 @@ export const GEL_BODY_NAME = 'gel-body';
 export const WATER_BODY_NAME = 'water-body';
 export const BLOOD_PACK_PREFIX = 'blood-pack-';
 export const BONE_ROD_NAME = 'bone-rod';
+/** Name of a showpiece object's body (#156), so its effect can hide, shake or break it. */
+export const OBJECT_BODY_NAME = 'object-body';
 
 /** Synthetic bone simulant: off-white, slightly yellow. */
 export const BONE_COLOR = 0xe9dfc8;
@@ -341,9 +343,129 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         }),
       );
 
+    case 'bowlingBall':
+    case 'steelBall':
+    case 'gong':
+    case 'watermelon':
+    case 'bottle': {
+      const body = buildObject(look, t, h, w);
+      body.name = OBJECT_BODY_NAME;
+      return body;
+    }
+
     case 'bone':
       // Bone simulant normally lives inside the test dummy (models/dummy.ts); on its own it is a plain plate.
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: BONE_COLOR, roughness: 0.6 }));
+  }
+}
+
+/** Showpiece objects (#156), centred on their own origin like every body, the shot line along +x. */
+function buildObject(look: 'bowlingBall' | 'steelBall' | 'gong' | 'watermelon' | 'bottle', t: number, h: number, w: number): THREE.Object3D {
+  switch (look) {
+    case 'bowlingBall': {
+      const r = h / 2;
+      const ball = new THREE.Group();
+      const shell = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 64, 40),
+        new THREE.MeshPhysicalMaterial({ map: bowlingBallTexture(), roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.04 }),
+      );
+      ball.add(shell);
+      // Thumb and two finger holes on the top, turned away from the shooter.
+      const holeMaterial = new THREE.MeshStandardMaterial({ color: 0x050608, roughness: 0.9 });
+      const holes: [number, number, number][] = [
+        [0.012, 0.35, 0],
+        [0.01, -0.05, -0.22],
+        [0.01, -0.05, 0.22],
+      ];
+      for (const [radius, tilt, spin] of holes) {
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), holeMaterial);
+        const dir = new THREE.Vector3(Math.sin(tilt) * 0.6 + 0.35, 0.8, Math.sin(spin)).normalize();
+        hole.position.copy(dir).multiplyScalar(r * 1.001);
+        hole.lookAt(dir.clone().multiplyScalar(r * 2));
+        ball.add(hole);
+      }
+      return ball;
+    }
+
+    case 'steelBall': {
+      const r = h / 2;
+      const ball = new THREE.Group();
+      ball.add(new THREE.Mesh(new THREE.SphereGeometry(r, 64, 40), new THREE.MeshStandardMaterial({ color: 0xe2e6ea, metalness: 1, roughness: 0.26, envMapIntensity: 2.6 })));
+      // A rubber ring under it so it can't roll off the cart.
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.45, r * 0.08, 10, 32), new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = -r * 0.9 + r * 0.08;
+      ball.add(ring);
+      return ball;
+    }
+
+    case 'gong': {
+      // A round plate facing the shooter: orange paint on the faces, bare steel round the cut edge.
+      const mill = steelPlateMaps('mill');
+      const edge = new THREE.MeshStandardMaterial({ map: mill.map, roughnessMap: mill.roughnessMap, metalness: 0.75, roughness: 1, envMapIntensity: 2 });
+      const paint = new THREE.MeshStandardMaterial({ color: 0xd8642a, roughness: 0.55, metalness: 0.05 });
+      const disc = new THREE.CylinderGeometry(h / 2, h / 2, t, 72);
+      disc.rotateZ(Math.PI / 2);
+      // CylinderGeometry groups: side, top, bottom.
+      return new THREE.Mesh(disc, [edge, paint, paint]);
+    }
+
+    case 'watermelon': {
+      const geometry = new THREE.SphereGeometry(1, 64, 40);
+      // Poles along the melon's length (the shot line, x), so the stripes run end to end.
+      geometry.rotateZ(-Math.PI / 2);
+      const pos = geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) pos.setXYZ(i, (pos.getX(i) * t) / 2, (pos.getY(i) * h) / 2, (pos.getZ(i) * w) / 2);
+      geometry.computeVertexNormals();
+      return new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({ map: watermelonTexture(), roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.35 }));
+    }
+
+    case 'bottle': {
+      const r = w / 2;
+      const bottle = new THREE.Group();
+      // Side profile from the base up: the straight body, the shoulder, the neck and the lip.
+      const base = -h / 2;
+      const profile = [
+        [0, base],
+        [r * 0.92, base],
+        [r, base + 0.006],
+        [r, h / 2],
+        [r * 0.8, h / 2 + 0.03],
+        [r * 0.36, h / 2 + 0.06],
+        [r * 0.32, h / 2 + 0.1],
+        [r * 0.38, h / 2 + 0.104],
+        [r * 0.38, h / 2 + 0.11],
+      ].map(([x, y]) => new THREE.Vector2(x, y));
+      const glass = new THREE.MeshPhysicalMaterial({
+        color: 0x7cc79a,
+        roughness: 0.03,
+        transparent: true,
+        opacity: 0.32,
+        specularIntensity: 1,
+        clearcoat: 1,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      bottle.add(new THREE.Mesh(new THREE.LatheGeometry(profile, 48), glass));
+      // Water up into the shoulder.
+      const fill = [
+        [0, base + 0.004],
+        [r * 0.94, base + 0.004],
+        [r * 0.94, h / 2],
+        [r * 0.74, h / 2 + 0.03],
+        [0, h / 2 + 0.03],
+      ].map(([x, y]) => new THREE.Vector2(x, y));
+      const water = new THREE.Mesh(
+        new THREE.LatheGeometry(fill, 48),
+        new THREE.MeshPhysicalMaterial({ color: 0xcfeef5, roughness: 0.04, transparent: true, opacity: 0.45, specularIntensity: 1, depthWrite: false }),
+      );
+      water.renderOrder = -1;
+      bottle.add(water);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.4, r * 0.4, 0.014, 24), new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.9, roughness: 0.3 }));
+      cap.position.y = h / 2 + 0.112;
+      bottle.add(cap);
+      return bottle;
+    }
   }
 }
 

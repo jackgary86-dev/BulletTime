@@ -584,3 +584,77 @@ export function paintFlakeNormalMap(): THREE.Texture {
     return texture;
   });
 }
+
+/**
+ * A reactive-resin bowling ball's marbled swirl (#156): deep blue with violet
+ * and pale veins. Wraps left to right, round the ball.
+ */
+export function bowlingBallTexture(): THREE.Texture {
+  return cached('bowling-ball', () => {
+    const [c, ctx] = canvas(512, 256);
+    ctx.fillStyle = '#16255e';
+    ctx.fillRect(0, 0, 512, 256);
+    const rand = seededRandom(156);
+    // Broad, soft swirls of colour, then a few thin bright veins, like poured resin.
+    const veins: [string, number, number, number][] = [
+      ['rgba(110, 60, 170, 0.5)', 14, 34, 10],
+      ['rgba(40, 90, 200, 0.45)', 12, 26, 8],
+      ['rgba(190, 200, 240, 0.25)', 6, 4, 1.5],
+    ];
+    for (const [color, count, width, blur] of veins) {
+      ctx.strokeStyle = color;
+      ctx.lineCap = 'round';
+      ctx.filter = `blur(${blur}px)`;
+      for (let i = 0; i < count; i++) {
+        ctx.lineWidth = width * (0.4 + rand());
+        ctx.beginPath();
+        let x = rand() * 512;
+        let y = rand() * 256;
+        ctx.moveTo(x, y);
+        for (let k = 0; k < 6; k++) {
+          const nx = x + (rand() - 0.3) * 160;
+          const ny = y + (rand() - 0.5) * 90;
+          ctx.quadraticCurveTo(x + (rand() - 0.5) * 120, y + (rand() - 0.5) * 120, nx, ny);
+          x = nx;
+          y = ny;
+        }
+        ctx.stroke();
+        // Draw it again one width round so the swirl wraps seamlessly.
+        ctx.save();
+        ctx.translate(-512, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.filter = 'none';
+    return toTexture(c);
+  });
+}
+
+/** Watermelon rind (#156): dark green stripes, ragged at the edges, on a pale green ground. Stripes run along v. */
+export function watermelonTexture(): THREE.Texture {
+  return cached('watermelon', () => {
+    const [c, ctx] = canvas(512, 256);
+    ctx.fillStyle = '#7fa65a';
+    ctx.fillRect(0, 0, 512, 256);
+    const rand = seededRandom(1561);
+    const stripes = 14;
+    for (let s = 0; s < stripes; s++) {
+      const x0 = (s / stripes) * 512;
+      ctx.fillStyle = '#1f4a1c';
+      ctx.beginPath();
+      ctx.moveTo(x0, 0);
+      // Ragged, wandering edges down the length of the melon.
+      for (let y = 0; y <= 256; y += 8) ctx.lineTo(x0 - 6 + rand() * 4 + Math.sin(y * 0.05 + s) * 4, y);
+      for (let y = 256; y >= 0; y -= 8) ctx.lineTo(x0 + 18 + rand() * 6 + Math.sin(y * 0.04 + s * 2) * 5, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Faint mottling.
+    for (let i = 0; i < 1400; i++) {
+      ctx.fillStyle = `rgba(${rand() < 0.5 ? '20,60,20' : '160,200,120'}, ${0.08 + rand() * 0.1})`;
+      ctx.fillRect(rand() * 512, rand() * 256, 2 + rand() * 5, 2 + rand() * 5);
+    }
+    return toTexture(c);
+  });
+}

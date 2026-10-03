@@ -38,7 +38,22 @@ export type MediumLook =
   | 'sandbag'
   | 'glass'
   | 'ice'
-  | 'bone';
+  | 'bone'
+  // Showpiece objects (#156)
+  | 'bowlingBall'
+  | 'steelBall'
+  | 'gong'
+  | 'watermelon'
+  | 'bottle';
+
+/**
+ * Outline of a showpiece object across the shot line (#156). Slabs leave it
+ * out. The path through the object, and where the aim may go, follow it.
+ * - sphere / ellipsoid: round in both directions (the shot line runs through its depth).
+ * - cylinder: an upright cylinder, round across (z) and straight up and down (y).
+ * - disc: a flat disc facing the shooter, round on the face but of even thickness.
+ */
+export type ObjectShape = 'sphere' | 'ellipsoid' | 'cylinder' | 'disc';
 
 export interface RangeM {
   min: number;
@@ -88,6 +103,8 @@ export interface MediumSpec {
   organicLayout?: string;
   /** Simulants that only appear inside the test dummy (#25), not in the material list. */
   dummyOnly?: boolean;
+  /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
+  shape?: ObjectShape;
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -443,6 +460,104 @@ export const MEDIA: MediumSpec[] = [
     cavityPressurePa: 1.0e6,
     allowsExpansion: true,
     dummyOnly: true,
+  },
+  // --- Showpiece objects (#156): everyday things to destroy, with their own models and effects. ---
+  {
+    id: 'bowling-ball',
+    name: 'Bowling ball',
+    description:
+      'A 16 lb ball: a hard polyurethane shell round a dense resin core. Pistol rounds flatten and bury themselves in it; rifle rounds crack it open in a burst of chunks and dust.',
+    behaviour: 'concrete',
+    look: 'bowlingBall',
+    shape: 'sphere',
+    density: 1375, // 7.26 kg in a 21.6 cm sphere
+    thickness: { min: 0.216, max: 0.216, default: 0.216 },
+    heightM: 0.216,
+    widthM: 0.216,
+    angleAdjustable: false,
+    dragCoefficient: 0.8,
+    resistancePa: 150e6, // 9mm FMJ ≈ 6 cm in, .308 just through
+    hardness: 0.5,
+    yawNeckScale: 0.15,
+    allowsExpansion: false,
+  },
+  {
+    id: 'steel-ball',
+    name: 'Steel ball (10 cm)',
+    description: 'A solid ball of hardened steel. Every round splashes against it in a flash of sparks and a flat disc of lead spray; the ball only takes a bright mark.',
+    behaviour: 'steel',
+    look: 'steelBall',
+    shape: 'sphere',
+    density: 7850,
+    thickness: { min: 0.1, max: 0.1, default: 0.1 },
+    heightM: 0.1,
+    widthM: 0.1,
+    angleAdjustable: false,
+    dragCoefficient: 1.0,
+    resistancePa: 3.6e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 55,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+  },
+  {
+    id: 'gong',
+    name: 'Steel gong (swinging plate)',
+    description: 'A round mild-steel plate hung on two chains. Pistol rounds dent it in a shower of sparks and set it shuddering; rifle rounds punch a glowing hole straight through.',
+    behaviour: 'steel',
+    look: 'gong',
+    shape: 'disc',
+    density: 7850,
+    thickness: { min: 0.003, max: 0.012, default: 0.006 },
+    heightM: 0.3,
+    widthM: 0.3,
+    angleAdjustable: false,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 60,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+  },
+  {
+    id: 'watermelon',
+    name: 'Watermelon',
+    description:
+      'The classic. A tough rind round flesh that is over 90% water. A fast rifle round sets off a hydrodynamic burst: the rind splits outward and the red flesh sprays across the lab.',
+    behaviour: 'water',
+    look: 'watermelon',
+    shape: 'ellipsoid',
+    density: 960,
+    // Lying on its side, shot end to end, so the side camera sees its full length.
+    thickness: { min: 0.3, max: 0.3, default: 0.3 },
+    heightM: 0.2,
+    widthM: 0.2,
+    angleAdjustable: false,
+    dragCoefficient: 0.35,
+    resistancePa: 0.8e6, // a little firmer than water
+    hardness: 0.02,
+    yawNeckScale: 0.7,
+    cavityPressurePa: 0.6e6,
+    allowsExpansion: true,
+  },
+  {
+    id: 'bottle',
+    name: 'Glass bottle of water',
+    description: 'A litre glass bottle, full. The glass shatters into a cloud of shards while the water inside bursts outward from the shot line.',
+    behaviour: 'water',
+    look: 'bottle',
+    shape: 'cylinder',
+    density: 1000,
+    thickness: { min: 0.085, max: 0.085, default: 0.085 },
+    heightM: 0.18, // the straight body; the shoulder and neck rise above it
+    widthM: 0.085,
+    angleAdjustable: false,
+    dragCoefficient: 0.35,
+    resistancePa: 1.5e6, // water plus two thin glass walls
+    hardness: 0.1,
+    yawNeckScale: 0.6,
+    cavityPressurePa: 0.6e6,
+    allowsExpansion: true,
   },
 ];
 
