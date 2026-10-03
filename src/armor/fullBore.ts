@@ -33,11 +33,12 @@
  */
 
 import {
-  CRATER_PROFILE_SAMPLES,
   MAX_TIMELINE_FRAMES,
   TIMELINE_FRAMES,
   normalizeShot,
   losThickness,
+  roundBottomCraterProfile,
+  roundBottomRadius,
   sampleFrames,
   timelineDuration,
   type ArmorEjecta,
@@ -193,9 +194,8 @@ export function fullBoreShot(input: ArmorShot): ArmorTimeline {
     return REAR_BULGE_GAIN * Math.max(0, REAR_BULGE_ONSET_RATIO * D - remaining);
   };
   // The crater is a bore of the plug diameter with a round nose at the bottom: radius at height s above the bottom.
-  const boreRadius = (s: number) => (s >= holeRadius ? holeRadius : Math.sqrt(s * (2 * holeRadius - s)));
-  const craterProfile = (depth: number, through: boolean) =>
-    Array.from({ length: CRATER_PROFILE_SAMPLES }, (_, i) => (through ? holeRadius : boreRadius(depth * (1 - i / (CRATER_PROFILE_SAMPLES - 1)))));
+  const boreRadius = (s: number) => roundBottomRadius(s, holeRadius);
+  const craterProfile = (depth: number, through: boolean) => roundBottomCraterProfile(depth, holeRadius, through);
 
   const frameAtTime = (t: number): ArmorFrame => {
     let travel: number;

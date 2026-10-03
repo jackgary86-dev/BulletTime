@@ -5,6 +5,7 @@
  */
 
 import { fullBoreShot } from './fullBore';
+import { longRodShot } from './longRod';
 import type { ArmorShot, ArmorTimeline } from './model';
 
 /** Runs the model for the shot's projectile family. */
@@ -13,6 +14,8 @@ export function simulateArmor(shot: ArmorShot): ArmorTimeline {
   switch (family) {
     case 'ap-shot':
       return fullBoreShot(shot);
+    case 'apfsds':
+      return longRodShot(shot);
     default:
       throw new Error(`The armor lab does not model '${family}' against plate yet`);
   }
