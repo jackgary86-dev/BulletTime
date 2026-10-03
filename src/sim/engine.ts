@@ -446,6 +446,9 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
 
   // Ricochet off the face at shallow angles.
   if (medium.ricochetAngleDeg !== undefined && incidence >= (medium.ricochetAngleDeg * Math.PI) / 180 && body.kind !== 'fragment') {
+    // The impact is logged at the arriving speed, before the bounce takes its share.
+    if (first) body.impactSpeed = body.speed;
+    event(ctx, body, first ? 'impact' : 'enter', { normal: faceNormal, layer: index });
     const [lo, hi] = P.ricochetRestitution;
     body.dir = normalize(reflect(body.dir, n));
     const kept = lo + (hi - lo) * medium.hardness;
@@ -455,7 +458,6 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
     body.state = 'ricocheted';
     body.ricocheted = true;
     body.impacted = true;
-    event(ctx, body, first ? 'impact' : 'enter', { normal: faceNormal, layer: index });
     event(ctx, body, 'ricochet', { normal: faceNormal, layer: index });
     return 'ricochet';
   }
