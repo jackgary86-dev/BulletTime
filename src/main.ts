@@ -24,6 +24,8 @@ import { initialQuality, QUALITY, saveQuality, type QualityLevel } from './scene
 import type { Timeline } from './sim/types';
 import { attachLoader } from './ui/loader';
 import { contentGate } from './ui/contentWarning';
+import { buildCues, CueTrack } from './audio/cues';
+import { playSound, unlockAudio } from './audio/sounds';
 
 /** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
 const COMPARE_FOV = 48;
@@ -43,6 +45,8 @@ async function bootstrap(): Promise<void> {
   const baseFov = camera.fov;
 
   const playback = new Playback();
+  // Shot and impact sounds (#120), from lane A only: two lanes at once would just be noise.
+  const cueTrack = new CueTrack();
   mountOverlay(overlay);
 
   const hud = mountCameraHud(overlay);
@@ -79,6 +83,7 @@ async function bootstrap(): Promise<void> {
 
   const clearShot = () => {
     for (const lane of lanes()) lane.clear();
+    cueTrack.clear();
     shotsPanel.setSession(null);
     playback.stop();
     results.hide();
@@ -106,7 +111,9 @@ async function bootstrap(): Promise<void> {
     // Replays the last Fire: the last single shot, or the whole group or burst.
     onReplay: () => {
       if (!playback.timeline || !laneA) return;
+      unlockAudio();
       playback.start(playback.timeline, laneA.lastFireStart);
+      cueTrack.rewind(laneA.lastFireStart);
       scrubber.sync();
     },
     onReset: () => {
@@ -129,7 +136,9 @@ async function bootstrap(): Promise<void> {
         clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
       }
       director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth);
+      unlockAudio();
       playback.start(clock, laneA.lastFireStart);
+      cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
       scrubber.load(clock);
       shotsPanel.setSession(sessionSummary(timeline));
       panel.setHasShot(true);
@@ -207,12 +216,15 @@ async function bootstrap(): Promise<void> {
     timer.update(timestamp);
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
     const delta = Math.min(timer.getDelta(), 0.1);
+    // Read before update: the frame that reaches the end of the shot stops playback but still plays its sounds.
+    const advancing = playback.isPlaying;
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
       hud.set(t, playback.fps, playback.shutterS);
       scrubber.sync();
+      for (const sound of cueTrack.update(t, advancing)) playSound(sound);
     } else hud.hide();
     director.update(delta, t, playback.timeline);
 
