@@ -96,7 +96,18 @@ export interface ArmorFrame {
 }
 
 /** Event kinds. Later models extend this union with their own. */
-export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop';
+export type ArmorEventType =
+  | 'impact'
+  | 'shatter'
+  | 'plug'
+  | 'perforate'
+  | 'stop'
+  // Long rod (#162): the rod stops eroding and digs on as a rigid body; the crater stops deepening while the rod
+  // erodes against its floor; the rod is used up; the last of the plate breaks out of the rear face.
+  | 'rigid'
+  | 'no-penetration'
+  | 'rod-consumed'
+  | 'breakout';
 
 export interface ArmorEvent {
   /** Time since impact, s. */
@@ -111,7 +122,13 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration';
+export type ArmorMechanism =
+  | 'Plugging'
+  | 'Plastic penetration'
+  // Long rod (#162), by the Alekseevskii–Tate regime that did most of the digging.
+  | 'Hydrodynamic erosion'
+  | 'Rigid-rod penetration'
+  | 'No penetration (rod erodes at the face)';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
@@ -132,6 +149,13 @@ export interface ArmorEnergy {
   plateWorkJ: number;
   /** Kinetic energy of the plate material thrown out behind the plate (plug, scab or debris). */
   ejectaJ: number;
+  /**
+   * For an eroding penetrator (long rod #162): the kinetic energy the rod
+   * material carried as it was eroded away at the crater bottom. It lines the
+   * crater as debris and ends up as heat there. Absent for a shot that does
+   * not erode.
+   */
+  erodedRodJ?: number;
 }
 
 export interface ArmorResult {
@@ -173,6 +197,28 @@ export interface ArmorTimeline {
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/**
+ * Radius, m, of a bore of radius `radius` with a round (hemispherical)
+ * bottom, at height `s` above the bottom: the round nose over the first
+ * radius, then the full bore. Also the crater's mouth radius when it is `s`
+ * deep.
+ */
+export function roundBottomRadius(s: number, radius: number): number {
+  return s >= radius ? radius : Math.sqrt(Math.max(0, s * (2 * radius - s)));
+}
+
+/**
+ * A frame's `craterProfile` for a round-bottomed bore of radius `radius` dug
+ * `depth` deep: `CRATER_PROFILE_SAMPLES` radii from the face to the bottom.
+ * Once the hole goes right through (`through`), the bore is `radius` all the
+ * way.
+ */
+export function roundBottomCraterProfile(depth: number, radius: number, through = false): number[] {
+  return Array.from({ length: CRATER_PROFILE_SAMPLES }, (_, i) =>
+    through ? radius : roundBottomRadius(depth * (1 - i / (CRATER_PROFILE_SAMPLES - 1)), radius),
+  );
+}
 
 /**
  * Line-of-sight thickness, m: the path through a plate of normal thickness

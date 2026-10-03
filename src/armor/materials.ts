@@ -118,7 +118,10 @@ export const PLATE_MATERIALS: PlateMaterial[] = [
     description: 'A light armor alloy, a third the density of steel. It needs about three times the thickness of RHA to stop the same shot.',
     density: 2660,
     yieldPa: 0.23e9,
-    targetResistancePa: 1.3e9,
+    // Rt for aluminium armor alloys spans roughly 1–2 GPa in the open literature. 1.8 GPa sits in that range and
+    // above the tungsten rod's 1.5 GPa yield: with Rt under Yp, the Tate model drives a rod deeper into aluminium
+    // than the hydrodynamic limit L·√(ρp/ρt), which no real rod does (#162).
+    targetResistancePa: 1.8e9,
     brinell: 75,
     spallStrengthPa: 1.0e9,
     soundSpeed: 6320,

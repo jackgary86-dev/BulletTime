@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fullBoreShot } from './fullBore';
+import { longRodShot } from './longRod';
 import { getPlateMaterial } from './materials';
 import type { ArmorShot } from './model';
 import { MUNITION_FAMILIES, impactState } from './munitions';
@@ -26,8 +27,18 @@ describe('simulateArmor', () => {
     expect(simulateArmor(rhaShot({ obliquityDeg: 85 })).shot.obliquityDeg).toBe(75);
   });
 
+  it('runs the long-rod model for APFSDS', () => {
+    const shot = rhaShot({ impact: impactState('apfsds', 120, 1650), thicknessM: 2 });
+    const tl = simulateArmor(shot);
+    expect(tl).toEqual(longRodShot(shot));
+    expect(tl.result.mechanism).toBe('Hydrodynamic erosion');
+    expect(tl.result.penetrationM).toBeGreaterThan(0.55);
+    expect(tl.result.penetrationM).toBeLessThan(0.75);
+    expect(simulateArmor({ ...shot, obliquityDeg: 85 }).shot.obliquityDeg).toBe(75);
+  });
+
   it('throws for the families later tickets will model', () => {
-    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot')) {
+    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds')) {
       expect(() => simulateArmor(rhaShot({ impact: impactState(family.id, 120) }))).toThrow(/not model/);
     }
   });
