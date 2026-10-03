@@ -248,11 +248,9 @@ export class HoleMarks {
 
   clear(): void {
     for (const { object } of this.holes) {
-      object.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        mesh.geometry?.dispose();
-        (mesh.material as THREE.Material | undefined)?.dispose?.();
-      });
+      // Materials hold no textures and are left to the garbage collector:
+      // disposing them would make three.js recompile their shaders next shot (#135).
+      object.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
       this.group.remove(object);
     }
     this.holes.length = 0;
