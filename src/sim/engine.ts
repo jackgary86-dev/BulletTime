@@ -77,6 +77,8 @@ interface DamageNearBody {
   layer: number;
   anchor: Vec3;
   bodyRadius: number;
+  /** The lists only hold while the body is at least this big (see `findDenseDamage`). */
+  minBodyRadius: number;
   /** Points whose hole or channel the body could be following. */
   channels: PriorDamage[];
   /** Points close enough to weaken the material around the body. */
@@ -87,27 +89,163 @@ const DAMAGE_CACHE_MARGIN_M = 0.01;
 
 const distance = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
+/**
+ * One layer's earlier damage in grids (#142), so a body only looks at points near it: cells
+ * about a channel wide to find the channels it could be following, fine cells to find the
+ * nearest points that weaken it, and cells as wide as the weakening reach to find them all.
+ */
+interface LayerDamage {
+  all: PriorDamage[];
+  channelCell: number;
+  channel: Map<number, PriorDamage[]>;
+  fine: Map<number, PriorDamage[]>;
+  coarse: Map<number, PriorDamage[]>;
+  maxRadius: number;
+}
+
+const FINE_CELL_M = 0.01;
+const COARSE_CELL_M = WEAKENED_RADIUS_M + DAMAGE_CACHE_MARGIN_M;
+/** Layers (and neighbourhoods) with more earlier damage points than this are searched through grids. */
+const DENSE_DAMAGE_POINTS = 256;
+/** Hits the weakening count stops at (see `damageFactor`). */
+const MAX_WEAKENING_HITS = 4;
+
+const cellKey = (ix: number, iy: number, iz: number) => ((ix + 4096) * 8192 + (iy + 4096)) * 8192 + (iz + 4096);
+
+function addToGrid(grid: Map<number, PriorDamage[]>, cell: number, d: PriorDamage): void {
+  const key = cellKey(Math.floor(d.pos.x / cell), Math.floor(d.pos.y / cell), Math.floor(d.pos.z / cell));
+  const list = grid.get(key);
+  if (list) list.push(d);
+  else grid.set(key, [d]);
+}
+
+function layerDamage(ctx: Context, layer: number): LayerDamage | undefined {
+  if (!ctx.damageByLayer) {
+    const byLayer = new Map<number, PriorDamage[]>();
+    for (const d of ctx.setup.damage ?? []) {
+      const list = byLayer.get(d.layer);
+      if (list) list.push(d);
+      else byLayer.set(d.layer, [d]);
+    }
+    ctx.damageByLayer = new Map();
+    for (const [index, list] of byLayer) {
+      const maxRadius = list.reduce((m, d) => Math.max(m, d.radius), 0);
+      const channelCell = Math.max(FINE_CELL_M, maxRadius * 1.5 + DAMAGE_CACHE_MARGIN_M);
+      const grids: LayerDamage = { all: list, channelCell, channel: new Map(), fine: new Map(), coarse: new Map(), maxRadius };
+      if (list.length > DENSE_DAMAGE_POINTS)
+        for (const d of list) {
+          addToGrid(grids.channel, channelCell, d);
+          addToGrid(grids.fine, FINE_CELL_M, d);
+          addToGrid(grids.coarse, COARSE_CELL_M, d);
+        }
+      ctx.damageByLayer.set(index, grids);
+    }
+  }
+  return ctx.damageByLayer.get(layer);
+}
+
+/** Cell offsets within `range` cells, nearest first, with the least distance (in cells) any point could be. */
+let fineOffsets: { dx: number; dy: number; dz: number; gap: number }[] | undefined;
+function nearestFirstOffsets(): { dx: number; dy: number; dz: number; gap: number }[] {
+  if (fineOffsets) return fineOffsets;
+  const range = Math.ceil(WEAKENED_RADIUS_M / FINE_CELL_M);
+  const offsets: { dx: number; dy: number; dz: number; gap: number }[] = [];
+  for (let dx = -range; dx <= range; dx++)
+    for (let dy = -range; dy <= range; dy++)
+      for (let dz = -range; dz <= range; dz++) {
+        const g = (o: number) => Math.max(0, Math.abs(o) - 1);
+        offsets.push({ dx, dy, dz, gap: Math.hypot(g(dx), g(dy), g(dz)) });
+      }
+  return (fineOffsets = offsets.sort((a, b) => a.gap - b.gap));
+}
+
 function damageNear(ctx: Context, body: Body, layer: number): DamageNearBody {
   const bodyRadius = body.diameter / 2;
   const cached = ctx.damageNear.get(body.id);
-  if (cached && cached.layer === layer && bodyRadius <= cached.bodyRadius && distance(body.pos, cached.anchor) <= DAMAGE_CACHE_MARGIN_M)
+  if (
+    cached &&
+    cached.layer === layer &&
+    bodyRadius <= cached.bodyRadius &&
+    bodyRadius >= cached.minBodyRadius &&
+    distance(body.pos, cached.anchor) <= DAMAGE_CACHE_MARGIN_M
+  )
     return cached;
-  if (!ctx.damageByLayer) {
-    ctx.damageByLayer = new Map();
-    for (const d of ctx.setup.damage ?? []) {
-      const list = ctx.damageByLayer.get(d.layer);
-      if (list) list.push(d);
-      else ctx.damageByLayer.set(d.layer, [d]);
+  const near: DamageNearBody = { layer, anchor: { ...body.pos }, bodyRadius, minBodyRadius: 0, channels: [], weakening: [] };
+  const index = layerDamage(ctx, layer);
+  if (index && index.all.length <= DENSE_DAMAGE_POINTS) {
+    for (const d of index.all) {
+      const dist = distance(body.pos, d.pos);
+      if (dist < d.radius * 1.5 + bodyRadius + DAMAGE_CACHE_MARGIN_M) near.channels.push(d);
+      if (dist < WEAKENED_RADIUS_M + DAMAGE_CACHE_MARGIN_M) near.weakening.push(d);
     }
-  }
-  const near: DamageNearBody = { layer, anchor: { ...body.pos }, bodyRadius, channels: [], weakening: [] };
-  for (const d of ctx.damageByLayer.get(layer) ?? []) {
-    const dist = distance(body.pos, d.pos);
-    if (dist < d.radius * 1.5 + bodyRadius + DAMAGE_CACHE_MARGIN_M) near.channels.push(d);
-    if (dist < WEAKENED_RADIUS_M + DAMAGE_CACHE_MARGIN_M) near.weakening.push(d);
+  } else if (index) {
+    findDenseDamage(index, body.pos, bodyRadius, near);
   }
   ctx.damageNear.set(body.id, near);
   return near;
+}
+
+/** `damageNear`'s search through the grids, for layers with many points. */
+function findDenseDamage(index: LayerDamage, pos: Vec3, bodyRadius: number, near: DamageNearBody): void {
+  const { x, y, z } = pos;
+  // A cheap squared-distance test skips points that are clearly too far before the exact one.
+  const within = (d: PriorDamage, limit: number) => {
+    const dx = d.pos.x - x;
+    const dy = d.pos.y - y;
+    const dz = d.pos.z - z;
+    const loose = limit * (1 + 1e-9);
+    return dx * dx + dy * dy + dz * dz <= loose * loose && distance(pos, d.pos) < limit;
+  };
+  // Channels: a point whose channel holds the body from anywhere it gets to before the next
+  // refresh settles it alone (while the body stays this big); otherwise every point whose
+  // channel it could reach.
+  const cell = index.channelCell;
+  const hx = Math.floor(x / cell);
+  const hy = Math.floor(y / cell);
+  const hz = Math.floor(z / cell);
+  const reach = Math.ceil((index.maxRadius * 1.5 + bodyRadius + DAMAGE_CACHE_MARGIN_M) / cell);
+  channels: for (let dx = -reach; dx <= reach; dx++)
+    for (let dy = -reach; dy <= reach; dy++)
+      for (let dz = -reach; dz <= reach; dz++)
+        for (const d of index.channel.get(cellKey(hx + dx, hy + dy, hz + dz)) ?? []) {
+          if (within(d, d.radius * 1.5 + bodyRadius - DAMAGE_CACHE_MARGIN_M - 1e-9)) {
+            near.channels = [d];
+            near.minBodyRadius = bodyRadius;
+            break channels;
+          }
+          if (within(d, d.radius * 1.5 + bodyRadius + DAMAGE_CACHE_MARGIN_M)) near.channels.push(d);
+        }
+  // Weakening: every point close enough to count from somewhere the body gets to before the
+  // next refresh. Where there are many, the nearest few that count from anywhere give the same
+  // answer on their own (the count stops there), so the search stops at those.
+  const cx = Math.floor(x / COARSE_CELL_M);
+  const cy = Math.floor(y / COARSE_CELL_M);
+  const cz = Math.floor(z / COARSE_CELL_M);
+  const around: PriorDamage[][] = [];
+  let candidates = 0;
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const list = index.coarse.get(cellKey(cx + dx, cy + dy, cz + dz));
+        if (!list) continue;
+        around.push(list);
+        candidates += list.length;
+      }
+  if (candidates > DENSE_DAMAGE_POINTS) {
+    const fx = Math.floor(x / FINE_CELL_M);
+    const fy = Math.floor(y / FINE_CELL_M);
+    const fz = Math.floor(z / FINE_CELL_M);
+    const sure = WEAKENED_RADIUS_M - DAMAGE_CACHE_MARGIN_M - 1e-9;
+    for (const o of nearestFirstOffsets()) {
+      if (o.gap * FINE_CELL_M >= sure) break;
+      for (const d of index.fine.get(cellKey(fx + o.dx, fy + o.dy, fz + o.dz)) ?? []) {
+        if (within(d, sure)) near.weakening.push(d);
+        if (near.weakening.length >= MAX_WEAKENING_HITS) return;
+      }
+    }
+    near.weakening.length = 0;
+  }
+  for (const list of around) for (const d of list) if (within(d, WEAKENED_RADIUS_M + DAMAGE_CACHE_MARGIN_M)) near.weakening.push(d);
 }
 
 /** How much of the medium's strength is left where the body is, given earlier shots' damage. */
@@ -118,7 +256,7 @@ function damageFactor(ctx: Context, body: Body, layer: number): number {
   const near = damageNear(ctx, body, layer);
   for (const d of near.channels) if (distance(pos, d.pos) < d.radius * 1.5 + bodyRadius) return DAMAGED_CHANNEL_FACTOR;
   let hits = 0;
-  for (const d of near.weakening) if (distance(pos, d.pos) < WEAKENED_RADIUS_M && ++hits >= 4) break;
+  for (const d of near.weakening) if (distance(pos, d.pos) < WEAKENED_RADIUS_M && ++hits >= MAX_WEAKENING_HITS) break;
   return Math.max(MIN_WEAKENED_FACTOR, 1 - WEAKEN_PER_HIT * hits);
 }
 
@@ -188,7 +326,7 @@ interface Context {
   depositedJ: number;
   res: SimResolution;
   /** Earlier damage by layer, built on first use from `setup.damage`. */
-  damageByLayer?: Map<number, PriorDamage[]>;
+  damageByLayer?: Map<number, LayerDamage>;
   damageNear: Map<number, DamageNearBody>;
 }
 

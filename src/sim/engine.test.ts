@@ -138,6 +138,17 @@ describe('determinism and sessions', () => {
     expect(priorDamage(session).length).toBeGreaterThan(0);
     expect(repeat.summary.penetrationM).toBeGreaterThan(first.summary.penetrationM);
   });
+  it('a target with lots of earlier damage gives the same answer as one with a little (#142)', () => {
+    const first = fire({ bullet: '9mm-fmj', thickness: DEEP_GEL });
+    const damage = priorDamage(appendShot(null, first, 0));
+    // Far-off points change nothing, but push the layer past the point where it is searched through grids.
+    const far = Array.from({ length: 400 }, (_, i) => ({ layer: 0, pos: { x: 5 + i * 0.001, y: 5, z: 5 }, radius: 0.005 }));
+    expect(damage.length).toBeLessThan(256);
+    const sparse = fire({ bullet: '9mm-fmj', thickness: DEEP_GEL, damage });
+    const dense = fire({ bullet: '9mm-fmj', thickness: DEEP_GEL, damage: [...damage, ...far] });
+    expect(dense.summary).toEqual(sparse.summary);
+    expect(dense.tracks).toEqual(sparse.tracks);
+  });
   it('appended shots get their own ids and start times', () => {
     const one = fire({ bullet: '9mm-fmj', thickness: DEEP_GEL });
     const two = fire({ bullet: '9mm-jhp', thickness: DEEP_GEL, aim: { y: 0.03, z: 0 } });
