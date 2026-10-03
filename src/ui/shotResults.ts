@@ -1,7 +1,8 @@
 import type { StackLayer } from '../data/stacks';
 import type { OrganicResult } from '../fx/bloodPackEffect';
 import type { TargetLayer } from '../sim/engine';
-import type { ShotSummary, Timeline } from '../sim/types';
+import { sampleTrack } from '../sim/sample';
+import type { ShotSummary, Timeline, Track, Vec3 } from '../sim/types';
 
 export interface ShotResults {
   /** Shows the last shot's numbers and velocity chart, plus per-layer (stacks) and blood-pack (organic) details. */
@@ -10,15 +11,23 @@ export interface ShotResults {
   /** Names the shot in the title (comparison mode), or null for the plain title. */
   setLabel(label: string | null): void;
   setFolded(folded: boolean): void;
+  /** Moves the chart's live marker to the last shot's bullet at sim time `t`. */
+  update(t: number): void;
 }
 
 const FT_PER_M = 3.28084;
 const FT_LB_PER_J = 0.737562;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+/** Chart geometry, in SVG user units. */
+const CHART = { width: 220, height: 104, left: 30, right: 6, top: 6, bottom: 16 };
+/** The chart polyline never needs more points than this. */
+const MAX_CHART_POINTS = 160;
 
 /**
  * The results panel (#13): what the last shot did (impact speed and energy,
  * penetration, exit speed, the bullet's final state, peak cavity, energy left
- * in the target) and a small velocity-vs-depth chart. Layer and blood-pack
+ * in the target) and a velocity-vs-depth chart with gridlines and a marker
+ * that follows the bullet during playback. Layer and blood-pack
  * tables (#24, #19) sit under a Details toggle, and the whole panel folds
  * down to one line so it never has to cover the target.
  */
@@ -36,7 +45,10 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
     <div class="results-body">
       <div class="results-main">
         <dl class="readout results-readout"></dl>
-        <figure class="results-chart" aria-label="Velocity against depth"></figure>
+        <figure class="results-chart">
+          <svg viewBox="0 0 ${CHART.width} ${CHART.height}" role="img" aria-label="Velocity against depth"></svg>
+          <p class="results-chart-empty" hidden></p>
+        </figure>
       </div>
       <div class="results-extra" hidden></div>
     </div>
@@ -51,6 +63,16 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
   let folded = false;
   let showDetails = false;
   let label: string | null = null;
+  const svg = panel.querySelector<SVGSVGElement>('.results-chart svg')!;
+  const empty = q('.results-chart-empty');
+  /** Live marker state for the shot on the chart. */
+  let marker: SVGCircleElement | null = null;
+  let track: Track | null = null;
+  let impactPos: Vec3 | null = null;
+  let impactTime = Infinity;
+  let toX = (_depth: number) => 0;
+  let toY = (_speed: number) => 0;
+  let maxDepth = 0;
 
   const layout = () => {
     body.hidden = folded;
@@ -78,11 +100,16 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
       const title = timeline.shots.length > 1 ? `Results · shot ${timeline.shots.length}` : 'Results';
       q('.results-title').textContent = label ?? title;
       q('.results-title').title = label ?? '';
-      q('.results-readout').innerHTML = readout(s)
+      const hasCavity = layers.some((l) => l.medium.behaviour === 'gel' || l.medium.behaviour === 'water');
+      q('.results-readout').innerHTML = readout(s, hasCavity)
         .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
         .join('');
       q('.results-line').textContent = `${Math.round(s.impactSpeed)} m/s · ${formatEnergy(s.impactEnergyJ)} · ${outcomeLine(s)}`;
-      q('.results-chart').innerHTML = chart(s, stack, layers);
+      const impact = timeline.events.find((e) => e.type === 'impact' && e.trackId === shot.primaryId);
+      impactPos = impact?.pos ?? null;
+      impactTime = impact?.t ?? Infinity;
+      track = timeline.tracks[shot.primaryId];
+      marker = drawChart(s, stack, layers);
       const parts: string[] = [];
       if (stack.length > 1) parts.push(layerTable(timeline, stack, layers));
       if (organic) parts.push(organicTable(organic));
@@ -100,20 +127,114 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
       folded = value;
       layout();
     },
+    update(t) {
+      if (!marker || !impactPos || !track || panel.hidden || folded) return;
+      const k = t >= impactTime ? sampleTrack(track, Math.min(t, track.keyframes.at(-1)!.t)) : null;
+      marker.style.display = k ? '' : 'none';
+      if (!k) return;
+      const depth = Math.min(maxDepth, Math.hypot(k.pos.x - impactPos.x, k.pos.y - impactPos.y, k.pos.z - impactPos.z));
+      marker.setAttribute('cx', toX(depth).toFixed(1));
+      marker.setAttribute('cy', toY(k.speed).toFixed(1));
+    },
   };
+
+  /** Draws speed against depth with the stack's layers shaded behind it; returns the live marker, or null with no curve. */
+  function drawChart(s: ShotSummary, stack: StackLayer[], layers: TargetLayer[]): SVGCircleElement | null {
+    svg.replaceChildren();
+    if (s.velocityVsDepth.length < 2) {
+      svg.style.display = 'none';
+      empty.hidden = false;
+      empty.textContent = s.ricocheted
+        ? 'Ricocheted off the face: no penetration.'
+        : s.finalState === 'detonated'
+          ? 'Detonated on contact: no penetration.'
+          : 'Stopped at the surface.';
+      return null;
+    }
+    svg.style.display = '';
+    empty.hidden = true;
+
+    const points = [{ depth: 0, speed: s.impactSpeed }, ...s.velocityVsDepth];
+    if (s.passedThrough) points.push({ depth: Math.max(points.at(-1)!.depth, s.penetrationM), speed: s.exitSpeed });
+    maxDepth = niceCeil(points.at(-1)!.depth);
+    const maxSpeed = niceCeil(s.impactSpeed);
+    const plotW = CHART.width - CHART.left - CHART.right;
+    const plotH = CHART.height - CHART.top - CHART.bottom;
+    toX = (d) => CHART.left + (d / maxDepth) * plotW;
+    toY = (v) => CHART.top + (1 - v / maxSpeed) * plotH;
+
+    // Layer bands along the path (head-on depth; close enough for a sketch of where the speed went).
+    if (stack.length > 1) {
+      for (const l of layers) {
+        const x0 = Math.min(l.offset, maxDepth);
+        const x1 = Math.min(l.offset + l.thickness, maxDepth);
+        if (x1 <= x0) continue;
+        const band = el('rect', { x: toX(x0), y: CHART.top, width: toX(x1) - toX(x0), height: plotH, class: 'band' });
+        band.classList.toggle('alt', (l.stack ?? 0) % 2 === 1);
+        svg.append(band);
+      }
+    }
+    // Gridlines at quarters, labelled at 0, half and full scale.
+    for (let i = 0; i <= 4; i++) {
+      const y = toY((maxSpeed * i) / 4);
+      const x = toX((maxDepth * i) / 4);
+      svg.append(
+        el('line', { x1: CHART.left, x2: CHART.width - CHART.right, y1: y, y2: y, class: i === 0 ? 'axis' : 'grid' }),
+        el('line', { x1: x, x2: x, y1: CHART.top, y2: CHART.top + plotH, class: i === 0 ? 'axis' : 'grid' }),
+      );
+      if (i % 2 === 0) {
+        svg.append(
+          text(String(Math.round((maxSpeed * i) / 4)), CHART.left - 3, y + 3, 'end'),
+          text(i === 0 ? '0' : formatDepth((maxDepth * i) / 4), x, CHART.height - 4, i === 0 ? 'start' : i === 4 ? 'end' : 'middle'),
+        );
+      }
+    }
+    svg.append(text('m/s', CHART.left + 3, CHART.top + 8, 'start'));
+
+    const stride = Math.max(1, Math.ceil(points.length / MAX_CHART_POINTS));
+    const sampled = points.filter((_, i) => i % stride === 0 || i === points.length - 1);
+    svg.append(el('polyline', { points: sampled.map((p) => `${toX(p.depth).toFixed(1)},${toY(p.speed).toFixed(1)}`).join(' '), class: 'speed' }));
+
+    const dot = el('circle', { r: 3, class: 'marker', cx: toX(0), cy: toY(s.impactSpeed) }) as SVGCircleElement;
+    dot.style.display = 'none';
+    svg.append(dot);
+    return dot;
+  }
 }
 
-function readout(s: ShotSummary): [string, string][] {
+/** Rounds up to 1, 2, 2.5 or 5 × a power of ten, for tidy axis limits. */
+function niceCeil(x: number): number {
+  if (x <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(x));
+  for (const m of [1, 2, 2.5, 5]) if (m * p >= x) return m * p;
+  return 10 * p;
+}
+
+function el(tag: string, attrs: Record<string, string | number>): SVGElement {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  return node;
+}
+
+function text(content: string, x: number, y: number, anchor: 'start' | 'middle' | 'end'): SVGElement {
+  const node = el('text', { x, y, 'text-anchor': anchor });
+  node.textContent = content;
+  return node;
+}
+
+function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
   const rows: [string, string][] = [
-    ['Impact', `${Math.round(s.impactSpeed)} m/s<small>${Math.round(s.impactSpeed * FT_PER_M).toLocaleString('en-US')} ft/s</small>`],
-    ['Energy', `${Math.round(s.impactEnergyJ).toLocaleString('en-US')} J<small>${Math.round(s.impactEnergyJ * FT_LB_PER_J).toLocaleString('en-US')} ft-lb</small>`],
-    ['Penetration', s.ricocheted ? 'none' : formatDepth(s.penetrationM)],
-    ['Exit', s.passedThrough ? `${Math.round(s.exitSpeed)} m/s` : s.ricocheted ? 'ricochet' : 'stopped'],
+    ['Impact velocity', `${Math.round(s.impactSpeed)} m/s<small>${Math.round(s.impactSpeed * FT_PER_M).toLocaleString('en-US')} ft/s</small>`],
+    ['Kinetic energy', `${Math.round(s.impactEnergyJ).toLocaleString('en-US')} J<small>${Math.round(s.impactEnergyJ * FT_LB_PER_J).toLocaleString('en-US')} ft-lb</small>`],
+    ['Penetration', s.ricocheted ? 'None' : formatDepth(s.penetrationM)],
+    ['Passed through', s.passedThrough ? 'Yes' : 'No'],
+    ['Exit velocity', s.passedThrough ? `${Math.round(s.exitSpeed)} m/s` : '—'],
     ['Bullet', finalState(s)],
     // Rounding in the step-by-step physics can nudge the tally past what arrived; it can't exceed it.
-    ['Into target', formatEnergy(Math.min(s.energyDepositedJ, s.impactEnergyJ))],
+    ['Energy deposited', formatEnergy(Math.min(s.energyDepositedJ, s.impactEnergyJ))],
   ];
-  if (s.maxCavityDiameter > 0) rows.push(['Max cavity', formatDepth(s.maxCavityDiameter)]);
+  // The temporary cavity only means something in gel and water.
+  if (hasCavity) rows.push(['Max temp. cavity', s.maxCavityDiameter > 0 ? formatDepth(s.maxCavityDiameter) : '—']);
   return rows;
 }
 
@@ -127,58 +248,19 @@ function finalState(s: ShotSummary): string {
     case 'deformed':
       return `Flattened to ${mm}`;
     case 'fragmented':
-      return s.fragments ? `Fragmented (${s.fragments})` : 'Fragmented';
+      return s.fragments ? `Fragmented (${s.fragments} pieces)` : 'Fragmented';
     case 'splashed':
-      return 'Disintegrated';
+      return s.fragments ? `Splashed (${s.fragments} pieces)` : 'Splashed';
     case 'ricocheted':
       return 'Ricocheted';
     case 'detonated':
-      return 'Detonated';
+      return s.fragments ? `Detonated (${s.fragments} fragments)` : 'Detonated';
   }
 }
 
 function outcomeLine(s: ShotSummary): string {
   if (s.ricocheted) return 'ricocheted';
   return s.passedThrough ? `through, ${Math.round(s.exitSpeed)} m/s out` : `stopped at ${formatDepth(s.penetrationM)}`;
-}
-
-/** Speed against depth as a small SVG line chart, with the stack's layers shaded behind it. */
-function chart(s: ShotSummary, stack: StackLayer[], layers: TargetLayer[]): string {
-  const W = 200;
-  const H = 96;
-  const pad = { l: 30, r: 6, t: 6, b: 18 };
-  const points = [...s.velocityVsDepth];
-  if (!points.length || points[0].depth > 0) points.unshift({ depth: 0, speed: s.impactSpeed });
-  const end = s.passedThrough ? { depth: points.at(-1)!.depth, speed: s.exitSpeed } : { depth: s.penetrationM, speed: 0 };
-  if (!s.ricocheted && end.depth >= points.at(-1)!.depth) points.push(end);
-  const maxDepth = Math.max(0.01, ...points.map((p) => p.depth));
-  const maxSpeed = Math.max(1, s.impactSpeed);
-  const x = (d: number) => pad.l + (d / maxDepth) * (W - pad.l - pad.r);
-  const y = (v: number) => pad.t + (1 - v / maxSpeed) * (H - pad.t - pad.b);
-
-  // Layer bands along the path (head-on depth; close enough for a sketch of where the speed went).
-  const bands = layers
-    .map((l) => {
-      const x0 = Math.min(l.offset, maxDepth);
-      const x1 = Math.min(l.offset + l.thickness, maxDepth);
-      if (x1 <= x0) return '';
-      const shade = (l.stack ?? 0) % 2 === 0 ? 0.07 : 0.13;
-      return `<rect x="${x(x0).toFixed(1)}" y="${pad.t}" width="${(x(x1) - x(x0)).toFixed(1)}" height="${H - pad.t - pad.b}" fill="rgba(255,255,255,${shade})"/>`;
-    })
-    .join('');
-  const line = points.map((p) => `${x(p.depth).toFixed(1)},${y(p.speed).toFixed(1)}`).join(' ');
-  const depthLabel = formatDepth(maxDepth);
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">
-    ${stack.length ? bands : ''}
-    <line x1="${pad.l}" y1="${H - pad.b}" x2="${W - pad.r}" y2="${H - pad.b}" class="axis"/>
-    <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${H - pad.b}" class="axis"/>
-    <polyline points="${line}" class="speed"/>
-    <text x="${pad.l - 3}" y="${pad.t + 7}" text-anchor="end">${Math.round(maxSpeed)}</text>
-    <text x="${pad.l - 3}" y="${H - pad.b}" text-anchor="end">0</text>
-    <text x="${pad.l}" y="${H - 5}">0</text>
-    <text x="${W - pad.r}" y="${H - 5}" text-anchor="end">${depthLabel}</text>
-    <text x="${(pad.l + W) / 2}" y="${H - 5}" text-anchor="middle">m/s vs depth</text>
-  </svg>`;
 }
 
 function formatDepth(m: number): string {
