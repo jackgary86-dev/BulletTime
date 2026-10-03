@@ -69,42 +69,7 @@ export class GelEffect {
 
   constructor(private readonly particles: ParticleSystem) {
     this.group.name = 'gel-effect';
-    // An air cavity in water looks silvery: its wall reflects like a mirror (total internal reflection).
-    // Seen face-on you look straight through the thin wall into the water; toward the edges it turns to a
-    // silver mirror, with a frothy, churned surface. It stays opaque so the water's refraction still shows it,
-    // so the see-through middle is painted in the colour of the water behind it.
-    const froth = crinkleNormalMap();
-    froth.repeat.set(14, 4);
-    this.waterMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xd4dde2,
-      roughness: 0.12,
-      metalness: 1,
-      envMapIntensity: 1.3,
-      normalMap: froth,
-      normalScale: new THREE.Vector2(0.6, 0.6),
-      side: THREE.DoubleSide,
-    });
-    this.waterMaterial.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <opaque_fragment>',
-        `float facing = abs(dot(normal, normalize(vViewPosition)));
-outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0 - facing, 1.4)));
-#include <opaque_fragment>`,
-      );
-    };
-    const normalMap = crinkleNormalMap();
-    normalMap.repeat.set(10, 3);
-    this.material = new THREE.MeshPhysicalMaterial({
-      color: 0x6e5638,
-      roughness: 0.22,
-      metalness: 0,
-      normalMap,
-      normalScale: new THREE.Vector2(1.6, 1.6),
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.3,
-      side: THREE.DoubleSide,
-      vertexColors: true,
-    });
+    ({ material: this.material, water: this.waterMaterial } = cavityMaterials());
   }
 
   /**
@@ -172,11 +137,9 @@ outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0
     for (const child of this.group.children) this.updateCavityMesh(child as THREE.Mesh, t);
   }
 
-  /** Frees the materials (the cavity meshes go in `clear`). */
+  /** Frees the cavity meshes; the materials are shared and kept. */
   dispose(): void {
     this.clear();
-    this.material.dispose();
-    this.waterMaterial.dispose();
   }
 
   /** Blood from a pack burst at world x spreads along the cavity wall from time t, up to `reach` metres each way. */
@@ -537,4 +500,52 @@ function groupByPath(samples: CavitySample[]): CavitySample[][] {
     else paths.push([s]);
   }
   return paths.filter((p) => p.length >= 2);
+}
+
+let sharedCavityMaterials: { material: THREE.MeshPhysicalMaterial; water: THREE.MeshPhysicalMaterial } | null = null;
+
+/**
+ * The cavity wall materials, shared by every gel and water effect and never
+ * freed, so a new shot doesn't have to compile their shaders again (#127).
+ */
+function cavityMaterials(): { material: THREE.MeshPhysicalMaterial; water: THREE.MeshPhysicalMaterial } {
+  if (sharedCavityMaterials) return sharedCavityMaterials;
+  // An air cavity in water looks silvery: its wall reflects like a mirror (total internal reflection).
+  // Seen face-on you look straight through the thin wall into the water; toward the edges it turns to a
+  // silver mirror, with a frothy, churned surface. It stays opaque so the water's refraction still shows it,
+  // so the see-through middle is painted in the colour of the water behind it.
+  const froth = crinkleNormalMap();
+  froth.repeat.set(14, 4);
+  const water = new THREE.MeshPhysicalMaterial({
+    color: 0xd4dde2,
+    roughness: 0.12,
+    metalness: 1,
+    envMapIntensity: 1.3,
+    normalMap: froth,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    side: THREE.DoubleSide,
+  });
+  water.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `float facing = abs(dot(normal, normalize(vViewPosition)));
+outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0 - facing, 1.4)));
+#include <opaque_fragment>`,
+    );
+  };
+  const normalMap = crinkleNormalMap();
+  normalMap.repeat.set(10, 3);
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0x6e5638,
+    roughness: 0.22,
+    metalness: 0,
+    normalMap,
+    normalScale: new THREE.Vector2(1.6, 1.6),
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.3,
+    side: THREE.DoubleSide,
+    vertexColors: true,
+  });
+  sharedCavityMaterials = { material, water };
+  return sharedCavityMaterials;
 }

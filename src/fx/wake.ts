@@ -153,6 +153,7 @@ const MAX_STREAK_M = 0.4;
 export interface MotionStreak {
   mesh: THREE.Mesh;
   update(visible: boolean, travelM: number, diameter: number): void;
+  setColor(color: THREE.ColorRepresentation): void;
   dispose(): void;
 }
 
@@ -191,6 +192,9 @@ export function createMotionStreak(color: THREE.ColorRepresentation): MotionStre
       const length = Math.min(MAX_STREAK_M, travelM);
       mesh.visible = visible && length > diameter * 1.5;
       if (mesh.visible) mesh.scale.set(length, diameter, diameter);
+    },
+    setColor(next) {
+      material.color.set(next);
     },
     dispose() {
       geometry.dispose();
