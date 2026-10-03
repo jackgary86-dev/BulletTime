@@ -28,6 +28,12 @@ export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
   private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][] }[] = [];
+  /**
+   * Wakes and streaks from earlier shots, kept for the next one: freeing their
+   * materials would make three.js drop the shaders and compile them again on
+   * every Fire (#127).
+   */
+  private spareAir: { wake: Wake; streak: MotionStreak }[] = [];
   private pellets: THREE.Mesh[] = [];
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
@@ -71,9 +77,8 @@ export class ShotRenderer {
         }
       } else {
         const model = createBulletModel(spec);
-        const wake = createWake();
-        const streak = createMotionStreak(spec.shape === 'roundNose' && spec.type.toLowerCase().includes('lead') ? 0x8a8f96 : 0xc0804c);
-        wake.group.add(streak.mesh);
+        const { wake, streak } = this.spareAir.pop() ?? newAir();
+        streak.setColor(spec.shape === 'roundNose' && spec.type.toLowerCase().includes('lead') ? 0x8a8f96 : 0xc0804c);
         this.group.add(model.group, wake.group);
         this.bullets.push({ model, trackId: shot.primaryId, wake, streak, air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
       }
@@ -84,8 +89,7 @@ export class ShotRenderer {
     for (const { model, wake, streak } of this.bullets) {
       this.group.remove(model.group, wake.group);
       disposeBulletModel(model);
-      wake.dispose();
-      streak.dispose();
+      this.spareAir.push({ wake, streak });
     }
     this.bullets = [];
     for (const pellet of this.pellets) this.group.remove(pellet);
@@ -208,4 +212,12 @@ function curlGeometry(): THREE.BufferGeometry {
   }
   g.computeVertexNormals();
   return g;
+}
+
+/** A wake with its motion streak attached. */
+function newAir(): { wake: Wake; streak: MotionStreak } {
+  const wake = createWake();
+  const streak = createMotionStreak(0xc0804c);
+  wake.group.add(streak.mesh);
+  return { wake, streak };
 }
