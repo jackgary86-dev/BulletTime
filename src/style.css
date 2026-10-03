@@ -1253,3 +1253,112 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Phones (#138): the 3D view takes the top of the screen and the panels stack in one
+   scrolling column under it, with Fire and the results first. The title and camera
+   readout stay pinned over the view. */
+@media (max-width: 600px) {
+  #app {
+    bottom: auto;
+    height: 45vh;
+    height: 45svh;
+  }
+
+  #overlay {
+    position: fixed;
+    inset: 45vh 0 0;
+    inset: 45svh 0 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 8px 24px;
+  }
+
+  #overlay > .panel {
+    position: relative;
+    inset: auto;
+    flex: none;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  .controls {
+    order: 1;
+  }
+
+  .shot-results.lane-a {
+    order: 2;
+  }
+
+  .shot-results.lane-b {
+    order: 3;
+  }
+
+  .scrubber {
+    order: 4;
+  }
+
+  .shots-panel {
+    order: 5;
+  }
+
+  .bullet-panel {
+    order: 6;
+  }
+
+  .medium-panel {
+    order: 7;
+  }
+
+  .compare-panel {
+    order: 8;
+    justify-content: center;
+  }
+
+  .brand {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    padding: 6px 10px;
+  }
+
+  .brand h1 {
+    font-size: 18px;
+  }
+
+  .camera-hud,
+  .comparing .camera-hud {
+    position: fixed;
+    top: calc(45vh - 28px);
+    top: calc(45svh - 28px);
+  }
+
+  .comparing::after {
+    position: fixed;
+    top: 0;
+    bottom: auto;
+    height: 45vh;
+    height: 45svh;
+  }
+
+  .shot-results .results-main,
+  .comparing .shot-results .results-main {
+    grid-template-columns: 1fr;
+  }
+
+  .results-chart,
+  .comparing .results-chart {
+    max-width: none;
+  }
+
+  .scrubber .time {
+    min-width: 0;
+    font-size: 11px;
+  }
+
+  .hint {
+    display: none;
+  }
+}

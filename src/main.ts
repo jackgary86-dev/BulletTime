@@ -1,6 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
-import { createRenderer, watchResize } from './scene/renderer';
+import { createRenderer, viewSize, watchResize } from './scene/renderer';
 import { createCameraRig } from './scene/camera';
 import { TARGET_FRONT_X } from './models/targets';
 import { Playback } from './sim/playback';
@@ -159,7 +159,8 @@ async function bootstrap(): Promise<void> {
   rebuildTarget(target);
   director.reset();
 
-  const size = { width: window.innerWidth, height: window.innerHeight };
+  const [width0, height0] = viewSize(canvas);
+  const size = { width: width0, height: height0 };
   const layout = () => {
     const { width, height } = size;
     const comparing = !!laneB;
@@ -174,7 +175,7 @@ async function bootstrap(): Promise<void> {
     }
     overlay.classList.toggle('comparing', comparing);
   };
-  watchResize((width, height) => {
+  watchResize(canvas, (width, height) => {
     size.width = width;
     size.height = height;
     layout();
