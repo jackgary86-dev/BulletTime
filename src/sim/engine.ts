@@ -67,18 +67,59 @@ const WEAKENED_RADIUS_M = 0.06;
 const WEAKEN_PER_HIT = 0.15;
 const MIN_WEAKENED_FACTOR = 0.4;
 
-/** How much of the medium's strength is left at this point, given earlier shots' damage. */
-function damageFactor(ctx: Context, pos: Vec3, layer: number, bodyRadius: number): number {
-  const damage = ctx.setup.damage;
-  if (!damage?.length) return 1;
-  let near = 0;
-  for (const d of damage) {
-    if (d.layer !== layer) continue;
-    const dist = Math.hypot(pos.x - d.pos.x, pos.y - d.pos.y, pos.z - d.pos.z);
-    if (dist < d.radius * 1.5 + bodyRadius) return DAMAGED_CHANNEL_FACTOR;
-    if (dist < WEAKENED_RADIUS_M) near++;
+/**
+ * Earlier damage near one body (#124). Gel and water channels leave a point
+ * every few millimetres, and a group of buckshot leaves thousands, so instead
+ * of checking every point on every step, each body keeps the points around
+ * where it is and refreshes them once it has moved `DAMAGE_CACHE_MARGIN_M`.
+ */
+interface DamageNearBody {
+  layer: number;
+  anchor: Vec3;
+  bodyRadius: number;
+  /** Points whose hole or channel the body could be following. */
+  channels: PriorDamage[];
+  /** Points close enough to weaken the material around the body. */
+  weakening: PriorDamage[];
+}
+
+const DAMAGE_CACHE_MARGIN_M = 0.01;
+
+const distance = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+function damageNear(ctx: Context, body: Body, layer: number): DamageNearBody {
+  const bodyRadius = body.diameter / 2;
+  const cached = ctx.damageNear.get(body.id);
+  if (cached && cached.layer === layer && bodyRadius <= cached.bodyRadius && distance(body.pos, cached.anchor) <= DAMAGE_CACHE_MARGIN_M)
+    return cached;
+  if (!ctx.damageByLayer) {
+    ctx.damageByLayer = new Map();
+    for (const d of ctx.setup.damage ?? []) {
+      const list = ctx.damageByLayer.get(d.layer);
+      if (list) list.push(d);
+      else ctx.damageByLayer.set(d.layer, [d]);
+    }
   }
-  return Math.max(MIN_WEAKENED_FACTOR, 1 - WEAKEN_PER_HIT * Math.min(near, 4));
+  const near: DamageNearBody = { layer, anchor: { ...body.pos }, bodyRadius, channels: [], weakening: [] };
+  for (const d of ctx.damageByLayer.get(layer) ?? []) {
+    const dist = distance(body.pos, d.pos);
+    if (dist < d.radius * 1.5 + bodyRadius + DAMAGE_CACHE_MARGIN_M) near.channels.push(d);
+    if (dist < WEAKENED_RADIUS_M + DAMAGE_CACHE_MARGIN_M) near.weakening.push(d);
+  }
+  ctx.damageNear.set(body.id, near);
+  return near;
+}
+
+/** How much of the medium's strength is left where the body is, given earlier shots' damage. */
+function damageFactor(ctx: Context, body: Body, layer: number): number {
+  if (!ctx.setup.damage?.length) return 1;
+  const pos = body.pos;
+  const bodyRadius = body.diameter / 2;
+  const near = damageNear(ctx, body, layer);
+  for (const d of near.channels) if (distance(pos, d.pos) < d.radius * 1.5 + bodyRadius) return DAMAGED_CHANNEL_FACTOR;
+  let hits = 0;
+  for (const d of near.weakening) if (distance(pos, d.pos) < WEAKENED_RADIUS_M && ++hits >= 4) break;
+  return Math.max(MIN_WEAKENED_FACTOR, 1 - WEAKEN_PER_HIT * hits);
 }
 
 /** Splits hollow media (cinder block) into their solid shells; other media are one layer. */
@@ -146,6 +187,9 @@ interface Context {
   vd: VelocityDepthPoint[];
   depositedJ: number;
   res: SimResolution;
+  /** Earlier damage by layer, built on first use from `setup.damage`. */
+  damageByLayer?: Map<number, PriorDamage[]>;
+  damageNear: Map<number, DamageNearBody>;
 }
 
 export function simulate(setup: ShotSetup): Timeline {
@@ -166,6 +210,7 @@ export function simulate(setup: ShotSetup): Timeline {
     vd: [],
     depositedJ: 0,
     res: setup.resolution ?? STANDARD_RESOLUTION,
+    damageNear: new Map(),
   };
 
   const b = setup.bullet;
@@ -341,7 +386,7 @@ function integrate(ctx: Context, body: Body): void {
     if (medium) {
       force =
         0.5 * medium.density * medium.dragCoefficient * noseFactor * area * body.speed ** 2 +
-        medium.resistancePa * area * damageFactor(ctx, body.pos, layerIndex, body.diameter / 2);
+        medium.resistancePa * area * damageFactor(ctx, body, layerIndex);
     } else {
       force = 0.5 * P.airDensity * P.airDragCoefficient * area * body.speed ** 2;
     }
