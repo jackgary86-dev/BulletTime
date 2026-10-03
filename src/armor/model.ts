@@ -5,31 +5,40 @@
  * and returns an `ArmorTimeline`: frames sampled over time for playback, the
  * key events with captions, and a summary result. The fields (#166), renderer
  * (#167) and results UI (#168) read only this shape, never a model's insides.
+ * `simulate.ts` picks the model for a projectile family.
  *
  * Impact physics only: a shot is the projectile's state at the plate (from
  * `munitions.ts`) plus the plate's material, thickness and slope. Every number
  * is a simplified teaching model.
  *
- * The model files import helpers from here and `simulateArmor` imports the
- * models, so this module and the models form an import cycle. That is safe
- * because only function declarations (hoisted) cross it: keep it that way, and
- * never read one of this module's constants at a model's top level.
+ * This module holds only types and helpers and imports no model, so the
+ * models can import it freely.
  */
 
-import { fullBoreShot } from './fullBore';
 import type { PlateMaterial } from './materials';
 import type { ImpactState } from './munitions';
 
-/** Plate slopes the lab models, degrees from the plate normal. */
+/**
+ * Plate slopes the lab offers, degrees from the plate normal. Each model
+ * clamps a shot to the part of this range it models (see `normalizeShot`).
+ */
 export const MIN_OBLIQUITY_DEG = 0;
-export const MAX_OBLIQUITY_DEG = 75;
+export const MAX_OBLIQUITY_DEG = 85;
 
 /** Every timeline has at least this many evenly spaced frames. */
 export const TIMELINE_FRAMES = 160;
+/**
+ * No timeline has more frames than this. A model may sample more than
+ * `TIMELINE_FRAMES` to keep a short phase visible inside a long playback.
+ */
+export const MAX_TIMELINE_FRAMES = 4000;
 /** After the last event, playback runs on for this fraction of its time... */
 export const TIMELINE_TAIL_FRACTION = 0.2;
 /** ...or this long (s), whichever is longer. */
 export const TIMELINE_MIN_TAIL_S = 30e-6;
+
+/** Number of samples in a frame's `craterProfile`. */
+export const CRATER_PROFILE_SAMPLES = 16;
 
 export interface ArmorShot {
   /** The projectile (or jet) as it reaches the plate. */
@@ -37,7 +46,7 @@ export interface ArmorShot {
   material: PlateMaterial;
   /** Plate thickness normal to its face, m. */
   thicknessM: number;
-  /** Plate slope, degrees from the normal (0 = square-on), 0–75. */
+  /** Plate slope, degrees from the normal (0 = square-on), 0 to `MAX_OBLIQUITY_DEG`; each model clamps it to the range it models. */
   obliquityDeg: number;
 }
 
@@ -47,14 +56,43 @@ export interface ArmorFrame {
   t: number;
   /** Crater depth along the shot line, m (at most the line-of-sight thickness). */
   depth: number;
-  /** Penetrator speed, m/s (after perforation, its speed behind the plate). */
+  /**
+   * How far the penetrator's nose has moved along the shot line since impact,
+   * m. Equal to `depth` while it is in the plate; after perforation it keeps
+   * growing as the penetrator flies on behind the plate.
+   */
+  travel: number;
+  /**
+   * Speed of the penetrator body, m/s: a solid shot's speed, an eroding rod's
+   * tail speed (Tate's v), or for a jet the speed of the element now arriving.
+   * After perforation, its speed behind the plate.
+   */
   speed: number;
+  /**
+   * Speed of the crater bottom, d(depth)/dt, m/s (Tate's u): equal to `speed`
+   * for a rigid shot while it digs, lower for an eroding rod or a jet, and 0
+   * once the penetrator has stopped or left the plate.
+   */
+  penetrationRate: number;
   /** Crater radius at its mouth on the plate face, m. */
   craterRadius: number;
+  /**
+   * Crater radius, m, at `CRATER_PROFILE_SAMPLES` evenly spaced depths along
+   * the shot line, from the plate face (index 0) to `depth` (last index). When
+   * a model leaves it out, draw a cylinder of `craterRadius` with a rounded
+   * bottom.
+   */
+  craterProfile?: number[];
   /** Remaining penetrator length, m (constant for a solid shot, shrinking for an eroding rod or jet). */
   penetratorLength: number;
   /** Height of the bulge pushed out of the rear face, m. */
   rearBulge: number;
+  /**
+   * Energy the impact has deposited so far, J (cumulative): the plastic and
+   * shear work done, most of which ends up as heat. It ends at the result's
+   * `energy.plateWorkJ`.
+   */
+  energyDepositedJ: number;
 }
 
 /** Event kinds. Later models extend this union with their own. */
@@ -72,9 +110,33 @@ export interface ArmorEvent {
   label: string;
 }
 
+/** How the plate was defeated (or not). Later models extend this union with their own. */
+export type ArmorMechanism = 'Plugging' | 'Plastic penetration';
+
+/** A piece of plate thrown out of the rear face (a plug, or later a scab). */
+export interface ArmorEjecta {
+  massKg: number;
+  /** Speed along the shot line, m/s. */
+  velocity: number;
+  /** Thickness along the shot line, m. */
+  thicknessM: number;
+  diameterM: number;
+}
+
+/**
+ * Where the impact energy went, J. Together with the result's
+ * `residualEnergyJ` these terms add up to its `impactEnergyJ`.
+ */
+export interface ArmorEnergy {
+  /** Plastic and shear work done in the impact, most of which ends up as heat (for a shattered shot, also the work of breaking it up). */
+  plateWorkJ: number;
+  /** Kinetic energy of the plate material thrown out behind the plate (plug, scab or debris). */
+  ejectaJ: number;
+}
+
 export interface ArmorResult {
-  /** How the plate was defeated (or not), e.g. 'Plugging' or 'Plastic penetration'. */
-  mechanism: string;
+  /** How the plate was defeated (or not). Whether the penetrator shattered is reported separately, in `shattered`. */
+  mechanism: ArmorMechanism;
   /** Plate thickness along the shot line, m. */
   losThicknessM: number;
   /** Path depth the penetrator reached along the shot line, m (the line-of-sight thickness when perforated). */
@@ -85,21 +147,23 @@ export interface ArmorResult {
   /** Penetrator mass that gets through the plate, kg (0 when stopped). */
   residualMassKg: number;
   /** The plug sheared out of the plate, when there is one. */
-  plug?: { massKg: number; velocity: number; thicknessM: number; diameterM: number };
+  plug?: ArmorEjecta;
   /** Whether the penetrator broke up on the plate. */
   shattered: boolean;
   /** How many pieces it broke into (0 when intact). */
   fragments: number;
   /** Penetrator kinetic energy at impact, J. */
   impactEnergyJ: number;
-  /** Penetrator kinetic energy behind the plate, J (the plug's is not included). */
+  /** Penetrator kinetic energy behind the plate, J (the plug's is in `energy.ejectaJ`). */
   residualEnergyJ: number;
+  /** Where the rest of the impact energy went. */
+  energy: ArmorEnergy;
 }
 
 export interface ArmorTimeline {
-  /** The shot as simulated (obliquity clamped to the modelled range). */
+  /** The shot as simulated (obliquity clamped to the range this model handles). */
   shot: ArmorShot;
-  /** Evenly spaced from t = 0 (impact) to `duration`. */
+  /** Evenly spaced from t = 0 (impact) to `duration`: at least `TIMELINE_FRAMES`, at most `MAX_TIMELINE_FRAMES`. */
   frames: ArmorFrame[];
   /** In time order, starting with the impact. */
   events: ArmorEvent[];
@@ -112,18 +176,22 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 /**
  * Line-of-sight thickness, m: the path through a plate of normal thickness
- * `thicknessM` sloped at `obliquityDeg` (clamped to 0–75°), T / cos θ.
+ * `thicknessM` sloped at `obliquityDeg`, T / cos θ. Pure geometry; the slope
+ * is only clamped to the lab's 0 to `MAX_OBLIQUITY_DEG` so it stays finite.
  */
 export function losThickness(thicknessM: number, obliquityDeg: number): number {
   const theta = (clamp(obliquityDeg, MIN_OBLIQUITY_DEG, MAX_OBLIQUITY_DEG) * Math.PI) / 180;
   return thicknessM / Math.cos(theta);
 }
 
-/** Checks a shot and returns a copy with its obliquity clamped to the modelled range. */
-export function normalizeShot(shot: ArmorShot): ArmorShot {
+/**
+ * Checks a shot and returns a copy with its obliquity clamped to the range a
+ * model handles: 0 to `maxObliquityDeg` (at most the lab's `MAX_OBLIQUITY_DEG`).
+ */
+export function normalizeShot(shot: ArmorShot, maxObliquityDeg = MAX_OBLIQUITY_DEG): ArmorShot {
   if (!(Number.isFinite(shot.thicknessM) && shot.thicknessM > 0)) throw new Error(`Plate thickness must be a positive number of metres, got ${shot.thicknessM}`);
   if (!Number.isFinite(shot.obliquityDeg)) throw new Error(`Obliquity must be a number of degrees, got ${shot.obliquityDeg}`);
-  return { ...shot, obliquityDeg: clamp(shot.obliquityDeg, MIN_OBLIQUITY_DEG, MAX_OBLIQUITY_DEG) };
+  return { ...shot, obliquityDeg: clamp(shot.obliquityDeg, MIN_OBLIQUITY_DEG, Math.min(maxObliquityDeg, MAX_OBLIQUITY_DEG)) };
 }
 
 /** Playback length for a timeline whose last event happens at `endTime` (s): the event plus a short tail. */
@@ -139,6 +207,40 @@ export function sampleFrames(duration: number, frameAtTime: (t: number) => Armor
   return frames;
 }
 
+const isNumberArray = (v: unknown): v is number[] => Array.isArray(v) && v.every((x) => typeof x === 'number');
+
+/** A copy of a frame that shares no arrays with it. */
+function copyFrame(frame: ArmorFrame): ArmorFrame {
+  const out: Record<string, unknown> = { ...frame };
+  for (const [key, value] of Object.entries(frame)) if (Array.isArray(value)) out[key] = [...value];
+  return out as unknown as ArmorFrame;
+}
+
+/**
+ * Mixes two frames a fraction `f` of the way from `a` to `b`, field by field:
+ * every number, and every pair of equal-length number arrays element by
+ * element, so fields later models add are interpolated too. Anything else is
+ * taken from the nearer frame.
+ */
+function mixFrames(a: ArmorFrame, b: ArmorFrame, f: number, t: number): ArmorFrame {
+  const ra = a as unknown as Record<string, unknown>;
+  const rb = b as unknown as Record<string, unknown>;
+  const nearer = f < 0.5 ? ra : rb;
+  const out: Record<string, unknown> = {};
+  for (const key of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+    const x = ra[key];
+    const y = rb[key];
+    if (typeof x === 'number' && typeof y === 'number') out[key] = x + (y - x) * f;
+    else if (isNumberArray(x) && isNumberArray(y) && x.length === y.length) out[key] = x.map((xi, i) => xi + (y[i] - xi) * f);
+    else {
+      const value = nearer[key];
+      if (value !== undefined) out[key] = Array.isArray(value) ? [...value] : value;
+    }
+  }
+  out.t = t;
+  return out as unknown as ArmorFrame;
+}
+
 /**
  * The frame at time `t` (s) for playback: linear interpolation between the two
  * nearest frames, clamped to the first and last frame.
@@ -148,8 +250,8 @@ export function frameAt(timeline: ArmorTimeline, t: number): ArmorFrame {
   if (frames.length === 0) throw new Error('Timeline has no frames');
   const first = frames[0];
   const last = frames[frames.length - 1];
-  if (!(t > first.t)) return { ...first };
-  if (t >= last.t) return { ...last };
+  if (!(t > first.t)) return copyFrame(first);
+  if (t >= last.t) return copyFrame(last);
   // Binary search for the last frame at or before t.
   let lo = 0;
   let hi = frames.length - 1;
@@ -160,25 +262,5 @@ export function frameAt(timeline: ArmorTimeline, t: number): ArmorFrame {
   }
   const a = frames[lo];
   const b = frames[hi];
-  const f = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
-  const mix = (x: number, y: number) => x + (y - x) * f;
-  return {
-    t,
-    depth: mix(a.depth, b.depth),
-    speed: mix(a.speed, b.speed),
-    craterRadius: mix(a.craterRadius, b.craterRadius),
-    penetratorLength: mix(a.penetratorLength, b.penetratorLength),
-    rearBulge: mix(a.rearBulge, b.rearBulge),
-  };
-}
-
-/** Runs the model for the shot's projectile family. */
-export function simulateArmor(shot: ArmorShot): ArmorTimeline {
-  const family = shot.impact.family;
-  switch (family) {
-    case 'ap-shot':
-      return fullBoreShot(shot);
-    default:
-      throw new Error(`The armor lab does not model '${family}' against plate yet`);
-  }
+  return mixFrames(a, b, b.t > a.t ? (t - a.t) / (b.t - a.t) : 0, t);
 }

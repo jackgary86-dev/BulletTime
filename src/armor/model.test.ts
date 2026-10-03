@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { fullBoreShot } from './fullBore';
 import { getPlateMaterial } from './materials';
-import { frameAt, losThickness, normalizeShot, sampleFrames, simulateArmor, timelineDuration, type ArmorFrame, type ArmorShot, type ArmorTimeline } from './model';
-import { MUNITION_FAMILIES, impactState } from './munitions';
+import { MAX_OBLIQUITY_DEG, frameAt, losThickness, normalizeShot, sampleFrames, timelineDuration, type ArmorFrame, type ArmorShot, type ArmorTimeline } from './model';
+import { impactState } from './munitions';
 
 const rhaShot = (overrides: Partial<ArmorShot> = {}): ArmorShot => ({
   impact: impactState('ap-shot', 88, 1000),
@@ -11,7 +12,17 @@ const rhaShot = (overrides: Partial<ArmorShot> = {}): ArmorShot => ({
   ...overrides,
 });
 
-const frame = (t: number, depth: number, speed: number): ArmorFrame => ({ t, depth, speed, craterRadius: depth / 2, penetratorLength: 0.3 - depth, rearBulge: depth / 10 });
+const frame = (t: number, depth: number, speed: number): ArmorFrame => ({
+  t,
+  depth,
+  travel: depth * 2,
+  speed,
+  penetrationRate: speed / 2,
+  craterRadius: depth / 2,
+  penetratorLength: 0.3 - depth,
+  rearBulge: depth / 10,
+  energyDepositedJ: depth * 1e6,
+});
 
 describe('line-of-sight thickness', () => {
   it('is T / cos θ', () => {
@@ -22,20 +33,24 @@ describe('line-of-sight thickness', () => {
     expect(losThickness(0.08, 75)).toBeCloseTo(0.08 / Math.cos((75 * Math.PI) / 180), 12);
   });
 
-  it('clamps the slope to the modelled 0–75°', () => {
-    expect(losThickness(0.1, 89)).toBeCloseTo(losThickness(0.1, 75), 12);
+  it('is pure geometry across the lab’s slopes, clamped only to 0–85° so it stays finite', () => {
+    expect(MAX_OBLIQUITY_DEG).toBe(85);
+    expect(losThickness(0.1, 80)).toBeCloseTo(0.1 / Math.cos((80 * Math.PI) / 180), 12);
+    expect(losThickness(0.1, 89)).toBeCloseTo(losThickness(0.1, 85), 12);
     expect(losThickness(0.1, -20)).toBe(0.1);
   });
 });
 
 describe('shot checks', () => {
-  it('clamps obliquity and rejects impossible plates', () => {
-    expect(normalizeShot(rhaShot({ obliquityDeg: 85 })).obliquityDeg).toBe(75);
+  it('clamps obliquity to the lab’s range, or a model’s own limit, and rejects impossible plates', () => {
+    expect(normalizeShot(rhaShot({ obliquityDeg: 82 })).obliquityDeg).toBe(82);
+    expect(normalizeShot(rhaShot({ obliquityDeg: 89 })).obliquityDeg).toBe(85);
+    expect(normalizeShot(rhaShot({ obliquityDeg: 82 }), 75).obliquityDeg).toBe(75);
+    expect(normalizeShot(rhaShot({ obliquityDeg: 89 }), 120).obliquityDeg).toBe(85);
     expect(normalizeShot(rhaShot({ obliquityDeg: -5 })).obliquityDeg).toBe(0);
     expect(() => normalizeShot(rhaShot({ thicknessM: 0 }))).toThrow();
     expect(() => normalizeShot(rhaShot({ thicknessM: Number.NaN }))).toThrow();
     expect(() => normalizeShot(rhaShot({ obliquityDeg: Number.NaN }))).toThrow();
-    expect(simulateArmor(rhaShot({ obliquityDeg: 85 })).shot.obliquityDeg).toBe(75);
   });
 });
 
@@ -61,6 +76,9 @@ describe('timeline sampling', () => {
     expect(mid.craterRadius).toBeCloseTo(0.0125, 12);
     expect(mid.penetratorLength).toBeCloseTo(0.275, 12);
     expect(mid.rearBulge).toBeCloseTo(0.0025, 12);
+    expect(mid.travel).toBeCloseTo(0.05, 12);
+    expect(mid.penetrationRate).toBeCloseTo(400, 9);
+    expect(mid.energyDepositedJ).toBeCloseTo(25_000, 6);
     const late = frameAt(tl, 1.25e-4);
     expect(late.depth).toBeCloseTo(0.05 + 0.25 * 0.03, 12);
     expect(late.speed).toBeCloseTo(450, 9);
@@ -69,28 +87,36 @@ describe('timeline sampling', () => {
     expect(frameAt(tl, 1)).toEqual(tl.frames[2]);
   });
 
+  it('frameAt interpolates fields it does not know about, and number arrays element by element', () => {
+    type Extended = ArmorFrame & { extraJ: number; label: string };
+    const a: Extended = { ...frame(0, 0, 1000), craterProfile: [0, 0, 0], extraJ: 0, label: 'a' };
+    const b: Extended = { ...frame(1e-4, 0.04, 600), craterProfile: [0.02, 0.01, 0], extraJ: 100, label: 'b' };
+    const tl = { frames: [a, b], duration: 1e-4 } as unknown as ArmorTimeline;
+    const early = frameAt(tl, 0.25e-4) as Extended;
+    expect(early.extraJ).toBeCloseTo(25, 9);
+    expect(early.craterProfile![0]).toBeCloseTo(0.005, 12);
+    expect(early.craterProfile![1]).toBeCloseTo(0.0025, 12);
+    expect(early.craterProfile).toHaveLength(3);
+    // Values that cannot be mixed come from the nearer frame.
+    expect(early.label).toBe('a');
+    expect((frameAt(tl, 0.75e-4) as Extended).label).toBe('b');
+    // An array only one frame has, or arrays of different lengths, also come from the nearer frame.
+    const c = { ...frame(2e-4, 0.05, 0), craterProfile: [0.03, 0] };
+    expect(frameAt({ frames: [b, c], duration: 2e-4 } as ArmorTimeline, 1.9e-4).craterProfile).toEqual([0.03, 0]);
+    expect(frameAt({ frames: [frame(0, 0, 1), b], duration: 1e-4 } as ArmorTimeline, 0.9e-4).craterProfile).toEqual([0.02, 0.01, 0]);
+    // Clamped frames are copies: changing one does not change the timeline.
+    const copy = frameAt(tl, -1);
+    copy.craterProfile![0] = 1;
+    expect(a.craterProfile![0]).toBe(0);
+  });
+
   it('frameAt on a real timeline matches its frames and stays between neighbours', () => {
-    const tl = simulateArmor(rhaShot({ thicknessM: 0.25 }));
+    const tl = fullBoreShot(rhaShot({ thicknessM: 0.25 }));
     const f = tl.frames;
     expect(frameAt(tl, f[40].t)).toEqual(f[40]);
     const between = frameAt(tl, (f[40].t + f[41].t) / 2);
     expect(between.depth).toBeCloseTo((f[40].depth + f[41].depth) / 2, 12);
     expect(between.depth).toBeGreaterThan(f[40].depth);
     expect(between.depth).toBeLessThan(f[41].depth);
-  });
-});
-
-describe('simulateArmor', () => {
-  it('runs the full-bore model for AP shot', () => {
-    const tl = simulateArmor(rhaShot());
-    expect(tl.result.perforated).toBe(true);
-    expect(tl.events[0].type).toBe('impact');
-    expect(tl.frames.length).toBeGreaterThanOrEqual(120);
-  });
-
-  it('throws for the families later tickets will model', () => {
-    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot')) {
-      expect(() => simulateArmor(rhaShot({ impact: impactState(family.id, 120) }))).toThrow(/not model/);
-    }
   });
 });
