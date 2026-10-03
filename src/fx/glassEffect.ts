@@ -238,8 +238,9 @@ export class GlassCracks {
   clear(): void {
     for (const { mesh } of this.webs) {
       this.group.remove(mesh);
+      // The material is left to the garbage collector: disposing it would make
+      // three.js drop its shader and compile it again on the next shot (#135).
       mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
     }
     this.webs = [];
   }
