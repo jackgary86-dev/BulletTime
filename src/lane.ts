@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getRegion } from './data/dummy';
 import { STANDARD_RESOLUTION, ULTRA_RESOLUTION } from './data/physics';
+import { clampAimToObjects, shapeLayers } from './data/objects';
 import { physicsLayers, stackDepth } from './data/stacks';
 import type { BulletSpec } from './data/bullets';
 import { MuzzleEffect } from './fx/muzzle';
@@ -144,11 +145,15 @@ export class Lane {
     let offset = fireStart;
     offsets.forEach((o, i) => {
       // A group scatters round the aim point; a burst climbs with recoil (#153). Every round stays on the face.
-      const y = Math.max(-limitY, Math.min(limitY, plan.aimY + o.y));
-      const z = Math.max(-limitZ, Math.min(limitZ, plan.aimZ + o.z));
+      // Round objects (#156) keep the shot inside their outline, and the bullet crosses the chord at that point.
+      const { y, z } = clampAimToObjects(
+        this.setup.layers,
+        Math.max(-limitY, Math.min(limitY, plan.aimY + o.y)),
+        Math.max(-limitZ, Math.min(limitZ, plan.aimZ + o.z)),
+      );
       const part = simulate({
         bullet: this.spec,
-        layers,
+        layers: shapeLayers(layers, y, z),
         angleDeg,
         impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
         standOffM: STAND_OFF_M,

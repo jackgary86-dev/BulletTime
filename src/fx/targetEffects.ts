@@ -10,6 +10,7 @@ import { HoleMarks } from './holes';
 import { loadHardEffect } from './hardEffect';
 import { loadPanelEffect } from './panelEffect';
 import { loadSandEffect } from './sandEffect';
+import { ObjectEffect } from './objectEffect';
 import { ParticleSystem } from './particles';
 
 /**
@@ -24,12 +25,14 @@ export class TargetEffects {
   private bloods: BloodPackEffect[] = [];
   private readonly holes = new HoleMarks();
   private readonly glass = new GlassCracks();
+  private readonly objects: ObjectEffect;
   /** Blood packs and bone from the last shot into an organic target, or null. */
   organic: OrganicResult | null = null;
 
   constructor() {
     this.group.name = 'target-effects';
-    this.group.add(this.particles.group, this.holes.group, this.glass.group);
+    this.objects = new ObjectEffect(this.particles, this.holes);
+    this.group.add(this.particles.group, this.holes.group, this.glass.group, this.objects.group);
   }
 
   load(timeline: Timeline, target: THREE.Group, targetLayers: TargetLayer[], angleDeg: number): void {
@@ -61,6 +64,7 @@ export class TargetEffects {
       }
     });
     loadHardEffect(timeline, targetLayers, this.particles, this.holes);
+    this.objects.load(timeline, target, targetLayers);
     loadBoneEffect(timeline, layers, this.particles, this.holes);
     this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
   }
@@ -80,6 +84,7 @@ export class TargetEffects {
     this.bloods = [];
     this.holes.clear();
     this.glass.clear();
+    this.objects.clear();
     this.organic = null;
     this.particles.clear();
   }
@@ -89,6 +94,7 @@ export class TargetEffects {
     for (const gel of this.gels) gel.update(t);
     this.holes.update(t);
     this.glass.update(t);
+    this.objects.update(t);
     for (const blood of this.bloods) blood.update(t);
     this.particles.update(t, shutterS);
   }

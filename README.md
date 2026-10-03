@@ -17,6 +17,7 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
   - A concrete block and a hollow cinder block.
   - Mild and AR500 steel plate, a sandbag, glass and ice.
   - Organic lab targets: gel with blood packs, MythBusters style, and a clinical **ballistic test dummy** with bone, brain, lung and organ simulants.
+  - **Objects** to destroy: a bowling ball, a 10 cm steel ball, a steel gong on chains, a watermelon and a glass bottle of water. Round objects keep the aim inside their outline, and an off-centre shot crosses a shorter chord.
 - **Layered targets:** stack up to four layers with air gaps, for example a wall, a wooden fence, a car door, auto glass or a cinder block in front of a gel block.
 - **Physics:** a precomputed timeline at 1 µs steps. It models drag and material resistance, yaw, expansion, fragmentation, ricochet, shells of hollow targets, and the temporary and permanent wound cavity in gel.
 - **Effects for each material:**
@@ -26,6 +27,7 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
   - Steel: sparks and splatter.
   - Glass: radial and concentric cracks, and shards.
   - Organic targets: bursting blood packs and bone fragments.
+  - Objects: the watermelon swells and bursts into rind and flesh, the bottle shatters round a burst of water, a rifle round cracks the bowling ball into chunks, the steel ball throws sparks and lead spray, and the gong shudders or is holed.
 - **Playback:** slow-motion presets, frame stepping and a scrubber with event markers.
 - **Camera presets:** auto, side, tracking, close-up and free orbit.
 - **Lighting:** lab and high-speed (back-lit) modes.
@@ -40,6 +42,12 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 | ![Cinder block](docs/screenshots/cinder-block.png) | ![Test dummy](docs/screenshots/test-dummy.png) |
 | **Side-by-side comparison** | **Results panel** |
 | ![Compare mode](docs/screenshots/compare.png) | ![Results](docs/screenshots/results.png) |
+
+| Watermelon, .308 | Glass bottle, 5.56 | Bowling ball, .308 |
+|---|---|---|
+| ![Watermelon bursting](docs/objects-156/watermelon.jpg) | ![Bottle shattering](docs/objects-156/bottle.jpg) | ![Bowling ball cracking](docs/objects-156/bowling-ball.jpg) |
+| **Steel ball, .308** | **Steel gong, .308** | |
+| ![Sparks off the steel ball](docs/objects-156/steel-ball.jpg) | ![Holed gong](docs/objects-156/gong.jpg) | |
 
 ## Running it
 
@@ -158,6 +166,7 @@ Add an entry to `MEDIA` in `src/data/media.ts`:
 
 - `behaviour` decides the physics rules and the impact effects. A new medium that behaves like an existing family needs no code.
 - `look` decides the 3D model. A new appearance means adding a case to `buildBody` in `src/models/targets.ts`.
+- Showpiece objects also take a `shape` (`sphere`, `ellipsoid`, `cylinder` or `disc`). It lists them under Objects, keeps the aim inside the outline and sets the chord the shot crosses (`src/data/objects.ts`). Their signature effect lives in `src/fx/objectEffect.ts`.
 - Gel-like media also take `cavityPressurePa`, which sets the cavity size. Hollow targets take `shellM`.
 
 Tune `resistancePa` and `dragCoefficient` until a reference round behaves as published. Then run `npm test` and add the medium to the barrier table in `baseline.test.ts` if you want it pinned.
@@ -167,7 +176,7 @@ Tune `resistancePa` and `dragCoefficient` until a reference round behaves as pub
 - **Realistic, not stylised:** PBR materials, a dark lab studio with a measurement board, and an optional bright "high-speed camera" look.
 - **Organic targets are lab simulants only:** gel with blood packs (MythBusters style) and a clinical gel test dummy with synthetic bone and organ simulants. There are no realistic people or animals. The dummy is drawn as a cutaway so the wound channel stays visible from the side.
 - **Precomputed physics:** the whole shot is simulated on Fire, which makes scrubbing, replays and comparison exact and cheap. The model is empirical: drag plus a material-strength term, with thresholds for expansion, yaw, fragmentation and ricochet. It is tuned so 9mm FMJ goes about 65 cm in gel, 9mm JHP about 35 cm and .22 LR about 28 cm.
-- **Layered targets are slabs:** each layer is infinite across the shot line in the physics, so aiming is kept within each target's face. In the test dummy, the aim stays within a few centimetres of each region's centre. Ribs other than the sternum are visual only.
+- **Layered targets are slabs:** each layer is infinite across the shot line in the physics, so aiming is kept within each target's face. In the test dummy, the aim stays within a few centimetres of each region's centre. Ribs other than the sternum are visual only. Round objects are still slabs to the physics, but each shot's slab is cut to the chord through the object at the aim point. Their bursts and cracks are simple energy thresholds for the look, not a fracture model.
 - **Multiple shots** remember the damage in the target. A later round down an existing channel meets much less resistance.
 - **Compare mode** fires both setups fresh from t = 0 on every Fire, so they stay in step.
 - **The 20 mm HEI shell** is in the list as a clearly-marked fun option.
