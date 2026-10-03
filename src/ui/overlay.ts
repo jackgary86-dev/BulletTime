@@ -9,7 +9,7 @@ export function mountOverlay(root: HTMLElement): void {
   root.innerHTML = `
     <header class="brand">
       <h1>BulletTime</h1>
-      <p>Slow-motion bullet impact simulator <button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button></p>
+      <p>Slow-motion bullet impact simulator <button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button><button type="button" class="about-open sound-mute-toggle" title="Mute or unmute shot sounds">Sound on</button></p>
     </header>
     <p class="hint">Drag to orbit · scroll to zoom · right-drag to pan</p>
     <dialog class="about" aria-labelledby="about-title">
@@ -58,5 +58,5 @@ export function mountOverlay(root: HTMLElement): void {
   dialog.addEventListener('click', (e) => {
     if (e.target === dialog) dialog.close();
   });
-  mountSoundBoard(root, root.querySelector<HTMLElement>('.sounds-open')!);
+  mountSoundBoard(root, root.querySelector<HTMLElement>('.sounds-open')!, root.querySelector<HTMLButtonElement>('.sound-mute-toggle')!);
 }

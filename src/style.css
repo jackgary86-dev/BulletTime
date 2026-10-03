@@ -51,6 +51,7 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
+  max-width: calc(100vw - 32px);
   padding: 10px 14px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1161,6 +1162,22 @@ body {
 /* The Sounds window (#108): a label and a play button per sound. */
 .sound-board {
   width: min(360px, calc(100vw - 32px));
+}
+
+.sound-levels {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.sound-levels input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.sound-levels .about-option {
+  margin: 0;
 }
 
 .sound-board h3 {

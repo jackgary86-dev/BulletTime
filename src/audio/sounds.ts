@@ -246,19 +246,69 @@ export function getSound(id: string): SoundSpec {
   return sound;
 }
 
+const VOLUME_KEY = 'bullettime.volume';
+const MUTED_KEY = 'bullettime.muted';
+/** Master level at full volume, leaving headroom for overlapping sounds. */
+const FULL_GAIN = 0.6;
+
+function read(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Not remembered this time; the setting still applies for this session.
+  }
+}
+
+const savedVolume = Number(read(VOLUME_KEY));
+let volume = read(VOLUME_KEY) !== null && savedVolume >= 0 && savedVolume <= 1 ? savedVolume : 0.8;
+let muted = read(MUTED_KEY) === '1';
+
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
 
+function applyLevel(): void {
+  if (master && context) master.gain.setTargetAtTime(muted ? 0 : volume * FULL_GAIN, context.currentTime, 0.01);
+}
+
+/** Volume from 0 to 1 (#120), remembered between visits. */
+export function getVolume(): number {
+  return volume;
+}
+
+export function setVolume(v: number): void {
+  volume = Math.min(1, Math.max(0, v));
+  write(VOLUME_KEY, String(volume));
+  applyLevel();
+}
+
+export function isMuted(): boolean {
+  return muted;
+}
+
+export function setMuted(on: boolean): void {
+  muted = on;
+  write(MUTED_KEY, on ? '1' : '0');
+  applyLevel();
+}
+
 /**
- * Plays a sound now. The AudioContext is made on first use, which must be
- * inside a click or key handler for browsers to let it start.
+ * Makes and resumes the AudioContext. Browsers only let it start inside a
+ * click or key handler, so Fire and Replay call this before the shot's sounds
+ * are scheduled from the animation loop.
  */
-export function playSound(id: string): void {
-  const sound = getSound(id);
+export function unlockAudio(): AudioContext {
   if (!context) {
     context = new AudioContext();
     master = context.createGain();
-    master.gain.value = 0.6;
+    master.gain.value = muted ? 0 : volume * FULL_GAIN;
     // A gentle limiter so overlapping sounds don't clip.
     const limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -6;
@@ -266,5 +316,14 @@ export function playSound(id: string): void {
     master.connect(limiter).connect(context.destination);
   }
   if (context.state === 'suspended') void context.resume();
-  sound.play(context, master!, context.currentTime + 0.01);
+  return context;
+}
+
+/** Plays a sound now; the Sounds window and the shot playback (#120) both use this. */
+export function playSound(id: string): void {
+  const sound = getSound(id);
+  const ctx = unlockAudio();
+  // Nothing to hear; skip building the nodes.
+  if (muted || volume === 0) return;
+  sound.play(ctx, master!, ctx.currentTime + 0.01);
 }
