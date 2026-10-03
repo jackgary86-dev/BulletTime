@@ -34,4 +34,13 @@ function resourcesOf(root: THREE.Object3D): Set<{ dispose(): void }> {
 export function disposeTree(root: THREE.Object3D, keep: THREE.Object3D | null): void {
   const kept = keep ? resourcesOf(keep) : new Set();
   for (const resource of resourcesOf(root)) if (!kept.has(resource)) resource.dispose();
+  // Instanced meshes (particles, glass shards, the lab's acoustic panels) also hold instance buffers.
+  disposeInstanceBuffers(root);
+}
+
+/** Frees the per-instance matrix and colour buffers of every instanced mesh under `root`. */
+export function disposeInstanceBuffers(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) (obj as THREE.InstancedMesh).dispose();
+  });
 }

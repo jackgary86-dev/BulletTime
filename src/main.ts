@@ -180,14 +180,17 @@ async function bootstrap(): Promise<void> {
     layout();
   });
 
+  /** Lane B's emptied scene, reused the next time Compare turns on (see Lane's constructor, #133). */
+  let spareScene: THREE.Scene | undefined;
   const compare = mountComparePanel(overlay, { bulletId: DEFAULT_BULLET_ID, mediumId: DEFAULT_MEDIUM_ID }, {
     onToggle: (on) => {
       if (on) {
-        laneB = new Lane(renderer, camera, compare.setup, compare.spec);
+        laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
         laneB.setLightingMode(lighting);
         laneB.setQuality(QUALITY[quality]);
       } else if (laneB) {
         laneB.dispose(laneA?.scene ?? null);
+        spareScene = laneB.scene;
         laneB = null;
       }
       clearShot();
