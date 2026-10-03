@@ -4,16 +4,18 @@ import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
 import { CAMERA_ICONS, LIGHTING_ICONS } from './icons';
 
-/** Slow-motion presets, as simulated seconds per real second. */
+/**
+ * Slow-motion presets, as simulated seconds per real second. Nothing faster than 1/1,000:
+ * at 1× or 1/100 a shot is over before anything can be seen (#149).
+ */
 export const RATE_PRESETS = [
-  { label: '1×', rate: 1 },
-  { label: '1/100', rate: 1 / 100 },
   { label: '1/1,000', rate: 1 / 1000 },
   { label: '1/10,000', rate: 1 / 10_000 },
   { label: '1/100,000', rate: 1 / 100_000 },
 ] as const;
 
 const MIN_EXPONENT = -5; // 1/100,000×
+const MAX_EXPONENT = -3; // 1/1,000×
 
 export interface ControlsPanel {
   /** Updates the live readout of simulated time and bullet speed. */
@@ -69,7 +71,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     </div>
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
-    <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="0" step="0.01" />
+    <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="${MAX_EXPONENT}" step="0.01" />
     <dl class="readout">
       <div><dt>Sim time</dt><dd class="readout-time">0 µs</dd></div>
       <div><dt>Velocity</dt><dd class="readout-speed">0 m/s</dd></div>
@@ -123,7 +125,8 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     return { button, rate: preset.rate };
   });
 
-  function setRate(rate: number) {
+  function setRate(requested: number) {
+    const rate = Math.min(10 ** MAX_EXPONENT, Math.max(10 ** MIN_EXPONENT, requested));
     slider.value = String(Math.log10(rate));
     rateValue.textContent = formatRate(rate);
     for (const { button, rate: presetRate } of presetButtons) {
@@ -149,6 +152,5 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
 }
 
 function formatRate(rate: number): string {
-  if (rate >= 0.999) return '1×';
   return `1/${Math.round(1 / rate).toLocaleString('en-US')}×`;
 }

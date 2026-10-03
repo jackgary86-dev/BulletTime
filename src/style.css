@@ -197,10 +197,15 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.presets,
 .camera-modes {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
 }
 
