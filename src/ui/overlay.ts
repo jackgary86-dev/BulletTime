@@ -9,7 +9,7 @@ export function mountOverlay(root: HTMLElement): void {
   root.innerHTML = `
     <header class="brand">
       <h1>BulletTime</h1>
-      <p>Slow-motion bullet impact simulator <button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button><button type="button" class="about-open sound-mute-toggle" title="Mute or unmute shot sounds">Sound on</button></p>
+      <p><span class="tagline">Slow-motion bullet impact simulator </span><button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button><button type="button" class="about-open sound-mute-toggle" title="Mute or unmute shot sounds">Sound on</button></p>
     </header>
     <p class="hint">Drag to orbit · scroll to zoom · right-drag to pan</p>
     <dialog class="about" aria-labelledby="about-title">

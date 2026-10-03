@@ -1254,20 +1254,73 @@ body {
   outline-offset: 2px;
 }
 
-/* Phones (#138): the 3D view takes the top of the screen and the panels stack in one
-   scrolling column under it, with Fire and the results first. The title and camera
-   readout stay pinned over the view. */
-@media (max-width: 600px) {
-  #app {
-    bottom: auto;
-    height: 45vh;
-    height: 45svh;
+/* Short desktop windows (#140): the compact round card, and the target panel scrolls inside
+   itself rather than running off the bottom. */
+@media (min-width: 901px) and (max-height: 820px) {
+  .bullet-panel .bullet-preview,
+  .bullet-panel .scale-note,
+  .bullet-panel .bullet-description {
+    display: none;
   }
 
+  .medium-panel {
+    max-height: calc(100vh - 412px);
+    overflow-y: auto;
+  }
+}
+
+/* Mid-size windows: the title drops its tagline so the Compare bar has room beside it (#140). */
+@media (min-width: 601px) and (max-width: 1180px) {
+  .brand .tagline {
+    display: none;
+  }
+}
+
+/* Between the laptop rules and full width, the timeline stays between the side columns and
+   the Compare bar between the title and the controls, wrapping onto a second row (#140). */
+@media (min-width: 1181px) and (max-width: 1400px) {
+  .scrubber {
+    left: 332px;
+    right: 332px;
+    width: auto;
+    transform: none;
+  }
+
+  .compare-panel {
+    left: 448px;
+    right: 332px;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1180px) {
+  .compare-panel {
+    left: 288px;
+    right: 288px;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1400px) {
+  .compare-panel {
+    width: fit-content;
+    max-width: none;
+    margin: 0 auto;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .compare-b {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Small screens (#138, #140): the panels stack in one scrolling column, with Fire and the
+   results first, and the title and camera readout stay pinned over the 3D view. Phones put
+   the column under the view; small, short windows (landscape phones, 800 × 600) beside it. */
+@media (max-width: 600px), (max-width: 900px) and (max-height: 820px), (max-height: 500px) {
   #overlay {
     position: fixed;
-    inset: 45vh 0 0;
-    inset: 45svh 0 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1281,6 +1334,7 @@ body {
     flex: none;
     width: auto;
     max-width: none;
+    max-height: none;
     transform: none;
   }
 
@@ -1329,18 +1383,9 @@ body {
   }
 
   .camera-hud,
-  .comparing .camera-hud {
-    position: fixed;
-    top: calc(45vh - 28px);
-    top: calc(45svh - 28px);
-  }
-
+  .comparing .camera-hud,
   .comparing::after {
     position: fixed;
-    top: 0;
-    bottom: auto;
-    height: 45vh;
-    height: 45svh;
   }
 
   .shot-results .results-main,
@@ -1348,8 +1393,9 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .results-chart,
+  .shot-results .results-chart,
   .comparing .results-chart {
+    display: block;
     max-width: none;
   }
 
@@ -1360,5 +1406,65 @@ body {
 
   .hint {
     display: none;
+  }
+}
+
+/* Phones: the view takes the top 45% of the screen, the column the rest. */
+@media (max-width: 600px) {
+  #app {
+    bottom: auto;
+    height: 45vh;
+    height: 45svh;
+  }
+
+  #overlay {
+    inset: 45vh 0 0;
+    inset: 45svh 0 0;
+  }
+
+  .brand {
+    max-width: calc(100vw - 16px);
+  }
+
+  .camera-hud,
+  .comparing .camera-hud {
+    top: calc(45vh - 28px);
+    top: calc(45svh - 28px);
+  }
+
+  .comparing::after {
+    top: 0;
+    bottom: auto;
+    height: 45vh;
+    height: 45svh;
+  }
+}
+
+/* Small, short windows: the column sits on the right, the view fills the rest. */
+@media (min-width: 601px) and (max-width: 900px) and (max-height: 820px),
+  (min-width: 601px) and (max-height: 500px) {
+  #app {
+    right: min(340px, 45vw);
+  }
+
+  #overlay {
+    inset: 0 0 0 auto;
+    width: min(340px, 45vw);
+  }
+
+  .brand {
+    max-width: calc(100vw - min(340px, 45vw) - 16px);
+  }
+
+  .camera-hud,
+  .comparing .camera-hud {
+    top: auto;
+    bottom: 10px;
+    left: calc((100vw - min(340px, 45vw)) / 2);
+  }
+
+  .comparing::after {
+    top: 0;
+    left: calc((100vw - min(340px, 45vw)) / 2);
   }
 }
