@@ -698,6 +698,31 @@ body {
   font-size: 8px;
 }
 
+.results-chart .grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.results-chart .band {
+  fill: rgba(255, 255, 255, 0.07);
+}
+
+.results-chart .band.alt {
+  fill: rgba(255, 255, 255, 0.13);
+}
+
+.results-chart .marker {
+  fill: var(--fg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.results-chart-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .results-extra {
   display: flex;
   flex-direction: column;

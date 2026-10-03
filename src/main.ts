@@ -224,6 +224,8 @@ async function bootstrap(): Promise<void> {
       panel.setReadout(t, primary?.speed ?? 0);
       hud.set(t, playback.fps, playback.shutterS);
       scrubber.sync();
+      results.update(t);
+      if (laneB) resultsB.update(t);
       for (const sound of cueTrack.update(t, advancing)) playSound(sound);
     } else hud.hide();
     director.update(delta, t, playback.timeline);
