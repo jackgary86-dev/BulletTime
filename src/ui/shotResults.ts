@@ -202,11 +202,12 @@ function layerTable(timeline: Timeline, stack: StackLayer[], layers: TargetLayer
     const ricochet = mine.find((e) => e.type === 'ricochet');
     let outcome: string;
     if (!entry && !ricochet) outcome = 'not reached';
-    else if (ricochet && !entry) outcome = 'ricocheted';
+    else if (ricochet) outcome = 'ricocheted';
     else if (exit) outcome = `${Math.round(exit.speed)} m/s out`;
     else outcome = 'stopped';
     const vIn = entry?.speed ?? 0;
-    const vOut = exit?.speed ?? 0;
+    // A glancing round keeps the speed it bounced off with (#131).
+    const vOut = (ricochet ?? exit)?.speed ?? 0;
     const energy = entry ? 0.5 * track.massKg * (vIn ** 2 - vOut ** 2) : 0;
     return `<tr><th>${i + 1}. ${escape(l.medium.name)}</th><td>${entry ? `${Math.round(vIn)} m/s in` : '–'}</td><td>${outcome}</td><td>${entry ? `${Math.round(energy).toLocaleString('en-US')} J` : '–'}</td></tr>`;
   });
