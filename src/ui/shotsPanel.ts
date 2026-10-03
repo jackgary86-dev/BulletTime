@@ -1,5 +1,6 @@
-/** How the next Fire is laid out: one shot, a group fired one after another, or a burst on one timeline. */
-export type FireMode = 'single' | 'group' | 'burst';
+import type { FireMode } from '../sim/firePattern';
+
+export type { FireMode };
 
 export interface FirePlan {
   /** Aim point on the target face relative to its centre, in metres (y up, z across). */
@@ -50,6 +51,7 @@ export function mountShotsPanel(root: HTMLElement): ShotsPanel {
         </div>
       </div>
     </div>
+    <p class="fire-mode-hint"></p>
     <div class="multi-options" hidden>
       <label class="field-label">Rounds <output class="rounds-value"></output>
         <input id="rounds-slider" type="range" min="2" max="10" step="1" value="5" /></label>
@@ -90,6 +92,13 @@ export function mountShotsPanel(root: HTMLElement): ShotsPanel {
     });
   }
 
+  /** What each mode does, under the buttons (#153). */
+  const MODE_HINTS: Record<FireMode, string> = {
+    single: 'One round at the aim point.',
+    group: 'Aimed rounds one after another, scattered within the spread.',
+    burst: 'Rapid fire at the set rate; each round climbs with recoil.',
+  };
+  const showHint = () => (q('.fire-mode-hint').textContent = MODE_HINTS[plan.mode]);
   const modeButtons = [...panel.querySelectorAll<HTMLButtonElement>('.fire-modes button')];
   for (const button of modeButtons) {
     button.addEventListener('click', () => {
@@ -97,6 +106,7 @@ export function mountShotsPanel(root: HTMLElement): ShotsPanel {
       for (const b of modeButtons) b.classList.toggle('active', b === button);
       q('.multi-options').hidden = plan.mode === 'single';
       q('.burst-options').hidden = plan.mode !== 'burst';
+      showHint();
     });
   }
 
@@ -110,6 +120,7 @@ export function mountShotsPanel(root: HTMLElement): ShotsPanel {
   slider('spread-slider', '.spread-value', (v) => `${((plan.spreadM = v) * 100).toFixed(1)} cm`);
   slider('rpm-slider', '.rpm-value', (v) => `${(plan.rpm = v)} rpm`);
   showAim();
+  showHint();
 
   return {
     plan: () => ({ ...plan }),

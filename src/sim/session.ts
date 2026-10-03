@@ -72,3 +72,35 @@ export function activeShot(timeline: Timeline, t: number): ShotInfo {
 export function isPrimary(timeline: Timeline, trackId: number): boolean {
   return timeline.shots.some((s) => s.primaryId === trackId);
 }
+
+/** Dead air shorter than this plays through as normal, in seconds. */
+export const MIN_DEAD_AIR_S = 3e-3;
+/** Playback lands this long before the next round leaves the muzzle, so its flash is seen, in seconds. */
+const DEAD_AIR_LEAD_S = 2e-4;
+/** After a round's last projectile stops, its impact still settles for this long, in seconds. */
+const DEAD_AIR_TAIL_S = 1e-3;
+
+/**
+ * Stretches of a multi-shot timeline where nothing is happening (#153): between
+ * one round settling and the next leaving the muzzle, as [from, to] sim times.
+ * Playback jumps over them, so a burst at 750 rpm (80 ms apart, a few ms of
+ * action each) plays in about the time of its impacts.
+ */
+export function deadAir(timeline: Timeline, minGap = MIN_DEAD_AIR_S): [number, number][] {
+  const gaps: [number, number][] = [];
+  let busyUntil = -Infinity;
+  const shots = [...timeline.shots].sort((a, b) => a.start - b.start);
+  for (const shot of shots) {
+    const from = busyUntil;
+    const to = shot.start - DEAD_AIR_LEAD_S;
+    if (to - from > minGap) gaps.push([from, to]);
+    let end = shot.start;
+    for (let id = shot.firstTrack; id < shot.firstTrack + shot.trackCount; id++) {
+      const track = timeline.tracks[id];
+      if (track) end = Math.max(end, track.endT);
+    }
+    busyUntil = Math.max(busyUntil, end + DEAD_AIR_TAIL_S);
+  }
+  // The first round's run-up from t = 0 is part of the shot, not dead air.
+  return gaps.filter(([from]) => Number.isFinite(from));
+}

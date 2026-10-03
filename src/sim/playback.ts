@@ -1,3 +1,4 @@
+import { deadAir } from './session';
 import type { Timeline } from './types';
 
 /** One display frame at 60 fps, the unit for frame-by-frame stepping. */
@@ -31,10 +32,13 @@ export class Playback {
   timeline: Timeline | null = null;
   private simTime = 0;
   private playing = false;
+  /** Dead air between rounds that playing (not scrubbing) jumps over (#153). */
+  private gaps: [number, number][] = [];
 
   /** Plays `timeline` from `from` seconds (a later shot on a multi-shot timeline starts part-way in). */
   start(timeline: Timeline, from = 0): void {
     this.timeline = timeline;
+    this.gaps = deadAir(timeline);
     this.simTime = from;
     this.playing = true;
   }
@@ -42,6 +46,7 @@ export class Playback {
   /** Clears the current shot. */
   stop(): void {
     this.timeline = null;
+    this.gaps = [];
     this.playing = false;
   }
 
@@ -85,11 +90,18 @@ export class Playback {
     this.seek(this.simTime + frames * Math.max(MIN_STEP_S, DISPLAY_FRAME_S * this.rate));
   }
 
+  /** The stretches of dead air playback skips, for the scrubber to show. */
+  get skipped(): readonly [number, number][] {
+    return this.gaps;
+  }
+
   /** Advances by `realDeltaS` seconds of wall-clock time and returns the current simulated time. */
   update(realDeltaS: number): number | null {
     if (!this.timeline) return null;
     if (this.playing) {
       this.simTime += realDeltaS * this.rate;
+      // Jump over dead air between rounds; scrubbing and stepping can still go anywhere.
+      for (const [from, to] of this.gaps) if (this.simTime > from && this.simTime < to) this.simTime = to;
       if (this.simTime >= this.timeline.duration) {
         this.simTime = this.timeline.duration;
         this.playing = false;
