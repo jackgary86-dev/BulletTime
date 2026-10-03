@@ -17,6 +17,8 @@ import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel, type FirePlan } from './ui/shotsPanel';
 import { mountComparePanel } from './ui/comparePanel';
 import { mountCameraHud } from './ui/cameraHud';
+import { mountRangeGame } from './ui/rangeGame';
+import { stageSetup } from './game/range';
 import { physicsLayers } from './data/stacks';
 import { faceLimits, Lane } from './lane';
 import type { LightingMode } from './scene/studio';
@@ -120,30 +122,33 @@ async function bootstrap(): Promise<void> {
       clearShot();
       director.reset();
     },
-    onFire: () => {
-      if (!laneA) return;
-      const plan = shotsPanel.plan();
-      // Comparing: both lanes fire fresh from t = 0 so they stay in step.
-      const timeline = laneA.fire(plan, !!laneB);
-      results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
-      if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
-      results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
-      let clock: Timeline = timeline;
-      if (laneB) {
-        const b = laneB.fire(plan, true);
-        resultsB.show(b, laneB.setup.layers, physicsLayers(laneB.setup.layers), laneB.effects.organic);
-        // One clock for both: as long as the longer of the two shots.
-        clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
-      }
-      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth);
-      unlockAudio();
-      playback.start(clock, laneA.lastFireStart);
-      cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
-      scrubber.load(clock);
-      shotsPanel.setSession(sessionSummary(timeline));
-      panel.setHasShot(true);
-    },
+    onFire: () => fireShot(shotsPanel.plan()),
   });
+
+  /** Fires `plan` from lane A (and lane B when comparing) and starts the replay; returns lane A's timeline. */
+  function fireShot(plan: FirePlan): Timeline | null {
+    if (!laneA) return null;
+    // Comparing: both lanes fire fresh from t = 0 so they stay in step.
+    const timeline = laneA.fire(plan, !!laneB);
+    results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
+    if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
+    results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
+    let clock: Timeline = timeline;
+    if (laneB) {
+      const b = laneB.fire(plan, true);
+      resultsB.show(b, laneB.setup.layers, physicsLayers(laneB.setup.layers), laneB.effects.organic);
+      // One clock for both: as long as the longer of the two shots.
+      clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
+    }
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth);
+    unlockAudio();
+    playback.start(clock, laneA.lastFireStart);
+    cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
+    scrubber.load(clock);
+    shotsPanel.setSession(sessionSummary(timeline));
+    panel.setHasShot(true);
+    return timeline;
+  }
 
   const rebuildTarget = (setup: TargetSetup) => {
     if (!laneA) return;
@@ -207,6 +212,48 @@ async function bootstrap(): Promise<void> {
       clearShot();
     },
   });
+  // The range challenge (#151): a shot-placement game played on lane A.
+  const app = document.querySelector<HTMLElement>('#app')!;
+  let saved: { rate: number } | null = null;
+  const range = mountRangeGame(app, {
+    begin() {
+      if (laneB) overlay.querySelector<HTMLButtonElement>('.compare-toggle')?.click();
+      saved = { rate: playback.rate };
+      playback.rate = 1 / 1000;
+      overlay.classList.add('range-mode');
+      director.setMode('auto');
+    },
+    setStage(stage) {
+      if (!laneA) return 0.05;
+      laneA.spec = getBullet(stage.bulletId);
+      const setup = stageSetup(stage);
+      laneA.setTarget(setup);
+      clearShot();
+      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth);
+      const face = faceLimits(setup);
+      // The scoring circle stays 1 cm inside the face, where the fire code keeps every shot.
+      return Math.min(face.y, face.z) - 0.01;
+    },
+    fire(aimY, aimZ) {
+      const timeline = fireShot({ ...shotsPanel.plan(), mode: 'single', aimY, aimZ })!;
+      return timeline.shots.at(-1)!.summary;
+    },
+    replayDone: () => !playback.isPlaying,
+    skipReplay() {
+      playback.seek(playback.duration);
+      scrubber.sync();
+    },
+    end() {
+      overlay.classList.remove('range-mode');
+      if (saved) playback.rate = saved.rate;
+      saved = null;
+      if (laneA) laneA.spec = spec;
+      rebuildTarget(target);
+      director.reset();
+    },
+  });
+  overlay.querySelector('.compare-panel')?.prepend(range.entry);
+
   applyQuality();
   layout();
 
