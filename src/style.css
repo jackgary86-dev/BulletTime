@@ -1484,7 +1484,7 @@ body {
    controls, so it joins the left column above the target panel. */
 @media (min-width: 601px) and (max-width: 760px) and (min-height: 821px) {
   .compare-panel {
-    top: 290px;
+    top: 316px;
     left: 16px;
     right: auto;
     margin: 0;
@@ -1492,9 +1492,39 @@ body {
 
   /* The results and timeline span the bottom here, so the target panel stops above them and scrolls. */
   .medium-panel {
-    top: 347px;
-    max-height: calc(100vh - 627px);
-    max-height: calc(100dvh - 627px);
+    top: 373px;
+    max-height: calc(100vh - 653px);
+    max-height: calc(100dvh - 653px);
     overflow-y: auto;
+  }
+}
+
+/* The camera readout (#147) sits clear of the panels around it. */
+
+/* 1181-1400 px: centred under the title's bottom edge instead of beside it. */
+@media (min-width: 1181px) and (max-width: 1400px) and (min-height: 501px) {
+  :not(.comparing) > .camera-hud {
+    top: 92px;
+  }
+}
+
+/* Portrait tablets: timecode only, so it fits in the gap between the side columns. */
+@media (min-width: 761px) and (max-width: 900px) and (min-height: 821px) {
+  .camera-hud .hud-fps {
+    display: none;
+  }
+}
+
+/* Narrow portrait windows have no gap between the columns: the readout joins the left
+   column, under the round card and above Compare. */
+@media (min-width: 601px) and (max-width: 760px) and (min-height: 821px) {
+  :not(.comparing) > .camera-hud {
+    top: 290px;
+    left: 20px;
+    transform: none;
+  }
+
+  .camera-hud .hud-fps {
+    display: none;
   }
 }
