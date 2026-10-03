@@ -106,6 +106,9 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
           specularIntensity: 1,
           clearcoat: 0.6,
           clearcoatRoughness: 0.12,
+          // The temporary cavity inside is drawn as a see-through air pocket after the block (#154);
+          // the block must not hide it in the depth buffer.
+          depthWrite: false,
         }),
       );
       gel.name = GEL_BODY_NAME;

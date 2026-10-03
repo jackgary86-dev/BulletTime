@@ -6,14 +6,17 @@ import { crinkleNormalMap } from './crinkleTexture';
 import type { ParticleSystem } from './particles';
 
 /**
- * The ballistic gelatin showcase: a crinkled, spindle-shaped temporary cavity
- * that balloons after the bullet passes, then collapses and pulses down to the
- * permanent wound channel; the block bulging around it; a splash at the entry
- * face; the exit face drawn out into a cone on a pass-through; and gel debris.
- * Everything is a pure function of sim time, so it scrubs and replays.
+ * The ballistic gelatin showcase: a spindle-shaped temporary cavity that
+ * balloons after the bullet passes, then collapses and pulses down to the
+ * permanent wound channel; radial fissures torn into the gel around the
+ * channel; the block bulging around it; a splash at the entry face; the exit
+ * face drawn out into a cone on a pass-through; and gel debris. Everything is
+ * a pure function of sim time, so it scrubs and replays.
  *
- * Visual target: a high-speed camera frame of a gel block at peak cavity
- * (see issue #8).
+ * Visual target: a high-speed camera frame of a clear gel block at peak
+ * cavity (#8, #154): the cavity reads as an air pocket, seen mostly by the
+ * bright rim where light refracts at the gel/air boundary, and the wound
+ * track keeps star-shaped cracks whose length follows the energy dumped.
  */
 
 /** Time for a cavity section to reach its peak: base + per metre of radius, in seconds. */
@@ -42,6 +45,11 @@ const SPLASH_DEPTH = 0.01;
 const SPLASH_S = 0.8e-3;
 
 const RING_SEGMENTS = 40;
+/** Radial fissures (#154): how many per cavity section, and their length as a fraction of the section's peak cavity radius. */
+const FISSURES_PER_RING = 5;
+const FISSURE_LENGTH = 0.32;
+/** Fissures tear open while the cavity is stretched: they reach full length this far into the rise, as a fraction of it. */
+const FISSURE_GROW = 0.8;
 
 /** 'gel': crinkled amber cavity in a bulging block. 'water': a silvery air cavity that closes into bubbles. */
 export type CavityStyle = 'gel' | 'water';
@@ -109,6 +117,7 @@ export class GelEffect {
       rings.unshift({ ...first, centre: first.centre.clone().setX(this.blockCentre.x - this.half.x), peak: 0, channel: 0 });
       allRings.push(...rings);
       this.group.add(this.buildCavityMesh(rings));
+      if (style === 'gel') this.group.add(buildFissureMesh(rings));
     }
     this.rings = allRings.sort((a, b) => a.centre.x - b.centre.x);
     this.radii = new Float32Array(this.rings.length);
@@ -171,7 +180,8 @@ export class GelEffect {
       // Earlier shots' cavities that have come to rest stay as they are while a later one plays.
       const settle = Math.max(child.userData.settleT as number, stainsSettle);
       if (same && t >= settle && last.t >= settle) continue;
-      this.updateCavityMesh(child as THREE.Mesh, t);
+      if (child.userData.fissures) updateFissureMesh(child as THREE.Mesh, t);
+      else this.updateCavityMesh(child as THREE.Mesh, t);
     }
   }
 
@@ -550,6 +560,85 @@ function groupByPath(samples: CavitySample[]): CavitySample[][] {
 }
 
 let sharedCavityMaterials: { material: THREE.MeshPhysicalMaterial; water: THREE.MeshPhysicalMaterial } | null = null;
+let sharedFissureMaterial: THREE.MeshBasicMaterial | null = null;
+
+/**
+ * Fissures are thin tears in clear gel: you see them as faint silvery sheets,
+ * brightest edge-on. Shared and never freed, like the cavity materials (#127).
+ */
+function fissureMaterial(): THREE.MeshBasicMaterial {
+  sharedFissureMaterial ??= new THREE.MeshBasicMaterial({
+    color: 0xeadcc4,
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  return sharedFissureMaterial;
+}
+
+/**
+ * Radial fissures round the wound channel (#154): a few thin wedges per cavity
+ * section, each pointing out from the channel at its own angle, so the track
+ * reads as a star in cross-section and a "Christmas tree" from the side. They
+ * tear open while the cavity is stretched and stay after it collapses.
+ */
+function buildFissureMesh(rings: Ring[]): THREE.Mesh {
+  const tears: { ring: Ring; angle: number; length: number; width: number }[] = [];
+  for (let i = 1; i < rings.length; i++) {
+    const ring = rings[i];
+    if (ring.peak < 0.004) continue;
+    const spacing = rings[i].centre.distanceTo(rings[i - 1].centre) || 0.005;
+    for (let k = 0; k < FISSURES_PER_RING; k++) {
+      const h = (n: number) => Math.abs((Math.sin((i * 37 + k * 11 + n) * 12.9898) * 43758.5453) % 1);
+      tears.push({
+        ring,
+        angle: ((k + h(1) * 0.8) / FISSURES_PER_RING) * Math.PI * 2,
+        length: ring.peak * FISSURE_LENGTH * (0.45 + 0.9 * h(2)),
+        width: spacing * (1.2 + 1.6 * h(3)),
+      });
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(tears.length * 9), 3).setUsage(THREE.DynamicDrawUsage));
+  const mesh = new THREE.Mesh(geometry, fissureMaterial());
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 1;
+  mesh.userData.fissures = tears;
+  mesh.userData.settleT = tears.reduce((m, f) => Math.max(m, f.ring.t + f.ring.rise * FISSURE_GROW), 0);
+  mesh.visible = false;
+  return mesh;
+}
+
+function updateFissureMesh(mesh: THREE.Mesh, t: number): void {
+  const tears = mesh.userData.fissures as { ring: Ring; angle: number; length: number; width: number }[];
+  const pos = mesh.geometry.attributes.position;
+  const arr = pos.array as Float32Array;
+  let visible = false;
+  tears.forEach((f, i) => {
+    const age = t - f.ring.t;
+    const grow = age <= 0 ? 0 : Math.min(1, age / (f.ring.rise * FISSURE_GROW));
+    if (grow > 0) visible = true;
+    // A wedge from the channel wall out to the tip, its base spanning a little of the path.
+    const base = Math.max(f.ring.channel, 0.0015);
+    const tip = base + f.length * grow;
+    const dy = Math.sin(f.angle);
+    const dz = Math.cos(f.angle);
+    const c = f.ring.centre;
+    const k = i * 9;
+    arr[k] = c.x - f.width / 2;
+    arr[k + 1] = c.y + dy * base;
+    arr[k + 2] = c.z + dz * base;
+    arr[k + 3] = c.x + f.width / 2;
+    arr[k + 4] = c.y + dy * base;
+    arr[k + 5] = c.z + dz * base;
+    arr[k + 6] = c.x;
+    arr[k + 7] = c.y + dy * tip;
+    arr[k + 8] = c.z + dz * tip;
+  });
+  pos.needsUpdate = true;
+  mesh.visible = visible;
+}
 
 /**
  * The cavity wall materials, shared by every gel and water effect and never
@@ -580,19 +669,39 @@ outgoingLight = mix(vec3(0.07, 0.1, 0.12), outgoingLight, mix(0.12, 1.0, pow(1.0
 #include <opaque_fragment>`,
     );
   };
-  const normalMap = crinkleNormalMap();
-  normalMap.repeat.set(10, 3);
+  // An air pocket in clear gel (#154): face-on you look straight through it, so it is nearly
+  // invisible; toward its silhouette the gel/air boundary refracts and reflects the lab lights
+  // into a bright, thin rim. Faint stretch striations run along it. Blood from burst packs
+  // (the vertex colour) makes the wall opaque where it soaks in.
+  const striations = crinkleNormalMap();
+  striations.repeat.set(16, 2);
   const material = new THREE.MeshPhysicalMaterial({
-    color: 0x6e5638,
-    roughness: 0.22,
-    metalness: 0,
-    normalMap,
-    normalScale: new THREE.Vector2(1.6, 1.6),
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.3,
+    color: 0xfff1dc,
+    roughness: 0.08,
+    metalness: 0.2,
+    envMapIntensity: 1.6,
+    normalMap: striations,
+    normalScale: new THREE.Vector2(0.18, 0.18),
+    clearcoat: 1,
+    clearcoatRoughness: 0.05,
     side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false,
     vertexColors: true,
   });
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `float facing = abs(dot(normalize(normal), normalize(vViewPosition)));
+float rim = pow(1.0 - facing, 3.0);
+// Stained sections lose green in the vertex colour (red blood, or blue with reduced gore).
+float stain = clamp((1.0 - vColor.g) * 1.4, 0.0, 1.0);
+// Kept under the bloom threshold: a crisp refraction line, not a glow.
+outgoingLight = outgoingLight * 0.55 + vec3(1.0, 0.9, 0.74) * rim * 0.5;
+diffuseColor.a = clamp(mix(0.03, 0.7, rim) + stain * 0.75, 0.0, 1.0);
+#include <opaque_fragment>`,
+    );
+  };
   sharedCavityMaterials = { material, water };
   return sharedCavityMaterials;
 }
