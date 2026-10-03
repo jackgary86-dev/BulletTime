@@ -27,7 +27,7 @@ function airMaterial(normalMap?: THREE.Texture): THREE.MeshPhysicalMaterial {
     ior: 1.25,
     thickness: 0.003,
     specularIntensity: 0.06,
-    normalMap,
+    normalMap: normalMap ?? null,
     normalScale: new THREE.Vector2(0.6, 0.6),
     side: THREE.DoubleSide,
     depthWrite: false,
