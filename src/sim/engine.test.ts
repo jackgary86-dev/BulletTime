@@ -96,6 +96,13 @@ describe('ricochet', () => {
   it.each(['steel-ar500', 'concrete'])('does not ricochet off %s head-on or at a steep angle', (medium) => {
     for (const angleDeg of [0, 30]) expect(fire({ bullet: '9mm-fmj', medium, angleDeg }).summary.ricocheted).toBe(false);
   });
+  it('reports the speed the round arrived at, not the speed it bounced off at (#122)', () => {
+    const shot = fire({ bullet: '9mm-fmj', medium: 'steel-mild', angleDeg: 75 });
+    expect(shot.summary.ricocheted).toBe(true);
+    const arriving = shot.tracks[0].keyframes.find((k) => k.t > 0)!.speed;
+    expect(shot.summary.impactSpeed).toBeGreaterThan(arriving * 0.98);
+    expect(shot.summary.energyDepositedJ).toBeLessThanOrEqual(shot.summary.impactEnergyJ);
+  });
   it('follows each medium’s ricochet angle', () => {
     const steel = getMedium('steel-ar500').ricochetAngleDeg!;
     expect(fire({ bullet: '9mm-fmj', medium: 'steel-ar500', angleDeg: steel - 10 }).summary.ricocheted).toBe(false);
