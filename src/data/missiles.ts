@@ -95,7 +95,7 @@ export function missileSpec(airframeId: string, headId: string): BulletSpec {
     behaviour: kinetic ? 'intact' : 'explosive',
     shape: kinetic ? 'dart' : 'missile',
     noseDragFactor: kinetic ? 0.25 : 0.5,
-    yawNeckM: kinetic ? 0.9 : undefined,
+    hardCore: kinetic || undefined,
     blast: kinetic ? undefined : blastFor(h.id, a),
   };
 }

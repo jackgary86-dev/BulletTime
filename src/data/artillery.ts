@@ -63,14 +63,15 @@ function shell(row: ShellRow): BulletSpec {
     type: KIND_LABEL[row.kind],
     description: KIND_TEXT[row.kind],
     // A discarding-sabot dart is much narrower than its gun.
-    caliberMm: row.kind === 'dart' ? 26 : row.calibreMm,
+    caliberMm: row.kind === 'dart' ? 32 : row.calibreMm,
     lengthMm: row.lengthMm,
     massGrains: gr(row.massKg),
     muzzleVelocityMs: row.speedMs,
     behaviour: kinetic ? 'intact' : 'explosive',
     shape: row.kind === 'dart' ? 'dart' : 'cannonShell',
     noseDragFactor: kinetic ? 0.35 : 0.5,
-    yawNeckM: kinetic ? 0.5 : undefined,
+    // Armour-piercing shot is a hard core: it keeps its frontage and does not tumble in armour.
+    hardCore: kinetic || undefined,
     blast,
   };
 }
@@ -88,7 +89,7 @@ const ROWS: ShellRow[] = [
   { id: '76mm-he', group: 'Anti-tank and field guns', calibreMm: 76, name: 'field gun', kind: 'he', lengthMm: 320, massKg: 6.2, speedMs: 680, fillKg: 0.7 },
   { id: '76mm-ap', group: 'Anti-tank and field guns', calibreMm: 76, name: 'anti-tank gun', kind: 'ap', lengthMm: 330, massKg: 7.7, speedMs: 880 },
   { id: '87mm-he', group: 'Anti-tank and field guns', calibreMm: 87, name: 'field gun-howitzer', kind: 'he', lengthMm: 400, massKg: 11.3, speedMs: 530, fillKg: 0.9 },
-  { id: '88mm-ap', group: 'Anti-tank and field guns', calibreMm: 88, name: 'dual-purpose gun', kind: 'ap', lengthMm: 380, massKg: 10, speedMs: 800 },
+  { id: '88mm-ap', group: 'Anti-tank and field guns', calibreMm: 88, name: 'dual-purpose gun', kind: 'ap', lengthMm: 420, massKg: 10.2, speedMs: 1000 },
   { id: '88mm-he', group: 'Anti-tank and field guns', calibreMm: 88, name: 'dual-purpose gun', kind: 'he', lengthMm: 400, massKg: 9.2, speedMs: 800, fillKg: 0.95 },
   // Naval guns
   { id: '102mm-naval-he', group: 'Naval guns', calibreMm: 102, name: 'naval gun', kind: 'he', lengthMm: 440, massKg: 14, speedMs: 800, fillKg: 1.4 },
@@ -113,7 +114,7 @@ const ROWS: ShellRow[] = [
   { id: '240mm-he', group: 'Howitzers', calibreMm: 240, name: 'siege howitzer', kind: 'he', lengthMm: 1000, massKg: 160, speedMs: 650, fillKg: 30 },
   // Tank guns
   { id: '105mm-heat', group: 'Tank guns', calibreMm: 105, name: 'tank gun', kind: 'heat', lengthMm: 600, massKg: 10.5, speedMs: 1100, fillKg: 1.6 },
-  { id: '120mm-apfsds', group: 'Tank guns', calibreMm: 120, name: 'tank gun', kind: 'dart', lengthMm: 700, massKg: 4.6, speedMs: 1650 },
+  { id: '120mm-apfsds', group: 'Tank guns', calibreMm: 120, name: 'tank gun', kind: 'dart', lengthMm: 700, massKg: 4.0, speedMs: 1500 },
 ];
 
 export const ARTILLERY: BulletSpec[] = ROWS.map(shell);

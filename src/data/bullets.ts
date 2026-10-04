@@ -69,6 +69,8 @@ export interface BulletSpec {
   shape: BulletShape;
   /** Marks the clearly-not-a-sidearm entertainment option. */
   fun?: boolean;
+  /** A hardened steel or tungsten core: it does not flatten, splash or tumble against armour, so it keeps its frontage (AP shot, long rods). */
+  hardCore?: boolean;
   /** Heading the selector groups this round under (artillery, for now). */
   group?: string;
   /** Which simulator lists this round (bullet when left out). */

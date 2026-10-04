@@ -573,7 +573,7 @@ function integrate(ctx: Context, body: Body): void {
       body.speed = 0;
       if (medium.hardness >= P.splashHardness && body.kind !== 'fragment' && body.state !== 'ricocheted') {
         // Lead and copper meeting steel or concrete they can't defeat splash outward.
-        const hardSplash = medium.behaviour === 'steel';
+        const hardSplash = medium.behaviour === 'steel' && !body.bullet?.hardCore;
         if (hardSplash) {
           splash(ctx, body, layerIndex);
           persists = false;
@@ -695,7 +695,7 @@ function exitLayer(ctx: Context, body: Body, index: number): void {
 
 /** Soft bullets flatten against hard media. */
 function flatten(body: Body, medium: MediumSpec): void {
-  if (medium.hardness <= 0.5 || body.kind === 'fragment') return;
+  if (medium.hardness <= 0.5 || body.kind === 'fragment' || body.bullet?.hardCore) return;
   const grow = 1 + P.flattenGain * (medium.hardness - 0.5);
   // Steel-cored and big FMJ rounds deform less than lead.
   const toughness = body.bullet && body.bullet.caliberMm >= 12 ? 0.4 : 1;
