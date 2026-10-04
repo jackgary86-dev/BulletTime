@@ -84,7 +84,7 @@ export function rodIsRigid(v: number, rodYieldPa: number, plateDensity: number, 
   return rodYieldPa - targetResistancePa > 0.5 * plateDensity * v * v;
 }
 
-/** The hydrodynamic limit, m: the deepest an ideal fluid rod of length L could go, L·√(ρp/ρt). Strength only lowers it. */
+/** The hydrodynamic limit, m: the deepest an ideal fluid rod of length L could go, L·√(ρp/ρt). Strength only lowers it while the plate resists more than the rod yields (Rt > Yp); a rod stronger than that (tungsten in aluminium) can pass it. */
 export function hydrodynamicLimit(rodLengthM: number, rodDensity: number, plateDensity: number): number {
   return rodLengthM * Math.sqrt(rodDensity / plateDensity);
 }

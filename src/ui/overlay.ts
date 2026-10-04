@@ -28,6 +28,10 @@ export function mountOverlay(root: HTMLElement, simulator = 'Bullet'): void {
         purchasing decisions.
       </p>
       <p>
+        The Armor lab's equations, constants, sources and limits are written up in the
+        <a href="https://github.com/jackgary86-dev/BulletTime/blob/main/docs/armor-models.md" target="_blank" rel="noopener">Armor lab model notes</a>.
+      </p>
+      <p>
         Organic targets are lab simulants: gel, fake blood packs and synthetic bone, as used in
         television and lab tests.
       </p>
