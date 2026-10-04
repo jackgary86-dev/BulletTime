@@ -183,3 +183,25 @@ describe('blast response of the material (#196)', () => {
     expect(far.pressureKPa).toBeLessThan(near.pressureKPa / 5);
   });
 });
+
+describe('results for warheads and charges (#200)', () => {
+  it('follows the deepest jet through the plate, fastest at the face and slowing as it bores', () => {
+    const s = shoot(missileId('guided-at', 'shaped'), 'rha', 0.3).summary;
+    expect(s.penetrator).toBeDefined();
+    expect(s.penetrator!.startSpeed).toBeGreaterThan(3000);
+    const curve = s.penetrator!.curve;
+    expect(curve.length).toBeGreaterThan(5);
+    expect(curve.at(-1)!.depth).toBeGreaterThan(curve[0].depth);
+    expect(curve.at(-1)!.speed).toBeLessThan(curve[0].speed);
+  });
+
+  it('has no penetrator curve for plain bullets and for a charge that throws nothing', () => {
+    expect(shoot('9mm-fmj', 'pine', 0.038).summary.penetrator).toBeUndefined();
+    expect(shoot('charge-block', 'pine', 0.038).summary.penetrator).toBeUndefined();
+  });
+
+  it('follows the fragments of a cased charge into the target', () => {
+    const s = shoot('charge-cased', 'drywall', 0.0127).summary;
+    expect(s.penetrator?.curve.length ?? 0).toBeGreaterThan(1);
+  });
+});

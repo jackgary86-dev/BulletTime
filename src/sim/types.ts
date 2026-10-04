@@ -115,6 +115,8 @@ export interface ShotSummary {
   /** Detonating rounds only: TNT-equivalent yield (kg) and overpressure at the face (kPa, charges). */
   yieldKg?: number;
   blastKPa?: number;
+  /** Warheads and charges: the deepest fragment or jet, and its speed against depth (the main projectile bursts, so its own curve is empty). */
+  penetrator?: { trackId: number; startSpeed: number; curve: VelocityDepthPoint[] };
   /** Charges only: how each target layer fared, front to back. */
   blastLayers?: { name: string; pressureKPa: number; outcome: 'intact' | 'cracked' | 'toppled' | 'destroyed' }[];
 }

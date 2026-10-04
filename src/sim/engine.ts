@@ -314,6 +314,8 @@ interface Body {
   ricocheted: boolean;
   /** A tandem warhead's second jets fly down the first group's hole, so the medium resists them less. */
   followsJet?: boolean;
+  /** Extra flight allowed before a fragment gives up: a charge's pieces first cross the stand-off to the target. */
+  extraRangeM?: number;
 }
 
 interface Context {
@@ -593,7 +595,7 @@ function integrate(ctx: Context, body: Body): void {
       alive = false;
     } else if (!medium) {
       const pastStack = depthOf(ctx, body.pos) > ctx.stackDepth + P.exitRunM;
-      const travelledAway = body.pathSinceImpact > 1.2 || (body.kind === 'fragment' && body.travelled > P.fragmentRangeM);
+      const travelledAway = body.pathSinceImpact > 1.2 || (body.kind === 'fragment' && body.travelled > P.fragmentRangeM + (body.extraRangeM ?? 0));
       const hitFloor = body.pos.y < 0;
       const tooSlow = body.speed < P.restSpeed;
       const lingering = body.impacted && body.t - body.lastMaterialT > P.maxAirAfterExitS;
@@ -811,7 +813,9 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
     const m = Math.min(fragMass / count, MAX_FRAGMENT_KG) * (0.5 + ctx.rand());
     const dir = perturb(axis, cone * Math.sqrt(ctx.rand()), ctx.rand);
     const speed = (spec.fragmentSpeedMs ?? 1300) * (0.8 + 0.4 * ctx.rand());
-    ctx.queue.push(makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m), t));
+    const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m), t);
+    if (ctx.setup.bullet.behaviour === 'charge') piece.extraRangeM = ctx.setup.standOffM;
+    ctx.queue.push(piece);
   }
   const jet = spec.jet;
   if (jet) {
@@ -823,6 +827,7 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
         const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
         const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);
         piece.followsJet = g > 0;
+        if (ctx.setup.bullet.behaviour === 'charge') piece.extraRangeM = ctx.setup.standOffM;
         ctx.queue.push(piece);
       }
     }
@@ -951,6 +956,7 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
     for (const e of ctx.events) if (e.type === 'exit' && e.layer === lastLayer && (!blastExit || e.speed > blastExit.speed)) blastExit = e;
   }
   const detonation = ctx.events.find((e) => e.type === 'detonate');
+  const penetrator = blast ? deepestTrack(ctx) : undefined;
   return {
     impactSpeed,
     impactEnergyJ: ctx.setup.bullet.behaviour === 'charge' ? (blast?.yieldKg ?? 0) * TNT_J_PER_KG : 0.5 * bulletMassKg(ctx.setup.bullet) * pelletCount * impactSpeed ** 2,
@@ -958,6 +964,7 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
     passedThrough: blast ? !!blastExit : !!finalExit && !ricocheted,
     exitSpeed: blast ? (blastExit?.speed ?? 0) : finalExit && !ricocheted ? finalExit.speed : 0,
     ...(blast ? { yieldKg: blast.yieldKg, blastKPa: detonation?.pressureKPa } : {}),
+    ...(penetrator ? { penetrator } : {}),
     ...(ctx.setup.bullet.behaviour === 'charge' && blast
       ? {
           blastLayers: blastResponse(blast.yieldKg, ctx.setup.standOffM, ctx.setup.layers).map((l) => ({
@@ -975,6 +982,21 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
     energyDepositedJ: ctx.depositedJ,
     velocityVsDepth: ctx.vd,
   };
+}
+
+/** The track that got deepest into the target, with its speed against depth, for the results chart. */
+function deepestTrack(ctx: Context): ShotSummary['penetrator'] {
+  let best: { track: Track; depth: number } | null = null;
+  for (const track of ctx.tracks) {
+    let depth = 0;
+    for (const k of track.keyframes) depth = Math.max(depth, Math.min(ctx.stackDepth, depthOf(ctx, k.pos)));
+    if (depth > 0 && (!best || depth > best.depth)) best = { track, depth };
+  }
+  if (!best) return undefined;
+  const inside = best.track.keyframes.filter((k) => depthOf(ctx, k.pos) >= 0);
+  const stride = Math.max(1, Math.ceil(inside.length / 60));
+  const curve = inside.filter((_, i) => i % stride === 0).map((k) => ({ depth: Math.min(ctx.stackDepth, depthOf(ctx, k.pos)), speed: k.speed }));
+  return { trackId: best.track.id, startSpeed: inside[0]?.speed ?? 0, curve };
 }
 
 function hash(s: string): number {

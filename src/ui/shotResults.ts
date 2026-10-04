@@ -106,10 +106,12 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
         .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
         .join('');
       q('.results-line').textContent = `${Math.round(s.impactSpeed)} m/s · ${formatEnergy(s.impactEnergyJ)} · ${outcomeLine(s)}`;
-      const impact = timeline.events.find((e) => e.type === 'impact' && e.trackId === shot.primaryId);
+      // A warhead bursts on the face: the chart follows the deepest jet or fragment instead.
+      const followId = s.penetrator?.trackId ?? shot.primaryId;
+      const impact = timeline.events.find((e) => e.type === 'impact' && e.trackId === followId);
       impactPos = impact?.pos ?? null;
       impactTime = impact?.t ?? Infinity;
-      track = timeline.tracks[shot.primaryId];
+      track = timeline.tracks[followId];
       marker = drawChart(s, stack, layers);
       const parts: string[] = [];
       if (stack.length > 1) parts.push(layerTable(timeline, stack, layers));
@@ -147,7 +149,9 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
   /** Draws speed against depth with the stack's layers shaded behind it; returns the live marker, or null with no curve. */
   function drawChart(s: ShotSummary, stack: StackLayer[], layers: TargetLayer[]): SVGCircleElement | null {
     svg.replaceChildren();
-    if (s.velocityVsDepth.length < 2) {
+    const curve = s.velocityVsDepth.length >= 2 ? s.velocityVsDepth : (s.penetrator?.curve ?? []);
+    const startSpeed = s.velocityVsDepth.length >= 2 ? s.impactSpeed : (s.penetrator?.startSpeed ?? s.impactSpeed);
+    if (curve.length < 2) {
       svg.style.display = 'none';
       empty.hidden = false;
       empty.textContent = s.ricocheted
@@ -166,10 +170,10 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
     svg.style.display = '';
     empty.hidden = true;
 
-    const points = [{ depth: 0, speed: s.impactSpeed }, ...s.velocityVsDepth];
+    const points = [{ depth: 0, speed: startSpeed }, ...curve];
     if (s.passedThrough) points.push({ depth: Math.max(points.at(-1)!.depth, s.penetrationM), speed: s.exitSpeed });
     maxDepth = niceCeil(points.at(-1)!.depth);
-    const maxSpeed = niceCeil(s.impactSpeed);
+    const maxSpeed = niceCeil(Math.max(startSpeed, ...curve.map((p) => p.speed)));
     const plotW = CHART.width - CHART.left - CHART.right;
     const plotH = CHART.height - CHART.top - CHART.bottom;
     toX = (d) => CHART.left + (d / maxDepth) * plotW;
@@ -207,7 +211,7 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
     const sampled = points.filter((_, i) => i % stride === 0 || i === points.length - 1);
     svg.append(el('polyline', { points: sampled.map((p) => `${toX(p.depth).toFixed(1)},${toY(p.speed).toFixed(1)}`).join(' '), class: 'speed' }));
 
-    const dot = el('circle', { r: 3, class: 'marker', cx: toX(0), cy: toY(s.impactSpeed) }) as SVGCircleElement;
+    const dot = el('circle', { r: 3, class: 'marker', cx: toX(0), cy: toY(startSpeed) }) as SVGCircleElement;
     dot.style.display = 'none';
     svg.append(dot);
     return dot;
@@ -304,8 +308,10 @@ function formatEnergy(j: number): string {
 
 function layerTable(timeline: Timeline, stack: StackLayer[], layers: TargetLayer[]): string {
   const shot = timeline.shots.at(-1)!;
-  const track = timeline.tracks[shot.primaryId];
-  const events = timeline.events.filter((e) => e.trackId === shot.primaryId && e.layer !== undefined);
+  // A warhead's work is done by its deepest jet or fragment.
+  const followId = shot.summary.penetrator?.trackId ?? shot.primaryId;
+  const track = timeline.tracks[followId];
+  const events = timeline.events.filter((e) => e.trackId === followId && e.layer !== undefined);
   const entryOf = (i: number) => events.find((e) => layers[e.layer!]?.stack === i && (e.type === 'impact' || e.type === 'enter'));
   const rows = stack.map((l, i) => {
     const mine = events.filter((e) => layers[e.layer!]?.stack === i);
