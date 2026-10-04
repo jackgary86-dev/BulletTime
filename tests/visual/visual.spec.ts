@@ -38,7 +38,7 @@ const SHOTS: { name: string; query: string }[] = [
   { name: 'bullet-9mm-jhp-gel', query: 'mode=bullet&bullet=9mm-jhp&medium=gel10&at=1.2ms' },
   { name: 'bullet-308-sp-c35', query: 'mode=bullet&bullet=308-sp&medium=concrete-c35&at=300us' },
   { name: 'bullet-12ga-slug-steel', query: 'mode=bullet&bullet=12ga-slug&medium=steel-mild&thickness=0.006&at=150us' },
-  { name: 'artillery-default', query: 'mode=artillery&at=1ms' },
+  { name: 'artillery-default', query: 'mode=artillery&at=300us' },
   { name: 'missile-default', query: 'mode=missile&at=1ms' },
   { name: 'explosion-default', query: 'mode=explosion&at=2ms' },
 ];
