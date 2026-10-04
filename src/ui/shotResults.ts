@@ -153,7 +153,11 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
       empty.textContent = s.ricocheted
         ? 'Ricocheted off the face: no penetration.'
         : s.finalState === 'detonated'
-          ? 'Detonated on contact: no penetration.'
+          ? s.blastKPa !== undefined
+            ? 'Blast in the test bed: see the overpressure and fragment readout.'
+            : s.penetrationM > 0
+              ? 'Warhead detonated: the jet and fragments did the work.'
+              : 'Detonated on contact: no penetration.'
           : s.passedThrough
             ? 'Straight through: too thin to chart.'
             : 'Stopped at the surface.';
@@ -231,6 +235,20 @@ function text(content: string, x: number, y: number, anchor: 'start' | 'middle' 
 }
 
 function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
+  // A charge in the test bed has no impact speed: show the blast and what the fragments did.
+  if (s.blastKPa !== undefined) {
+    const kpa = s.blastKPa;
+    const rows: [string, string][] = [
+      ['Explosive', `${(s.yieldKg ?? 0).toFixed(s.yieldKg && s.yieldKg < 1 ? 2 : 1)} kg<small>TNT equivalent</small>`],
+      ['Energy released', formatEnergy(s.impactEnergyJ)],
+      ['Overpressure at face', `${kpa >= 100 ? Math.round(kpa).toLocaleString('en-US') : kpa.toFixed(1)} kPa<small>${(kpa * 0.145038).toFixed(1)} psi</small>`],
+      ['Fragments', String(s.fragments)],
+      ['Deepest fragment hit', s.penetrationM > 0 ? formatDepth(s.penetrationM) : 'None'],
+      ['Fragment passed through', s.passedThrough ? 'Yes' : 'No'],
+    ];
+    if (hasCavity) rows.push(['Max temp. cavity', s.maxCavityDiameter > 0 ? formatDepth(s.maxCavityDiameter) : '—']);
+    return rows;
+  }
   const rows: [string, string][] = [
     ['Impact velocity', `${Math.round(s.impactSpeed)} m/s<small>${Math.round(s.impactSpeed * FT_PER_M).toLocaleString('en-US')} ft/s</small>`],
     ['Kinetic energy', `${Math.round(s.impactEnergyJ).toLocaleString('en-US')} J<small>${Math.round(s.impactEnergyJ * FT_LB_PER_J).toLocaleString('en-US')} ft-lb</small>`],
@@ -238,6 +256,7 @@ function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
     ['Passed through', s.passedThrough ? 'Yes' : 'No'],
     ['Exit velocity', s.passedThrough ? `${Math.round(s.exitSpeed)} m/s` : '—'],
     ['Bullet', finalState(s)],
+    ...(s.yieldKg ? [['Explosive', `${s.yieldKg.toFixed(s.yieldKg < 1 ? 2 : 1)} kg<small>TNT equivalent</small>`] as [string, string]] : []),
     // Rounding in the step-by-step physics can nudge the tally past what arrived; it can't exceed it.
     ['Energy deposited', formatEnergy(Math.min(s.energyDepositedJ, s.impactEnergyJ))],
   ];

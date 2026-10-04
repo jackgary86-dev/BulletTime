@@ -10,7 +10,12 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 
 ## Features
 
-- **Four simulators:** the game opens on a launcher with Bullet, Artillery, Missile and Explosion. Each is an experimental impact test on the same material catalogue. **Bullet** (.22 LR up to 20 mm) is playable now. Artillery (20 mm to 240 mm), Missile (five missiles with swappable warheads) and Explosion (every kind of blast in a test bed) are listed as coming soon. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186). Add `?mode=bullet` to the URL to skip the launcher.
+- **Four simulators:** the game opens on a launcher with **Bullet**, **Artillery**, **Missile** and **Explosion**. Each is an experimental impact or blast test on the same material catalogue, with slow-motion playback, per-material effects and a results panel. Add `?mode=artillery` (or `bullet`, `missile`, `explosion`) to the URL to skip the launcher. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186).
+  - **Bullet:** .22 LR up to the 20 mm cannon shell.
+  - **Artillery:** about 30 shells from 20 mm to 240 mm, grouped as autocannon, anti-tank and field guns, naval guns, mortars, recoilless rifles, howitzers and tank guns. AP and APFSDS shot punch through; HE shells burst on the face and throw fragments; HEAT fires a shaped-charge jet; HESH spalls the far side. Heavy targets (armour plate, reinforced concrete, packed earth) are added for them.
+  - **Missile:** five basic airframes (light rocket, shoulder rocket, guided anti-tank, air-to-surface, cruise-class), each fitted with any of five warheads: shaped charge, tandem, blast-fragmentation, kinetic penetrator or thermobaric.
+  - **Explosion:** a test bed of seven charges (flash, cased fragmentation, demolition block, satchel, linear shaped, thermobaric and incendiary) detonated at a stand-off from the material. The results show the TNT-equivalent yield and the overpressure at the face, and weak materials (glass, drywall, wood) fail before strong ones (concrete, steel).
+  - Explosive numbers are plausible game values, not engineering data.
 - **12 rounds** from .22 LR to .50 BMG: FMJ, hollow points, soft points, a fragmenting 5.56, buckshot, a slug, and a 20 mm HEI shell just for fun. Each has a true-scale 3D model and real-world data.
 - **Targets:**
   - 10% ballistic gel and a water tank.

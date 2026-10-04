@@ -1,10 +1,11 @@
 /**
  * The launcher shown after the content warning: the four simulators (#186).
  * Each is an experimental impact test on the same material catalogue, over its
- * own munition range. Only Bullet is playable so far; the others are listed as
- * coming soon. `?mode=bullet` in the URL skips the screen.
+ * own munition range. `?mode=artillery` (or any other mode) in the URL skips the screen.
  */
-export type SimulatorId = 'bullet' | 'artillery' | 'missile' | 'explosion';
+import type { SimulatorId } from '../data/bullets';
+
+export type { SimulatorId };
 
 interface Simulator {
   id: SimulatorId;
@@ -16,9 +17,9 @@ interface Simulator {
 
 const SIMULATORS: Simulator[] = [
   { id: 'bullet', name: 'Bullet', range: '.22 LR to 20 mm', blurb: 'Fire any round into gel, wood, concrete, steel, glass and layered stacks.', ready: true },
-  { id: 'artillery', name: 'Artillery', range: '20 mm to 240 mm', blurb: 'AP, HE and HEAT shells against thick plate, reinforced concrete and earth.', ready: false },
-  { id: 'missile', name: 'Missile', range: '5 missiles, many heads', blurb: 'Five basic missiles, each fitted with a different warhead.', ready: false },
-  { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: false },
+  { id: 'artillery', name: 'Artillery', range: '20 mm to 240 mm', blurb: 'AP, HE, HEAT and HESH shells from autocannon to siege howitzers against plate, concrete and earth.', ready: true },
+  { id: 'missile', name: 'Missile', range: '5 missiles, 5 warheads', blurb: 'Five basic missiles, each fitted with a different warhead.', ready: true },
+  { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: true },
 ];
 
 function requestedMode(): SimulatorId | null {

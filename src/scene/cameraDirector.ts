@@ -47,6 +47,9 @@ export class CameraDirector {
   mode: CameraMode = 'side';
   private impactPoint = new THREE.Vector3();
   private targetDepth = 0.4;
+  /** Largest face dimension of the target, and the stand-off the view should take in. */
+  private span = 0.3;
+  private reach = 0.5;
   private readonly look = new THREE.Vector3();
   private readonly pose: Pose = { position: new THREE.Vector3(), look: new THREE.Vector3(), ease: EASE_RATE.side };
   /** Velocities of the camera position and look point, in metres per real second. */
@@ -67,9 +70,15 @@ export class CameraDirector {
   }
 
   /** Where the target's front face is struck and how deep the target is, for framing. */
-  setTarget(impactPoint: THREE.Vector3, depth: number): void {
+  setTarget(impactPoint: THREE.Vector3, depth: number, span = 0.3): void {
     this.impactPoint.copy(impactPoint);
     this.targetDepth = depth;
+    this.span = span;
+  }
+
+  /** How far in front of the face the action starts (a charge's stand-off), in metres, so the side view includes it. */
+  setReach(reachM: number): void {
+    this.reach = Math.max(0.5, reachM);
   }
 
   setMode(mode: CameraMode): void {
@@ -154,9 +163,13 @@ export class CameraDirector {
   }
 
   private sidePose(pose: Pose): void {
-    const centreX = this.impactPoint.x + Math.min(this.targetDepth, 0.8) / 2;
-    pose.look.set(centreX, this.impactPoint.y, 0);
-    pose.position.set(centreX + 0.15, this.impactPoint.y + 0.17, 1.15 + Math.min(this.targetDepth, 0.8) * 0.3);
+    const depth = Math.min(this.targetDepth, 0.8);
+    // Widen to take in a charge standing off from the face, and big targets (the usual 0.5 m reach and 0.3 m face need no change).
+    const stand = Math.max(0, this.reach - 0.5);
+    const scale = Math.max(((this.reach + depth) / (0.5 + depth)) * (stand > 0 ? 1.35 : 1), 1 + Math.max(0, this.span - 0.3) * 1.4);
+    const centreX = this.impactPoint.x + depth / 2 - stand * 0.9;
+    pose.look.set(centreX, this.impactPoint.y + Math.max(0, this.span - 0.3) * 0.25, 0);
+    pose.position.set(centreX + 0.15, this.impactPoint.y + 0.17 * scale, (1.15 + depth * 0.3) * scale);
     pose.ease = EASE_RATE.side;
   }
 

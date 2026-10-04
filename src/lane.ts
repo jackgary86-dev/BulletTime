@@ -3,7 +3,7 @@ import { getRegion } from './data/dummy';
 import { STANDARD_RESOLUTION, ULTRA_RESOLUTION } from './data/physics';
 import { clampAimToObjects, shapeLayers } from './data/objects';
 import { physicsLayers, stackDepth } from './data/stacks';
-import type { BulletSpec } from './data/bullets';
+import { getBullet, type BulletSpec } from './data/bullets';
 import { MuzzleEffect } from './fx/muzzle';
 import { ShotRenderer } from './fx/shotRenderer';
 import type { BurstSpec } from './fx/particles';
@@ -21,6 +21,7 @@ import { seededRandom } from './sim/random';
 import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
 import { patternSeed, roundOffsets } from './sim/firePattern';
 import type { Timeline } from './sim/types';
+import { hasMuzzle } from './data/modes';
 import type { FirePlan } from './ui/shotsPanel';
 import type { TargetSetup } from './ui/stackEditor';
 
@@ -73,6 +74,11 @@ export class Lane {
 
   get lineY(): number {
     return shotLineY(this.setup);
+  }
+
+  /** Largest face dimension in the target, in metres, for framing. */
+  get faceSpan(): number {
+    return Math.max(0.3, ...this.setup.layers.map((l) => Math.max(l.medium.heightM, l.medium.widthM)));
   }
 
   get depth(): number {
@@ -156,7 +162,7 @@ export class Lane {
         layers: shapeLayers(layers, y, z),
         angleDeg,
         impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
-        standOffM: STAND_OFF_M,
+        standOffM: this.spec.standoffM ?? STAND_OFF_M,
         damage: priorDamage(this.session),
         resolution: this.quality.fineSimulation ? ULTRA_RESOLUTION : STANDARD_RESOLUTION,
       });
@@ -169,7 +175,7 @@ export class Lane {
     this.lastFireStart = fireStart;
     this.shot.load(timeline);
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
-    for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
+    if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
     addVapourTrails(timeline, this.effects.particles);
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
     timeline.duration = Math.max(timeline.duration, Math.min(this.effects.endTime, timeline.duration + EFFECT_TAIL_S));
@@ -202,15 +208,37 @@ export class Lane {
     }
     // The muzzle flash belongs to whichever shot is playing, at that shot's aim point.
     const current = timeline && t !== null ? activeShot(timeline, t) : null;
-    if (current) this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y + current.aim.y, current.aim.z));
-    this.muzzle.update(current && t !== null ? t - current.start : null, camera);
+    const flash = current && hasMuzzle(getBullet(current.bulletId)) ? current : null;
+    if (flash) this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y + flash.aim.y, flash.aim.z));
+    this.muzzle.update(flash && t !== null ? t - flash.start : null, camera);
     const { shockwave } = this.postFx;
-    shockwave.enabled = this.muzzle.shock.strength > 0;
-    shockwave.center.copy(this.muzzle.shock.center);
-    shockwave.radius = this.muzzle.shock.radius;
-    shockwave.strength = this.muzzle.shock.strength;
+    // A detonation's blast front takes over from the muzzle shell while it is passing.
+    const blast = timeline && t !== null ? blastShock(timeline.events, t) : null;
+    const shock = blast ?? this.muzzle.shock;
+    shockwave.enabled = shock.strength > 0;
+    shockwave.center.copy(shock.center);
+    shockwave.radius = shock.radius;
+    shockwave.strength = shock.strength;
     this.postFx.grade.setFlash(current && t !== null ? flashExposure(t - current.start, shutterS) : 0);
   }
+}
+
+/** The blast front of the detonation playing at sim time `t`, as a shell for the shockwave pass, or null. */
+const BLAST_SHOCK_END_S = 12e-3;
+const blastCenter = new THREE.Vector3();
+function blastShock(events: Timeline['events'], t: number): { center: THREE.Vector3; radius: number; strength: number } | null {
+  for (const e of events) {
+    if (e.type !== 'detonate' || e.yieldKg === undefined || t < e.t) continue;
+    const since = t - e.t;
+    if (since > BLAST_SHOCK_END_S) continue;
+    const w = Math.cbrt(Math.max(0.01, e.yieldKg));
+    // Fast and strong at first (several times the speed of sound), then slowing to it as it weakens.
+    const radius = Math.max(1e-4, 343 * since * (1 + 2.5 * Math.exp(-since / (1.5e-3 * Math.max(0.5, w)))));
+    const strength = Math.min(1, 0.25 * w) * (1 - since / BLAST_SHOCK_END_S) ** 2 / (1 + radius / (0.6 * w));
+    blastCenter.set(e.pos.x, e.pos.y, e.pos.z);
+    return { center: blastCenter, radius, strength };
+  }
+  return null;
 }
 
 /** The grey puff of powder smoke that rolls out of the barrel behind the flash (#63, #65). */

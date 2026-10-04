@@ -6,7 +6,8 @@ import { TARGET_FRONT_X } from './models/targets';
 import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { CameraDirector } from './scene/cameraDirector';
-import { DEFAULT_BULLET_ID, getBullet, type BulletSpec } from './data/bullets';
+import { getBullet, type BulletSpec } from './data/bullets';
+import { MODES } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
@@ -42,7 +43,9 @@ async function bootstrap(): Promise<void> {
 
   // Nothing renders until the player has seen the mature-content warning (#109).
   await contentGate();
-  await chooseSimulator();
+  const mode = await chooseSimulator();
+  const modeInfo = MODES[mode];
+  document.body.classList.add(`mode-${mode}`);
   await loader.progress(0.1, 'Starting the renderer');
   const renderer = createRenderer(canvas);
   const { camera, controls } = createCameraRig(canvas);
@@ -70,7 +73,8 @@ async function bootstrap(): Promise<void> {
     for (const lane of lanes()) lane.setQuality(q);
   };
 
-  let spec = getBullet(DEFAULT_BULLET_ID);
+  let spec = getBullet(modeInfo.defaultId);
+  director.setReach(spec.standoffM ?? 0.5);
   // Lane A is the main setup; lane B only exists while comparing (#14).
   let laneA: Lane | null = null;
   let laneB: Lane | null = null;
@@ -78,10 +82,12 @@ async function bootstrap(): Promise<void> {
 
   mountBulletSelector(overlay, {
     initialId: spec.id,
+    mode,
     // Switching rounds keeps the damage already in the target: the next shot just uses the new round.
     onChange: (next: BulletSpec) => {
       spec = next;
       if (laneA) laneA.spec = next;
+      director.setReach(next.standoffM ?? 0.5);
     },
   });
 
@@ -142,7 +148,7 @@ async function bootstrap(): Promise<void> {
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
     }
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth);
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth, laneA.faceSpan);
     unlockAudio();
     playback.start(clock, laneA.lastFireStart);
     cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
@@ -157,7 +163,7 @@ async function bootstrap(): Promise<void> {
     laneA.setTarget(setup);
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth);
+    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
     clearShot();
   };
   const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
@@ -190,7 +196,7 @@ async function bootstrap(): Promise<void> {
 
   /** Lane B's emptied scene, reused the next time Compare turns on (see Lane's constructor, #133). */
   let spareScene: THREE.Scene | undefined;
-  const compare = mountComparePanel(overlay, { bulletId: DEFAULT_BULLET_ID, mediumId: DEFAULT_MEDIUM_ID }, {
+  const compare = mountComparePanel(overlay, { bulletId: '9mm-jhp', mediumId: DEFAULT_MEDIUM_ID }, {
     onToggle: (on) => {
       if (on) {
         laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
@@ -231,7 +237,7 @@ async function bootstrap(): Promise<void> {
       const setup = stageSetup(stage);
       laneA.setTarget(setup);
       clearShot();
-      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth);
+      director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
       const face = faceLimits(setup);
       // The scoring circle stays 1 cm inside the face, where the fire code keeps every shot.
       return Math.min(face.y, face.z) - 0.01;

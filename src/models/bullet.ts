@@ -268,6 +268,70 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
         lathe(fuze, M.aluminium),
       ];
     }
+
+    case 'dart': {
+      // A long dense rod with a pointed nose, a blunt tail and four small fins.
+      const bodyTop = L * 0.9;
+      const rod: Profile = [
+        [0, 0],
+        [r * 0.9, 0],
+        [r, L * 0.02],
+        [r, bodyTop],
+        ...nose(r, bodyTop, L, r * 0.12, false, 6),
+        [0, L],
+      ];
+      const meshes: THREE.Object3D[] = [lathe(rod, M.lead)];
+      for (let i = 0; i < 4; i++) {
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(r * 0.12, L * 0.18, r * 1.4), M.aluminium);
+        fin.position.set(0, L * 0.09, 0);
+        fin.rotation.y = (i * Math.PI) / 4 + Math.PI / 8;
+        fin.castShadow = true;
+        meshes.push(fin);
+      }
+      return meshes;
+    }
+
+    case 'missile': {
+      // Airframe: painted body, a rounded nose cone, a coloured warhead band and four tail fins.
+      const noseStart = L * 0.82;
+      const body: Profile = [
+        [0, 0],
+        [r * 0.92, 0],
+        [r, L * 0.01],
+        [r, noseStart],
+        ...nose(r, noseStart, L, r * 0.08, true, 10),
+        [0, L],
+      ];
+      const band: Profile = [
+        [r * 1.003, L * 0.7],
+        [r * 1.003, L * 0.74],
+      ];
+      const meshes: THREE.Object3D[] = [lathe(body, M.paintedSteel), lathe(band, M.yellowPaint)];
+      for (let i = 0; i < 4; i++) {
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(r * 0.05, L * 0.1, r * 1.5), M.aluminium);
+        fin.position.set(0, L * 0.06, 0);
+        fin.rotation.y = (i * Math.PI) / 2;
+        fin.castShadow = true;
+        meshes.push(fin);
+      }
+      return meshes;
+    }
+
+    case 'charge': {
+      // A squat painted drum with a lid and a short fuze lead.
+      const drum: Profile = [
+        [0, 0],
+        [r, 0],
+        [r, L * 0.88],
+        [r * 0.92, L],
+        [0, L],
+      ];
+      const lid: Profile = [
+        [r * 1.01, L * 0.8],
+        [r * 1.01, L * 0.9],
+      ];
+      return [lathe(drum, M.paintedSteel), lathe(lid, M.redPaint)];
+    }
   }
 }
 

@@ -354,7 +354,8 @@ export function simulate(setup: ShotSetup): Timeline {
   const b = setup.bullet;
   const start = sub(setup.impactPoint, v3(setup.standOffM, 0, 0));
   const pellets = b.behaviour === 'shot' ? (b.pellets ?? 9) : 1;
-  for (let i = 0; i < pellets; i++) {
+  if (b.behaviour === 'charge') placeCharge(ctx, b, start);
+  else for (let i = 0; i < pellets; i++) {
     // Pellets leave in a fixed pattern: one centre, the rest on a ring.
     let dir = v3(1, 0, 0);
     if (i > 0 && b.spreadPerMetre) {
@@ -778,16 +779,96 @@ function splash(ctx: Context, body: Body, index: number): void {
   event(ctx, body, 'splash', { normal: faceNormal, layer: index });
 }
 
-/** The 20mm HEI shell detonates on contact, throwing fragments into a forward cone. */
+/** Delay between a charge appearing at its stand-off and going off, in seconds. */
+const CHARGE_FUZE_S = 1.5e-3;
+/** Heaviest representative casing fragment, in kilograms. */
+const MAX_FRAGMENT_KG = 0.03;
+/** Delay before a tandem warhead's second jet group, in seconds. */
+const TANDEM_DELAY_S = 40e-6;
+/** TNT's specific energy, in joules per kilogram, for the energy line in the results. */
+export const TNT_J_PER_KG = 4.184e6;
+
+/**
+ * Overpressure from a free-air blast at `rangeM` from `yieldKg` of TNT, in kPa:
+ * a standard curve fit by scaled distance (Mills). Close in it is an estimate
+ * of the incident pressure, good enough to rank materials, not for engineering.
+ */
+export function blastOverpressureKPa(yieldKg: number, rangeM: number): number {
+  const z = Math.max(0.3, rangeM) / Math.cbrt(Math.max(1e-6, yieldKg));
+  return 1772 / z ** 3 - 114 / z ** 2 + 108 / z;
+}
+
+/** Throws a cone of fragments (and shaped-charge jets) from `origin` along `axis`. */
+function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec: NonNullable<BulletSpec['blast']>, cone: number, t: number): void {
+  const count = spec.fragmentCount ?? 0;
+  const fragMass = body.mass * (spec.fragmentMassFraction ?? 0.7);
+  for (let i = 0; i < count; i++) {
+    // A sample of the real fragment cloud: each piece stays small, as real casing fragments are.
+    const m = Math.min(fragMass / count, MAX_FRAGMENT_KG) * (0.5 + ctx.rand());
+    const dir = perturb(axis, cone * Math.sqrt(ctx.rand()), ctx.rand);
+    const speed = (spec.fragmentSpeedMs ?? 1300) * (0.8 + 0.4 * ctx.rand());
+    ctx.queue.push(makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m), t));
+  }
+  const jet = spec.jet;
+  if (jet) {
+    const groups = jet.tandem ? 2 : 1;
+    for (let g = 0; g < groups; g++) {
+      for (let i = 0; i < jet.count; i++) {
+        const m = (body.mass * jet.massFraction) / jet.count;
+        const dir = perturb(axis, 0.012 * Math.sqrt(ctx.rand()), ctx.rand);
+        const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
+        ctx.queue.push(makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S));
+      }
+    }
+  }
+}
+
+/** A round that detonates on contact (shells, warheads): fragments into a forward cone, plus any jets. */
 function detonate(ctx: Context, body: Body, index: number): void {
   body.state = 'detonated';
+  const spec = body.bullet?.blast;
+  if (spec) {
+    throwFragments(ctx, body, body.pos, body.dir, spec, spec.jet ? 0.5 : 1.1, body.t);
+    event(ctx, body, 'detonate', { layer: index, yieldKg: spec.yieldKg, fireball: spec.fireball ?? 'standard' });
+    return;
+  }
   const count = 28;
   for (let i = 0; i < count; i++) {
     const m = (body.mass * 0.7) / count;
     const dir = perturb(body.dir, 1.1 * Math.sqrt(ctx.rand()), ctx.rand);
     ctx.queue.push(makeBody(ctx, 'fragment', { ...body.pos }, dir, 1100 + 500 * ctx.rand(), m, fragmentDiameter(m), body.t));
   }
-  event(ctx, body, 'detonate', { layer: index });
+  event(ctx, body, 'detonate', { layer: index, yieldKg: 0.01, fireball: 'standard' });
+}
+
+/** The explosion test bed: a charge sits at its stand-off and goes off, throwing fragments and jets at the target. */
+function placeCharge(ctx: Context, b: BulletSpec, start: Vec3): void {
+  const blast = b.blast ?? { yieldKg: 0 };
+  const body = makeBody(ctx, 'bullet', { ...start }, v3(1, 0, 0), 0, bulletMassKg(b), b.caliberMm / 1000, 0, b);
+  const standoff = ctx.setup.standOffM;
+  // Fragments leave in a cone wide enough to cover the face from the stand-off.
+  const cone = Math.min(1.3, Math.atan2(0.7, standoff));
+  body.t = CHARGE_FUZE_S;
+  body.state = 'detonated';
+  const frame = (t: number): Keyframe => ({ t, pos: { ...start }, dir: v3(1, 0, 0), speed: 0, yaw: 0, diameter: body.baseDiameter });
+  ctx.tracks.push({
+    id: body.id,
+    kind: 'bullet',
+    massKg: body.mass,
+    baseDiameter: body.baseDiameter,
+    keyframes: [frame(0), frame(CHARGE_FUZE_S)],
+    spawnT: 0,
+    endT: CHARGE_FUZE_S,
+    persists: false,
+    finalState: 'detonated',
+  });
+  event(ctx, body, 'detonate', {
+    layer: 0,
+    yieldKg: blast.yieldKg,
+    fireball: blast.fireball ?? 'standard',
+    pressureKPa: Math.max(0, blastOverpressureKPa(blast.yieldKg, standoff)),
+  });
+  throwFragments(ctx, body, start, v3(1, 0, 0), blast, cone, CHARGE_FUZE_S);
 }
 
 function fragmentDiameter(mass: number): number {
@@ -829,12 +910,24 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
   let maxCavityRadius = 0;
   for (const c of ctx.cavity) maxCavityRadius = Math.max(maxCavityRadius, c.radius);
   const ricocheted = primary.finalState === 'ricocheted';
+  // Warheads and charges do their work through fragments and jets, so look at every track.
+  const blast = ctx.setup.bullet.blast;
+  let blastPenetration = 0;
+  let blastExit: ShotEvent | undefined;
+  if (blast) {
+    for (const track of ctx.tracks) {
+      for (const k of track.keyframes) blastPenetration = Math.max(blastPenetration, Math.min(ctx.stackDepth, depthOf(ctx, k.pos)));
+    }
+    for (const e of ctx.events) if (e.type === 'exit' && e.layer === lastLayer && (!blastExit || e.speed > blastExit.speed)) blastExit = e;
+  }
+  const detonation = ctx.events.find((e) => e.type === 'detonate');
   return {
     impactSpeed,
-    impactEnergyJ: 0.5 * bulletMassKg(ctx.setup.bullet) * pelletCount * impactSpeed ** 2,
-    penetrationM: ricocheted ? 0 : maxDepthAll,
-    passedThrough: !!finalExit && !ricocheted,
-    exitSpeed: finalExit && !ricocheted ? finalExit.speed : 0,
+    impactEnergyJ: ctx.setup.bullet.behaviour === 'charge' ? (blast?.yieldKg ?? 0) * TNT_J_PER_KG : 0.5 * bulletMassKg(ctx.setup.bullet) * pelletCount * impactSpeed ** 2,
+    penetrationM: ricocheted ? 0 : blast ? blastPenetration : maxDepthAll,
+    passedThrough: blast ? !!blastExit : !!finalExit && !ricocheted,
+    exitSpeed: blast ? (blastExit?.speed ?? 0) : finalExit && !ricocheted ? finalExit.speed : 0,
+    ...(blast ? { yieldKg: blast.yieldKg, blastKPa: detonation?.pressureKPa } : {}),
     finalState: primary.finalState,
     finalDiameter: last.diameter,
     fragments: ctx.tracks.filter((t) => t.kind === 'fragment').length,

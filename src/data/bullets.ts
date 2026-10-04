@@ -7,13 +7,21 @@
  * barrel lengths. They are realistic, not authoritative for any specific load.
  */
 
+import { ARTILLERY } from './artillery';
+import { EXPLOSIVES } from './explosives';
+import { findMissile } from './missiles';
+
+/** The four simulators (#186). Each is an impact or blast test on the same material catalogue. */
+export type SimulatorId = 'bullet' | 'artillery' | 'missile' | 'explosion';
+
 /** How the bullet behaves on impact; drives the physics engine. */
 export type BulletBehaviour =
   | 'intact' // stays in one piece, may yaw (FMJ, round nose)
   | 'expand' // mushrooms above a velocity threshold (JHP, soft point)
   | 'fragment' // breaks up above a velocity threshold (5.56 M193)
   | 'shot' // multiple pellets (buckshot)
-  | 'explosive'; // high-explosive incendiary payload (20mm, fun option)
+  | 'explosive' // detonates on first contact (shells, warheads)
+  | 'charge'; // a placed charge that detonates in the air at its stand-off (explosion test bed)
 
 /** Which procedural profile builds the 3D model. */
 export type BulletShape =
@@ -25,7 +33,25 @@ export type BulletShape =
   | 'boatTail'
   | 'fosterSlug'
   | 'buckshot'
-  | 'cannonShell';
+  | 'cannonShell'
+  | 'dart' // long-rod penetrator
+  | 'missile'
+  | 'charge';
+
+/** What a detonation does (#186). Yields are TNT-equivalent kilograms; the numbers are plausible for a game, not engineering data. */
+export interface BlastSpec {
+  /** TNT-equivalent explosive, in kilograms. Sets the fireball, the overpressure and the shockwave. */
+  yieldKg: number;
+  /** Fragments thrown (a representative sample, not the real count) and their speed. */
+  fragmentCount?: number;
+  fragmentSpeedMs?: number;
+  /** Fraction of the round's mass that becomes fragments (default 0.7). */
+  fragmentMassFraction?: number;
+  /** Shaped-charge jets: how many separate jets, each pair's speed and the fraction of the round's mass in each jet group. */
+  jet?: { count: number; speedMs: number; massFraction: number; /** A second, delayed jet group (tandem warhead). */ tandem?: boolean };
+  /** Fireball look. */
+  fireball?: 'standard' | 'thermobaric' | 'incendiary' | 'none';
+}
 
 export interface BulletSpec {
   id: string;
@@ -43,6 +69,14 @@ export interface BulletSpec {
   shape: BulletShape;
   /** Marks the clearly-not-a-sidearm entertainment option. */
   fun?: boolean;
+  /** Heading the selector groups this round under (artillery, for now). */
+  group?: string;
+  /** Which simulator lists this round (bullet when left out). */
+  mode?: SimulatorId;
+  /** Detonation details for shells, warheads and charges. */
+  blast?: BlastSpec;
+  /** Distance from the round's start (or the charge) to the target face, in metres. */
+  standoffM?: number;
 
   /** Pellets per shell (shot only). Mass and size above are per pellet. */
   pellets?: number;
@@ -244,8 +278,11 @@ export const BULLETS: BulletSpec[] = [
 
 export const DEFAULT_BULLET_ID = '9mm-jhp';
 
+/** Every round in every simulator, except the missile combinations (those resolve by id). */
+export const ALL_MUNITIONS: BulletSpec[] = [...BULLETS, ...ARTILLERY, ...EXPLOSIVES];
+
 export function getBullet(id: string): BulletSpec {
-  const bullet = BULLETS.find((b) => b.id === id);
+  const bullet = ALL_MUNITIONS.find((b) => b.id === id) ?? findMissile(id);
   if (!bullet) throw new Error(`Unknown bullet id: ${id}`);
   return bullet;
 }

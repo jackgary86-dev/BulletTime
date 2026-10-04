@@ -1990,3 +1990,13 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* Range challenge and comparison are Bullet-only. */
+.mode-artillery .range-start,
+.mode-missile .range-start,
+.mode-explosion .range-start,
+.mode-artillery .compare-toggle,
+.mode-missile .compare-toggle,
+.mode-explosion .compare-toggle {
+  display: none;
+}

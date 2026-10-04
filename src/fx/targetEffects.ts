@@ -8,6 +8,7 @@ import { GlassCracks } from './glassEffect';
 import { GelEffect } from './gelEffect';
 import { HoleMarks } from './holes';
 import { loadHardEffect } from './hardEffect';
+import { loadBlastEffect } from './blastEffect';
 import { loadPanelEffect } from './panelEffect';
 import { loadSandEffect } from './sandEffect';
 import { ObjectEffect } from './objectEffect';
@@ -64,6 +65,7 @@ export class TargetEffects {
       }
     });
     loadHardEffect(timeline, targetLayers, this.particles, this.holes);
+    loadBlastEffect(timeline, targetLayers, this.particles);
     this.objects.load(timeline, target, targetLayers);
     loadBoneEffect(timeline, layers, this.particles, this.holes);
     this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);

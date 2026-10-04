@@ -69,6 +69,10 @@ export interface ShotEvent {
   speed: number;
   /** Index of the target layer involved. */
   layer?: number;
+  /** Detonations: TNT-equivalent yield in kilograms, the fireball look, and the overpressure at the target face (kPa; charges only). */
+  yieldKg?: number;
+  fireball?: string;
+  pressureKPa?: number;
 }
 
 /** Temporary and permanent cavity data along the primary path (gel-like media only). */
@@ -108,6 +112,9 @@ export interface ShotSummary {
   maxCavityDiameter: number;
   energyDepositedJ: number;
   velocityVsDepth: VelocityDepthPoint[];
+  /** Detonating rounds only: TNT-equivalent yield (kg) and overpressure at the face (kPa, charges). */
+  yieldKg?: number;
+  blastKPa?: number;
 }
 
 /** One shot within a timeline: a single fire, or one round of a group or burst (#22). */
