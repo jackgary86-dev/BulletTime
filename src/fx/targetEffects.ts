@@ -12,6 +12,7 @@ import { BlastDamage, loadBlastEffect } from './blastEffect';
 import { loadPanelEffect } from './panelEffect';
 import { loadSandEffect } from './sandEffect';
 import { ObjectEffect } from './objectEffect';
+import { PlateDish } from './plateDish';
 import { ParticleSystem } from './particles';
 
 /**
@@ -28,6 +29,7 @@ export class TargetEffects {
   private readonly glass = new GlassCracks();
   private readonly objects: ObjectEffect;
   private readonly blastDamage = new BlastDamage();
+  private readonly plateDish = new PlateDish();
   /** Blood packs and bone from the last shot into an organic target, or null. */
   organic: OrganicResult | null = null;
 
@@ -68,6 +70,7 @@ export class TargetEffects {
     loadHardEffect(timeline, targetLayers, this.particles, this.holes);
     loadBlastEffect(timeline, targetLayers, this.particles);
     this.blastDamage.load(timeline, target, targetLayers);
+    this.plateDish.load(timeline, target, targetLayers);
     this.objects.load(timeline, target, targetLayers);
     loadBoneEffect(timeline, layers, this.particles, this.holes);
     this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
@@ -90,6 +93,7 @@ export class TargetEffects {
     this.glass.clear();
     this.objects.clear();
     this.blastDamage.clear();
+    this.plateDish.clear();
     this.organic = null;
     this.particles.clear();
   }
@@ -101,6 +105,7 @@ export class TargetEffects {
     this.glass.update(t);
     this.objects.update(t);
     this.blastDamage.update(t);
+    this.plateDish.update(t);
     for (const blood of this.bloods) blood.update(t);
     this.particles.update(t, shutterS);
   }

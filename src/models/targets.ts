@@ -20,6 +20,8 @@ export const BLOOD_PACK_PREFIX = 'blood-pack-';
 export const BONE_ROD_NAME = 'bone-rod';
 /** Name of a showpiece object's body (#156), so its effect can hide, shake or break it. */
 export const OBJECT_BODY_NAME = 'object-body';
+/** Name of a metal plate's body (#221), so its effect can bulge the back face. */
+export const PLATE_BODY_NAME = 'plate-body';
 
 /** Synthetic bone simulant: off-white, slightly yellow. */
 export const BONE_COLOR = 0xe9dfc8;
@@ -294,7 +296,7 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         roughness: 1,
         envMapIntensity: 2,
       });
-      if (spec.look === 'mildSteel') return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale);
+      if (spec.look === 'mildSteel') return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale), PLATE_BODY_NAME);
       const paint = steelPlateMaps('painted');
       const painted = new THREE.MeshStandardMaterial({
         map: paint.map,
@@ -305,7 +307,7 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         roughness: 1,
       });
       // BoxGeometry material order: +x, -x, +y, -y, +z, -z.
-      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [painted, painted, scale, scale, scale, scale]);
+      return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [painted, painted, scale, scale, scale, scale]), PLATE_BODY_NAME);
     }
 
     case 'sandbag':
@@ -568,6 +570,11 @@ function createSandbag(t: number, h: number, w: number): THREE.Mesh {
  * Re-maps a box's UVs so every face shows the texture at the same real-world
  * scale (one tile per `tileM` metres), instead of stretching it per face.
  */
+function named<T extends THREE.Object3D>(object: T, name: string): T {
+  object.name = name;
+  return object;
+}
+
 function tileUvs(geometry: THREE.BoxGeometry, tileM: number): THREE.BoxGeometry {
   const pos = geometry.attributes.position;
   const normal = geometry.attributes.normal;

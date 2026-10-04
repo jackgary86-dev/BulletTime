@@ -7,6 +7,7 @@ import type { HoleMarks } from './holes';
 import type { ParticleSystem } from './particles';
 import type { MediumSpec } from '../data/media';
 import { concreteFootprint } from './concreteDamage';
+import { planDishes } from './plateDishMath';
 
 /**
  * Concrete, cinder block and steel plate: craters, cracks, dents, sparks, lead
@@ -19,7 +20,7 @@ import { concreteFootprint } from './concreteDamage';
  */
 
 const CONCRETE = { fresh: 0x9e9b94, dust: 0x8a8781, grit: 0x7d7a74, hole: 0x161616, crack: 0x2a2a2a };
-const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505, paint: 0xd8d1bf };
+const STEEL = { bright: 0xe4e8ec, bare: 0xb4bac2, lead: 0x9a9ea4, spark: 0xffb347, hole: 0x050505, paint: 0xd8d1bf, soot: 0x26262a };
 /** A perforation's rim glows hot and cools over about this long, in seconds. */
 const GLOW_COOL_S = 2.5e-3;
 /** Peak brightness of the flash from a steel strike, in candela, and how fast it dies, in seconds. */
@@ -28,6 +29,7 @@ const FLASH_DECAY_S = 150e-6;
 
 export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], particles: ParticleSystem, holes: HoleMarks): void {
   let seed = 101;
+  const dishes = planDishes(timeline, layers);
   for (const e of timeline.events) {
     if (e.layer === undefined) continue;
     const medium = layers[e.layer]?.medium;
@@ -46,7 +48,11 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
     }
     else if (medium.behaviour === 'steel') {
       const perforated = timeline.events.some((x) => x.type === 'exit' && x.layer === e.layer && x.trackId === e.trackId);
-      steelEvent(ctx, e, medium.look === 'ar500', perforated, particles, holes, seed++);
+      // The fragments the round shed on the way out (#188) are the source of truth for how many bright chips fly.
+      const shed = e.type === 'exit' ? timeline.tracks.filter((tr) => tr.kind === 'fragment' && Math.abs(tr.spawnT - e.t) < 1e-5).length : 0;
+      // The back face is bulged by the time the plate gives way (#221): the exit hole sits on top of the bulge.
+      const dish = e.type === 'exit' ? dishes.find((x) => x.layer === e.layer && x.trackId === e.trackId) : undefined;
+      steelEvent(ctx, e, medium.look === 'ar500', perforated, shed, dish?.depthM ?? 0, particles, holes, seed++);
     }
   }
 }
@@ -165,6 +171,8 @@ function steelEvent(
   e: ShotEvent,
   painted: boolean,
   perforated: boolean,
+  shed: number,
+  bulgeM: number,
   particles: ParticleSystem,
   holes: HoleMarks,
   seed: number,
@@ -216,6 +224,10 @@ function steelEvent(
       seed,
     });
     particles.add(sparks(e.t, origin, normal, c.dir, 120 * w * (0.4 + k)));
+    // Blow-back (#219): a dark cloud of jacket, lead and plate dust thrown back at wide angles, and thin droplet
+    // sheets that run up and down the face. Both are gone in about 100 us.
+    particles.add(blowBack(e.t, origin, normal, 45 * w * (0.4 + k)));
+    for (const up of [1, -1] as const) particles.add(faceSheet(e.t, origin, normal, c.dir, up, 28 * w * (0.4 + k)));
     // The strike lights up the plate and the room for an instant.
     particles.addFlash(e.t, origin.clone().addScaledVector(normal, 0.03), FLASH_CD * w * (0.3 + k), FLASH_DECAY_S);
   } else if (e.type === 'splash') {
@@ -242,19 +254,25 @@ function steelEvent(
   } else if (e.type === 'exit') {
     holes.add({
       t: e.t,
-      pos: e.pos,
+      pos: { x: e.pos.x + normal.x * bulgeM, y: e.pos.y + normal.y * bulgeM, z: e.pos.z + normal.z * bulgeM },
       normal,
       radius: d * 0.55,
       ragged: 0.4,
       color: STEEL.hole,
       crater: { radius: d * 1.1, color: STEEL.bright, roughness: 0.3, metalness: 0.6, irregularity: 0.2 },
-      rim: { count: 8, length: [d * 0.3, d * 0.6], width: d * 0.5, color: STEEL.bright, lift: 1.1 },
+      // The plate is pushed out into a few petals (#220): fewer for a gentle perforation, more for a violent one.
+      rim: { count: Math.min(8, 3 + Math.round(5 * k)), length: [d * 0.3, d * 0.6], width: d * 0.5, color: STEEL.bright, lift: 1.1 },
       glow: { radius: d * 1.5, cool: GLOW_COOL_S },
       seed,
     });
     // Spall: hot steel flakes thrown off the back face.
     particles.add(sparks(e.t, origin, normal, normal, 160 * w * (0.4 + k)));
     particles.add(bits('shard', e.t, origin, normal, 0.9, 60 * w * k, [40, 120 + e.speed * 0.2], [0.001, 0.003], STEEL.bright));
+    // The plug the bullet punches out leaves ahead of it, and a thin dark string of debris trails along the axis (#220).
+    particles.add({ ...bits('chunk', e.t, origin, normal, 0.05, 1, [e.speed * 0.8, e.speed * 0.8], [0.002, 0.003], STEEL.bright), duration: 1e-6, life: [4e-3, 10e-3], drag: 0 });
+    particles.add(debrisString(e.t, origin, normal, e.speed, 30 * w * (0.4 + k)));
+    // About 10 of 14 shed fragments show as bright chips thrown sideways.
+    if (shed > 0) particles.add(sideChips(e.t, origin, normal, Math.round(shed * 0.7), e.speed));
   }
 }
 
@@ -324,6 +342,96 @@ function sparks(t: number, origin: THREE.Vector3, normal: THREE.Vector3, dir: TH
     color: STEEL.spark,
     colorJitter: 0.3,
     stretch: 10,
+  };
+}
+
+/** Dark blow-back thrown out of the struck face: a cone about 1.3 rad wide that thins to haze in 60-100 us. */
+function blowBack(t: number, origin: THREE.Vector3, normal: THREE.Vector3, count: number): BurstSpec {
+  return {
+    look: 'dust',
+    t0: t,
+    duration: 30e-6,
+    origin: origin.clone().addScaledVector(normal, 0.001),
+    originJitter: 0.003,
+    axis: normal.clone(),
+    spread: 1.3,
+    count: Math.round(count),
+    speed: [20, 110],
+    size: [0.004, 0.012],
+    life: [60e-6, 100e-6],
+    drag: 400,
+    color: STEEL.soot,
+    colorJitter: 0.2,
+    grow: 3,
+  };
+}
+
+/** A thin sheet of droplets running along the face, up (+1) or down (-1) the plate. */
+function faceSheet(t: number, origin: THREE.Vector3, normal: THREE.Vector3, dir: THREE.Vector3, up: 1 | -1, count: number): BurstSpec {
+  const world = new THREE.Vector3(0, 1, 0);
+  const inPlane = world.addScaledVector(normal, -world.dot(normal));
+  // A plate lying flat has no vertical on its face: run along the bullet's travel instead.
+  if (inPlane.lengthSq() < 1e-6) inPlane.copy(dir).addScaledVector(normal, -dir.dot(normal));
+  inPlane.normalize().multiplyScalar(up);
+  return {
+    look: 'droplet',
+    t0: t,
+    duration: 30e-6,
+    origin: origin.clone().addScaledVector(normal, 0.0008),
+    originJitter: 0.002,
+    axis: inPlane.addScaledVector(normal, 0.15).normalize(),
+    spread: 0.3,
+    count: Math.round(count),
+    speed: [40, 160],
+    size: [0.0005, 0.0012],
+    life: [60e-6, 100e-6],
+    drag: 100,
+    color: STEEL.lead,
+    colorJitter: 0.3,
+    stretch: 5,
+  };
+}
+
+/** A thin dark string of debris trailing behind the bullet along the axis, at 0.2-0.8 of its speed, gone in ~100 us. */
+function debrisString(t: number, origin: THREE.Vector3, normal: THREE.Vector3, speed: number, count: number): BurstSpec {
+  return {
+    look: 'grain',
+    t0: t,
+    duration: 60e-6,
+    origin: origin.clone(),
+    originJitter: 0.0015,
+    axis: normal.clone(),
+    spread: 0.12,
+    count: Math.round(count),
+    speed: [speed * 0.2, speed * 0.8],
+    size: [0.0006, 0.0016],
+    life: [80e-6, 120e-6],
+    drag: 0,
+    color: STEEL.soot,
+    colorJitter: 0.3,
+    stretch: 6,
+  };
+}
+
+/** Bright plate chips flung sideways off the back face, about 1.3 rad round the normal. */
+function sideChips(t: number, origin: THREE.Vector3, normal: THREE.Vector3, count: number, speed: number): BurstSpec {
+  return {
+    look: 'shard',
+    t0: t,
+    duration: 40e-6,
+    origin: origin.clone(),
+    originJitter: 0.003,
+    axis: normal.clone(),
+    spread: 1.3,
+    innerSpread: 0.7,
+    count,
+    speed: [speed * 0.1, speed * 0.3],
+    size: [0.0012, 0.003],
+    life: [3e-3, 8e-3],
+    drag: 15,
+    gravity: 9.8,
+    color: STEEL.bright,
+    colorJitter: 0.3,
   };
 }
 
