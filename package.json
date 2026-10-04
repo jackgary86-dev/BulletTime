@@ -18,6 +18,7 @@
     "desktop": "npm run build:desktop && electron .",
     "dist": "npm run build:desktop && electron-builder",
     "smoke": "node scripts/smoke-desktop.mjs",
+    "screenshots:steam": "node scripts/steam-screenshots.mjs",
     "dist:steam": "node scripts/build-steam.mjs"
   },
   "dependencies": {

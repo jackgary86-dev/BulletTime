@@ -37,7 +37,9 @@ Simulation, Physics, Sandbox, Educational, Singleplayer, Realistic, Relaxing, Ca
 - Content descriptors to enter: firearms, artillery, missiles and explosions shown as lab tests; no real people, no real-world targets and no instructions for building anything.
 - A content warning is shown on first launch, and the game is aimed at ages 17 and over.
 
-## Screenshots to take (at least 5, 1920x1080)
+## Screenshots (at least 5, 1920x1080)
+
+`npm run screenshots:steam` takes all six into `steam/screenshots/` (add `-- --only 2,3` to retake some). The PNGs are about 2 MB each, so they are git-ignored; run the command to regenerate them. The scenes are in `electron/screenshots.cjs`; adjust a scene's `t` (how far through the shot to scrub) if the physics changes, and retake them before the store page goes live. The Steamworks upload still needs your own pick of the final set.
 
 1. The launcher with all four simulators.
 2. A 9 mm hollow point in gel, side camera, mid-cavity.

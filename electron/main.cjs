@@ -21,9 +21,12 @@ const CSP = [
 
 // CI smoke test (#206): runner machines have no GPU, so draw with the software renderer.
 const SMOKE = process.env.BULLETTIME_SMOKE === '1';
-if (SMOKE) {
-  // A fresh profile, so the first-launch content warning is exercised every time.
+// The smoke test and the store screenshots (#207) start from a fresh profile, so the
+// first-launch content warning and the launcher show every time.
+if (SMOKE || process.env.BULLETTIME_SHOTS) {
   app.setPath('userData', require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(), 'bullettime-smoke-')));
+}
+if (SMOKE) {
   app.commandLine.appendSwitch('use-angle', 'swiftshader');
   app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 }
@@ -82,6 +85,11 @@ function createWindow() {
       win.setFullScreen(false);
     }
   });
+  if (process.env.BULLETTIME_SHOTS) {
+    win.show();
+    require('./screenshots.cjs')(win, `${SCHEME}://bullettime`, app, path.resolve(process.env.BULLETTIME_SHOTS));
+    return;
+  }
   if (SMOKE) {
     win.show();
     require('./smoke.cjs')(win, `${SCHEME}://bullettime`, app);
