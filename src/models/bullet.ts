@@ -55,6 +55,157 @@ function nose(r: number, y0: number, y1: number, tipR: number, round: boolean, s
   return pts;
 }
 
+/**
+ * A flat swept fin standing out from the body along +x, set `angle` round the axis.
+ * `y0` is the root's trailing edge, `root` and `tip` the chords, `sweep` how far the
+ * tip's trailing edge sits ahead of the root's; `span` runs from the body surface out.
+ */
+function fin(
+  material: THREE.Material,
+  bodyR: number,
+  angle: number,
+  y0: number,
+  root: number,
+  tip: number,
+  span: number,
+  sweep: number,
+  thickness: number,
+): THREE.Mesh {
+  const shape = new THREE.Shape();
+  shape.moveTo(-bodyR * 0.1, y0);
+  shape.lineTo(-bodyR * 0.1, y0 + root);
+  shape.lineTo(span, y0 + sweep + tip);
+  shape.lineTo(span, y0 + sweep);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+  geometry.translate(bodyR, 0, -thickness / 2);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.y = angle;
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** `count` identical fins spaced evenly round the axis, the first at `offset`. */
+function fins(count: number, offset: number, make: (angle: number) => THREE.Mesh): THREE.Mesh[] {
+  return Array.from({ length: count }, (_, i) => make(offset + (i / count) * Math.PI * 2));
+}
+
+/** One missile airframe in the bullet frame (base at y = 0, nose at y = L); the airframe is the id's second part. */
+function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[] {
+  switch (airframe) {
+    case 'light-rocket': {
+      // A plain tube, a sharp ogive nose, a dark nozzle and four small tail fins.
+      const noseStart = L * 0.76;
+      const body: Profile = [
+        [0, L * 0.05],
+        [r * 0.9, L * 0.05],
+        [r, L * 0.07],
+        [r, noseStart],
+        ...nose(r, noseStart, L, r * 0.02, false, 14),
+        [0, L],
+      ];
+      const nozzle: Profile = [
+        [r * 0.62, 0],
+        [r * 0.7, L * 0.02],
+        [r * 0.8, L * 0.05],
+        [r * 0.7, L * 0.052],
+      ];
+      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(4, 0, (a) => fin(M.aluminium, r, a, L * 0.03, L * 0.1, L * 0.04, r * 0.7, L * 0.04, r * 0.05))];
+    }
+
+    case 'shoulder-rocket': {
+      // A bulged warhead on a thinner motor tube, a flared nozzle and six small fins.
+      const tubeR = r * 0.5;
+      const bulge = L * 0.56;
+      const body: Profile = [
+        [0, L * 0.1],
+        [tubeR * 0.9, L * 0.1],
+        [tubeR, L * 0.12],
+        [tubeR, bulge - L * 0.06],
+        [r * 0.8, bulge - L * 0.02],
+        [r, bulge + L * 0.04],
+        [r, L * 0.8],
+        ...nose(r, L * 0.8, L, r * 0.1, true, 10),
+        [0, L],
+      ];
+      const nozzle: Profile = [
+        [tubeR * 0.8, L * 0.1],
+        [tubeR * 0.7, L * 0.06],
+        [tubeR * 1.05, L * 0.01],
+        [tubeR * 1.2, 0],
+        [tubeR * 1.1, 0],
+        [tubeR * 0.6, L * 0.05],
+      ];
+      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(6, 0, (a) => fin(M.aluminium, tubeR, a, L * 0.02, L * 0.12, L * 0.05, r * 0.55, L * 0.03, r * 0.04))];
+    }
+
+    case 'guided-at': {
+      // A dome seeker, four forward canards and larger rear fins.
+      const seekerStart = L * 0.9;
+      const body: Profile = [
+        [0, L * 0.01],
+        [r * 0.92, L * 0.01],
+        [r, L * 0.03],
+        [r, L * 0.8],
+        ...nose(r, L * 0.8, seekerStart, r * 0.6, true, 8),
+        [0, seekerStart],
+      ];
+      const dome: Profile = [[r * 0.6, seekerStart], ...nose(r * 0.6, seekerStart, L, 0, true, 10), [0, L]];
+      return [
+        lathe(body, M.paintedSteel),
+        lathe(dome, M.seeker),
+        ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, r, a, L * 0.7, L * 0.07, L * 0.04, r * 0.6, L * 0.02, r * 0.05)),
+        ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, r, a, 0, L * 0.14, L * 0.06, r * 1.1, L * 0.05, r * 0.06)),
+      ];
+    }
+
+    case 'air-surface': {
+      // A slender body, a pale nose cone and swept mid-body wings.
+      const coneStart = L * 0.78;
+      const slim = r * 0.9;
+      const body: Profile = [
+        [0, 0],
+        [slim * 0.92, 0],
+        [slim, L * 0.01],
+        [slim, coneStart],
+        [0, coneStart],
+      ];
+      const cone: Profile = [[slim, coneStart], ...nose(slim, coneStart, L, slim * 0.04, false, 14), [0, L]];
+      return [lathe(body, M.paintedSteel), lathe(cone, M.paleCone), ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, slim, a, L * 0.3, L * 0.2, L * 0.05, r * 1.4, L * 0.15, r * 0.05))];
+    }
+
+    default: {
+      // Cruise-class: a pale lifting body, two swept wings, a tail fin and a belly intake.
+      const body: Profile = [
+        [0, 0],
+        [r * 0.8, 0],
+        [r, L * 0.02],
+        [r, L * 0.78],
+        ...nose(r, L * 0.78, L, r * 0.05, false, 14),
+        [0, L],
+      ];
+      const lifting = lathe(body, M.paleBody);
+      lifting.scale.z = 0.85;
+      const intakeProfile: Profile = [
+        [0, L * 0.3],
+        [r * 0.32, L * 0.3],
+        [r * 0.36, L * 0.32],
+        [r * 0.3, L * 0.45],
+        [0, L * 0.47],
+      ];
+      const intake = lathe(intakeProfile, M.nozzle);
+      intake.position.z = -r * 0.9;
+      return [
+        lifting,
+        intake,
+        // Wings out along ±x, tail fin up along +z.
+        ...fins(2, 0, (a) => fin(M.paleBody, r, a, L * 0.1, L * 0.2, L * 0.05, r * 3.4, L * 0.14, r * 0.07)),
+        fin(M.paleBody, r * 0.85, -Math.PI / 2, 0, L * 0.12, L * 0.05, r * 1.5, L * 0.07, r * 0.07),
+      ];
+    }
+  }
+}
+
 /** Builds the meshes for one bullet in its local frame: base at y = 0, nose at y = L, axis +y. */
 function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
   const r = (spec.caliberMm / 2) * MM;
@@ -291,31 +442,8 @@ function buildMeshes(spec: BulletSpec): THREE.Object3D[] {
       return meshes;
     }
 
-    case 'missile': {
-      // Airframe: painted body, a rounded nose cone, a coloured warhead band and four tail fins.
-      const noseStart = L * 0.82;
-      const body: Profile = [
-        [0, 0],
-        [r * 0.92, 0],
-        [r, L * 0.01],
-        [r, noseStart],
-        ...nose(r, noseStart, L, r * 0.08, true, 10),
-        [0, L],
-      ];
-      const band: Profile = [
-        [r * 1.003, L * 0.7],
-        [r * 1.003, L * 0.74],
-      ];
-      const meshes: THREE.Object3D[] = [lathe(body, M.paintedSteel), lathe(band, M.yellowPaint)];
-      for (let i = 0; i < 4; i++) {
-        const fin = new THREE.Mesh(new THREE.BoxGeometry(r * 0.05, L * 0.1, r * 1.5), M.aluminium);
-        fin.position.set(0, L * 0.06, 0);
-        fin.rotation.y = (i * Math.PI) / 2;
-        fin.castShadow = true;
-        meshes.push(fin);
-      }
-      return meshes;
-    }
+    case 'missile':
+      return missileMeshes(spec.id.split(':')[1], r, L);
 
     case 'charge': {
       // A squat painted drum with a lid and a short fuze lead.

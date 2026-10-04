@@ -74,4 +74,12 @@ export const BULLET_MATERIALS = {
   yellowPaint: new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.2, roughness: 0.55 }),
   /** Red identification band for incendiary filler. */
   redPaint: new THREE.MeshStandardMaterial({ color: 0x8c1d18, metalness: 0.2, roughness: 0.55 }),
+  /** Dark burnt metal of rocket nozzles and intakes. */
+  nozzle: new THREE.MeshStandardMaterial({ color: 0x23211f, metalness: 0.7, roughness: 0.5, side: THREE.DoubleSide }),
+  /** Pale grey radome and nose cone. */
+  paleCone: new THREE.MeshStandardMaterial({ color: 0xd9d6cc, metalness: 0.1, roughness: 0.45 }),
+  /** Pale grey painted skin of the cruise missile. */
+  paleBody: new THREE.MeshStandardMaterial({ color: 0xbfc3c4, metalness: 0.3, roughness: 0.5 }),
+  /** The dark glassy dome of a guided missile's seeker. */
+  seeker: new THREE.MeshPhysicalMaterial({ color: 0x1b2430, metalness: 0.2, roughness: 0.15, clearcoat: 1 }),
 } as const;

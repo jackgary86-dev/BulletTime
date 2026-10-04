@@ -54,7 +54,7 @@ async function bootstrap(): Promise<void> {
   const playback = new Playback();
   // Shot and impact sounds (#120), from lane A only: two lanes at once would just be noise.
   const cueTrack = new CueTrack();
-  mountOverlay(overlay);
+  mountOverlay(overlay, modeInfo.title);
 
   const hud = mountCameraHud(overlay);
   const scrubber = mountScrubber(overlay, playback);

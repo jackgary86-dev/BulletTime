@@ -22,6 +22,26 @@ const SIMULATORS: Simulator[] = [
   { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: true },
 ];
 
+/** Which card keyboard focus moves to: arrow keys step through the grid, Home and End jump to the ends. */
+export function nextCard(index: number, key: string, count: number, columns: number): number {
+  switch (key) {
+    case 'ArrowRight':
+      return (index + 1) % count;
+    case 'ArrowLeft':
+      return (index - 1 + count) % count;
+    case 'ArrowDown':
+      return index + columns < count ? index + columns : index;
+    case 'ArrowUp':
+      return index - columns >= 0 ? index - columns : index;
+    case 'Home':
+      return 0;
+    case 'End':
+      return count - 1;
+    default:
+      return index;
+  }
+}
+
 function requestedMode(): SimulatorId | null {
   const id = new URLSearchParams(location.search).get('mode');
   return SIMULATORS.find((s) => s.id === id && s.ready)?.id ?? null;
@@ -37,12 +57,12 @@ export function chooseSimulator(): Promise<SimulatorId> {
     screen.innerHTML = `
       <div class="launcher-inner">
         <h2>BulletTime</h2>
-        <p class="launcher-sub">Choose a simulator</p>
+        <p class="launcher-sub">Choose a simulator (keys 1 to 4, or the arrow keys and Enter)</p>
         <div class="launcher-grid">
           ${SIMULATORS.map(
             (s) => `
           <button type="button" class="launcher-card" data-mode="${s.id}" ${s.ready ? '' : 'disabled'}>
-            <span class="launcher-name">${s.name}</span>
+            <span class="launcher-name">${SIMULATORS.indexOf(s) + 1}. ${s.name}</span>
             <span class="launcher-range">${s.range}</span>
             <span class="launcher-blurb">${s.blurb}</span>
             ${s.ready ? '' : '<span class="launcher-soon">Coming soon</span>'}
@@ -53,6 +73,23 @@ export function chooseSimulator(): Promise<SimulatorId> {
     `;
     document.body.append(screen);
     screen.querySelector<HTMLButtonElement>('.launcher-card:not([disabled])')?.focus();
+    // Keys 1 to 4 pick a simulator, arrows and Home/End move between the cards.
+    screen.addEventListener('keydown', (e) => {
+      const cards = [...screen.querySelectorAll<HTMLButtonElement>('.launcher-card:not([disabled])')];
+      const digit = Number(e.key);
+      if (digit >= 1 && digit <= SIMULATORS.length && SIMULATORS[digit - 1].ready) {
+        screen.remove();
+        resolve(SIMULATORS[digit - 1].id);
+        return;
+      }
+      const at = cards.indexOf(document.activeElement as HTMLButtonElement);
+      const columns = Math.max(1, Math.round(screen.querySelector<HTMLElement>('.launcher-grid')!.clientWidth / (cards[0]?.offsetWidth || 1)));
+      const to = nextCard(at < 0 ? 0 : at, e.key, cards.length, columns);
+      if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        cards[to]?.focus();
+      }
+    });
     screen.addEventListener('click', (e) => {
       const card = (e.target as HTMLElement).closest<HTMLButtonElement>('.launcher-card:not([disabled])');
       if (!card) return;

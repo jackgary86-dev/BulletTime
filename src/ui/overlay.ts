@@ -5,19 +5,20 @@ import { mountSoundBoard } from './soundBoard';
  * Mounts the heads-up overlay: the app title with About and Sounds windows, and a hint
  * about camera controls. The other panels mount themselves into the same root.
  */
-export function mountOverlay(root: HTMLElement): void {
+export function mountOverlay(root: HTMLElement, simulator = 'Bullet'): void {
   root.innerHTML = `
     <header class="brand">
       <h1>BulletTime</h1>
-      <p><span class="tagline">Slow-motion bullet impact simulator </span><button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button><button type="button" class="about-open sound-mute-toggle" title="Mute or unmute shot sounds">Sound on</button></p>
+      <p><span class="tagline">Slow-motion ${simulator.toLowerCase()} simulator </span><button type="button" class="about-open">About</button><button type="button" class="about-open sounds-open">Sounds</button><button type="button" class="about-open sound-mute-toggle" title="Mute or unmute shot sounds">Sound on</button><button type="button" class="about-open simulators-open" title="Back to the choice of simulators">Simulators</button></p>
     </header>
     <p class="hint">Drag to orbit · scroll to zoom · right-drag to pan</p>
     <dialog class="about" aria-labelledby="about-title">
       <h2 id="about-title">About BulletTime</h2>
       <p>
         BulletTime is an entertainment and education tool. It shows, in slow motion, roughly what
-        happens when common rounds hit gel, water, wood, drywall, concrete, steel, sand, glass, ice
-        and lab test targets.
+        happens when rounds, shells, missiles and explosive charges hit gel, water, wood, drywall,
+        concrete, steel, sand, glass, ice and lab test targets, in four simulators: Bullet, Artillery,
+        Missile and Explosion.
       </p>
       <p>
         The physics is plausible and grounded in published reference numbers, such as typical
@@ -47,6 +48,8 @@ export function mountOverlay(root: HTMLElement): void {
       <form method="dialog"><button type="submit">Close</button></form>
     </dialog>
   `;
+  // The launcher is the page without a ?mode in the address, so going back to it starts the page afresh.
+  root.querySelector('.simulators-open')!.addEventListener('click', () => location.assign(location.pathname));
   const dialog = root.querySelector<HTMLDialogElement>('.about')!;
   const gore = dialog.querySelector<HTMLInputElement>('.reduced-gore')!;
   gore.addEventListener('change', () => setReducedGore(gore.checked));

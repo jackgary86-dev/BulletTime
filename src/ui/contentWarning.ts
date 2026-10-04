@@ -19,7 +19,7 @@ export function contentGate(): Promise<void> {
         <h2 id="content-warning-title">Content warning</h2>
         <div id="content-warning-body">
           <p>
-            BulletTime shows simulated firearm impacts in slow motion, including <strong>simulated blood</strong>
+            BulletTime shows simulated firearm, artillery, missile and explosive impacts and blasts in slow motion, including <strong>simulated blood</strong>
             and <strong>human-shaped ballistic test dummies</strong>.
           </p>
           <p>It is intended for players aged 17 and over.</p>
