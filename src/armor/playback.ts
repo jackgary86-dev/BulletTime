@@ -18,6 +18,9 @@ export const IMPACT_SHARE = 0.55;
 /** Smallest aftermath span worth a phase of its own, as a multiple of the impact duration. */
 export const MIN_AFTERMATH_RATIO = 2;
 
+/** What the clock needs from a timeline: a single plate's or a stack's. */
+export type PlaybackSource = Pick<ArmorTimeline, 'duration' | 'fragments'>;
+
 export interface PlaybackTime {
   /** Time for the section frames, s (held at the timeline's duration during the aftermath). */
   t: number;
@@ -28,13 +31,13 @@ export interface PlaybackTime {
 }
 
 /** The time at the end of the aftermath: when the last piece has come to rest. */
-export function aftermathEnd(timeline: ArmorTimeline): number {
+export function aftermathEnd(timeline: PlaybackSource): number {
   const f = timeline.fragments;
   return f ? Math.max(f.restS, MIN_AFTERMATH_RATIO * timeline.duration) : timeline.duration;
 }
 
 /** The times at playhead `u` (clamped to 0 to 1). */
-export function playbackAt(timeline: ArmorTimeline, u: number): PlaybackTime {
+export function playbackAt(timeline: PlaybackSource, u: number): PlaybackTime {
   const x = Math.min(1, Math.max(0, u));
   const { duration } = timeline;
   if (!timeline.fragments) return { t: x * duration, fragmentT: x * duration, aftermath: false };
@@ -48,7 +51,7 @@ export function playbackAt(timeline: ArmorTimeline, u: number): PlaybackTime {
 }
 
 /** The playhead (0 to 1) at which the section frames are at time `t` during the impact phase: the inverse of `playbackAt` there. */
-export function playheadForImpactTime(timeline: ArmorTimeline, t: number): number {
+export function playheadForImpactTime(timeline: PlaybackSource, t: number): number {
   const x = Math.min(1, Math.max(0, t / timeline.duration));
   return timeline.fragments ? x * IMPACT_SHARE : x;
 }

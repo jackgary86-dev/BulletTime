@@ -1,12 +1,13 @@
-import { frameAt, type ArmorShot, type ArmorTimeline } from '../armor/model';
+import type { ArmorTimeline } from '../armor/model';
 import { PLATE_MATERIALS, getPlateMaterial, DEFAULT_PLATE_MATERIAL_ID, type PlateMaterialId } from '../armor/materials';
 import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactState, type MunitionFamilyId } from '../armor/munitions';
 import { OVERLAYS, drawSection, type OverlayId } from '../armor/sectionDraw';
-import { dimensionLine, fragmentShapes, roomShapes, sectionLayout, sectionShapes } from '../armor/section';
+import { dimensionLine, fragmentShapes, roomShapes } from '../armor/section';
+import { MAX_LAYERS, STACK_PRESETS, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
+import { activeStage, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
 import { playbackAt } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
-import { simulateArmor } from '../armor/simulate';
 import { familyDiagram } from './armorDiagrams';
 
 /**
@@ -31,7 +32,7 @@ const SPEEDS = [
 ];
 
 export interface ArmorLabHandle {
-  /** Fires the current setup and returns the timeline, or null when the family has no model yet. */
+  /** Fires the current setup and returns the first plate's timeline, or null when the family has no model yet. */
   fire(): ArmorTimeline | null;
   /** Sets the controls (any subset) and fires. */
   preset(p: ArmorPreset): ArmorTimeline | null;
@@ -46,6 +47,8 @@ export interface ArmorPreset {
   thicknessMm?: number;
   obliquityDeg?: number;
   overlay?: OverlayId;
+  /** A stack arrangement by id (`STACK_PRESETS`), applied to the plate controls before firing. */
+  arrangement?: string;
 }
 
 const mm = (m: number) => `${(m * 1000).toFixed(m < 0.01 ? 1 : 0)} mm`;
@@ -70,12 +73,17 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       <input id="armor-calibre" type="range" min="${MIN_CALIBRE_MM}" max="${MAX_CALIBRE_MM}" step="1" />
       <label class="field-label" for="armor-velocity">Impact velocity <output class="armor-velocity-out"></output></label>
       <input id="armor-velocity" type="range" step="10" />
-      <label class="field-label" for="armor-material">Plate</label>
+      <label class="field-label" for="armor-material">Plate 1 (front)</label>
       <select id="armor-material"></select>
       <label class="field-label" for="armor-thickness">Thickness <output class="armor-thickness-out"></output></label>
       <input id="armor-thickness" type="range" min="${PLATE_MIN_MM}" max="${PLATE_MAX_MM}" step="5" />
       <label class="field-label" for="armor-obliquity">Plate angle <output class="armor-obliquity-out"></output></label>
       <input id="armor-obliquity" type="range" min="0" max="${OBLIQUITY_MAX_DEG}" step="1" />
+      <label class="field-label" for="armor-arrangement">Arrangement</label>
+      <select id="armor-arrangement"></select>
+      <div class="armor-layers"></div>
+      <button type="button" class="armor-add-plate">Add a plate behind</button>
+      <p class="armor-arrangement-note"></p>
       <button type="button" class="armor-fire">Fire</button>
       <p class="armor-material-note"></p>
     </section>
@@ -104,6 +112,9 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const velocity = q<HTMLInputElement>('#armor-velocity');
   const materialSel = q<HTMLSelectElement>('#armor-material');
   const thickness = q<HTMLInputElement>('#armor-thickness');
+  const arrangementSel = q<HTMLSelectElement>('#armor-arrangement');
+  const layersBox = q('.armor-layers');
+  const addPlate = q<HTMLButtonElement>('.armor-add-plate');
   const obliquity = q<HTMLInputElement>('#armor-obliquity');
   const canvas = q<HTMLCanvasElement>('.armor-canvas');
   const caption = q('.armor-caption');
@@ -119,6 +130,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   for (const f of MUNITION_FAMILIES) familySel.append(new Option(f.name, f.id));
   for (const m of PLATE_MATERIALS) materialSel.append(new Option(m.name, m.id));
   SPEEDS.forEach((s, i) => speedSel.append(new Option(s.label, String(i))));
+  for (const p of STACK_PRESETS) arrangementSel.append(new Option(p.name, p.id));
+  arrangementSel.append(new Option('Custom', 'custom'));
 
   let overlay: OverlayId = 'energy';
   OVERLAYS.forEach((o) => {
@@ -137,7 +150,16 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   });
   const syncOverlays = () => overlayBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.overlay === overlay));
 
-  let timeline: ArmorTimeline | null = null;
+  let stack: StackTimeline | null = null;
+  /** Plates 2 to 4: the rows under the front plate's controls. */
+  interface LayerRow {
+    materialId: PlateMaterialId;
+    thicknessMm: number;
+    gapMm: number;
+  }
+  let rows: LayerRow[] = [];
+  /** The front plate as the user set it, for the presets that build round it. */
+  let mainRef = { materialId: DEFAULT_PLATE_MATERIAL_ID as PlateMaterialId, thicknessMm: 120 };
   /** Playhead, 0 to 1 (see `playbackAt`). */
   let u = 0;
   let playing = true;
@@ -157,19 +179,87 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     explainerBox.innerHTML = `<h2>${family.name}</h2><p>${family.explainer}</p>${familyDiagram(family.id)}`;
   };
 
-  const shot = (): ArmorShot => ({
-    impact: impactState(familySel.value as MunitionFamilyId, Number(calibre.value), Number(velocity.value)),
-    material: getPlateMaterial(materialSel.value as PlateMaterialId),
-    thicknessM: Number(thickness.value) / 1000,
-    obliquityDeg: Number(obliquity.value),
-  });
+  const layers = (): PlateLayer[] => [
+    { material: getPlateMaterial(materialSel.value as PlateMaterialId), thicknessM: Number(thickness.value) / 1000, gapBeforeM: 0 },
+    ...rows.map((r) => ({ material: getPlateMaterial(r.materialId), thicknessM: r.thicknessMm / 1000, gapBeforeM: r.gapMm / 1000 })),
+  ];
+
+  const syncArrangementNote = () => {
+    const preset = STACK_PRESETS.find((p) => p.id === arrangementSel.value);
+    q('.armor-arrangement-note').textContent = preset ? preset.description : 'Your own stack: up to four plates, each with its own material, thickness and the air gap in front of it.';
+    addPlate.disabled = rows.length + 1 >= MAX_LAYERS;
+  };
+
+  const renderRows = () => {
+    layersBox.innerHTML = '';
+    rows.forEach((row, i) => {
+      const el = document.createElement('div');
+      el.className = 'armor-layer';
+      el.innerHTML = `
+        <span class="armor-layer-title">Plate ${i + 2}</span>
+        <label>Gap <input type="number" class="armor-layer-gap" min="0" max="1500" step="10" value="${row.gapMm}" /> mm</label>
+        <select class="armor-layer-material" aria-label="Plate ${i + 2} material"></select>
+        <label>Thickness <input type="number" class="armor-layer-thickness" min="${PLATE_MIN_MM}" max="${PLATE_MAX_MM}" step="5" value="${row.thicknessMm}" /> mm</label>
+        <button type="button" class="armor-layer-remove" aria-label="Remove plate ${i + 2}">Remove</button>`;
+      const sel = el.querySelector<HTMLSelectElement>('.armor-layer-material')!;
+      for (const m of PLATE_MATERIALS) sel.append(new Option(m.name, m.id));
+      sel.value = row.materialId;
+      const clampNum = (v: string, min: number, max: number) => Math.min(max, Math.max(min, Number(v) || 0));
+      sel.addEventListener('input', () => {
+        row.materialId = sel.value as PlateMaterialId;
+        custom();
+      });
+      el.querySelector('.armor-layer-gap')!.addEventListener('input', (e) => {
+        row.gapMm = clampNum((e.target as HTMLInputElement).value, 0, 1500);
+        custom();
+      });
+      el.querySelector('.armor-layer-thickness')!.addEventListener('input', (e) => {
+        row.thicknessMm = clampNum((e.target as HTMLInputElement).value, PLATE_MIN_MM, PLATE_MAX_MM);
+        custom();
+      });
+      el.querySelector('.armor-layer-remove')!.addEventListener('click', () => {
+        rows.splice(i, 1);
+        renderRows();
+        custom();
+      });
+      layersBox.append(el);
+    });
+    syncArrangementNote();
+  };
+
+  /** The user changed a plate by hand: the arrangement is now their own. */
+  const custom = () => {
+    arrangementSel.value = rows.length === 0 ? 'single' : 'custom';
+    if (rows.length === 0) mainRef = { materialId: materialSel.value as PlateMaterialId, thicknessMm: Number(thickness.value) };
+    syncArrangementNote();
+  };
+
+  const applyArrangement = (id: string) => {
+    const preset = STACK_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    const built = preset.build(getPlateMaterial(mainRef.materialId), mainRef.thicknessMm / 1000, {
+      spaced: getPlateMaterial('mild-steel'),
+      soft: getPlateMaterial('mild-steel'),
+      hard: getPlateMaterial('rha'),
+    });
+    materialSel.value = built[0].material.id;
+    thickness.value = String(Math.round(built[0].thicknessM * 1000));
+    rows = built.slice(1).map((l) => ({ materialId: l.material.id, thicknessMm: Math.round(l.thicknessM * 1000), gapMm: Math.round(l.gapBeforeM * 1000) }));
+    arrangementSel.value = id;
+    renderRows();
+    syncControls();
+  };
 
   const fire = (): ArmorTimeline | null => {
     try {
-      timeline = simulateArmor(shot());
+      stack = simulateStack({
+        impact: impactState(familySel.value as MunitionFamilyId, Number(calibre.value), Number(velocity.value)),
+        layers: layers(),
+        obliquityDeg: Number(obliquity.value),
+      });
       notice.hidden = true;
     } catch (e) {
-      timeline = null;
+      stack = null;
       notice.hidden = false;
       notice.textContent = `${e instanceof Error ? e.message : String(e)}. Pick another munition for now.`;
     }
@@ -177,7 +267,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     playing = true;
     renderResults();
     redraw();
-    return timeline;
+    return stack ? stack.stages[0].timeline : null;
   };
 
   const resize = () => {
@@ -199,38 +289,77 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const w = rect.width || canvas.width;
     const h = rect.height || canvas.height;
     playBtn.textContent = playing ? 'Pause' : u >= 1 ? 'Replay' : 'Play';
-    if (!timeline) {
+    if (!stack) {
       ctx.clearRect(0, 0, w, h);
       return;
     }
-    const pb = playbackAt(timeline, u);
-    const frame = frameAt(timeline, pb.t);
-    const layout = sectionLayout(timeline, w, h);
-    const shapes = sectionShapes(timeline, frame, layout, pb.fragmentT);
-    const impact = timeline.shot.impact;
-    drawSection(ctx, shapes, { plateColor: timeline.shot.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat' },
-      {
-        dimension: dimensionLine(timeline, layout),
-        room: roomShapes(timeline, layout),
-        fragments: fragmentShapes(timeline, pb.fragmentT, layout),
-        field: overlay === 'temperature' || overlay === 'stress' || overlay === 'pressure' ? buildOverlay(timeline, pb.fragmentT, overlay, layout) : null,
-        energy: energyBalance(timeline, pb.fragmentT),
-        scaleBar: scaleBar(layout.pxPerM),
-      });
+    const pb = playbackAt(stack, u);
+    const layout = stackLayout(stack, w, h);
+    const parts = stackShapes(stack, pb.t, pb.fragmentT, layout);
+    const multi = stack.stages.length > 1;
+    const lastIdx = stack.stages.length - 1;
+    const dims = multi ? stackDimensions(stack, layout) : undefined;
+    const fieldOverlay = overlay === 'temperature' || overlay === 'stress' || overlay === 'pressure' ? overlay : null;
+    stack.stages.forEach((st, i) => {
+      const stageLayout = layout.stages[i];
+      const localFragmentT = pb.fragmentT - st.offsetT;
+      const impact = st.shot.impact;
+      let room = i === stack!.fragmentStage ? roomShapes(st.timeline, stageLayout) : null;
+      // The left box of a later plate is the gap in front of it: keep its wall off the plate before.
+      if (room && i > 0) room = { ...room, leftX: Math.max(room.leftX, layout.stages[i - 1].rearX) };
+      drawSection(
+        ctx,
+        parts[i].shapes,
+        { plateColor: st.layer.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat', continued: i > 0 },
+        {
+          dimension: multi ? undefined : dimensionLine(st.timeline, stageLayout),
+          dimensions: i === lastIdx ? dims : undefined,
+          room,
+          fragments: i === stack!.fragmentStage ? fragmentShapes(st.timeline, localFragmentT, stageLayout) : [],
+          field: fieldOverlay ? buildOverlay(st.timeline, Math.max(0, localFragmentT), fieldOverlay, stageLayout) : null,
+          legend: i === lastIdx,
+          energy: !multi ? energyBalance(st.timeline, pb.fragmentT) : null,
+          scaleBar: i === lastIdx ? scaleBar(layout.pxPerM) : null,
+        },
+      );
+    });
+    const active = activeStage(stack, pb.t);
+    const here = parts[active];
+    const platePrefix = multi ? `plate ${active + 1}: ` : '';
     q('.armor-hud-time').textContent = `t = ${clock(pb.fragmentT)}`;
-    q('.armor-hud-depth').textContent = `depth ${mm(frame.depth)} of ${mm(timeline.result.losThicknessM)}`;
-    q('.armor-hud-speed').textContent = `${Math.round(frame.speed)} m/s`;
+    q('.armor-hud-depth').textContent = `${platePrefix}depth ${mm(here.frame.depth)} of ${mm(stack.stages[active].timeline.result.losThicknessM)}`;
+    q('.armor-hud-speed').textContent = `${Math.round(here.frame.speed)} m/s`;
     scrub.value = String(Math.round(u * 1000));
-    const reached = timeline.events.filter((e) => e.t <= pb.fragmentT);
+    const reached = stack.events.filter((e) => e.t <= pb.fragmentT);
     caption.textContent = reached.length ? reached[reached.length - 1].label : '';
     resultsBox.querySelectorAll<HTMLElement>('[data-event]').forEach((li) => li.classList.toggle('reached', Number(li.dataset.event) <= pb.fragmentT));
   };
 
+  const stackRows = (st: StackTimeline): [string, string][] => {
+    const r = st.result;
+    const rows: [string, string][] = [
+      ['Outcome', r.perforated ? `Through all ${st.plates.length} plates` : `Stopped at plate ${(r.stoppedAt ?? 0) + 1}`],
+      ['Plates defeated', `${r.platesDefeated} of ${st.plates.length}`],
+    ];
+    for (const p of st.plates) {
+      const title = `Plate ${p.index + 1}: ${p.materialName.split(' (')[0]} ${mm(p.thicknessM)}`;
+      if (!p.engaged) {
+        rows.push([title, 'not reached']);
+        continue;
+      }
+      const out = p.perforated ? `through at ${Math.round(p.residualVelocity)} m/s${p.residualLengthM > 0 ? `, ${mm(p.residualLengthM)} of it left` : ''}` : p.mechanism === 'Ricochet' ? 'glanced off' : 'stopped';
+      rows.push([title, `${p.mechanism}; arrives at ${Math.round(p.entrySpeed)} m/s; dug ${mm(p.penetrationM)} of ${mm(p.losThicknessM)}; ${out}`]);
+    }
+    rows.push(['Impact energy', joules(r.impactEnergyJ)], ['Carried through the stack', r.perforated ? joules(r.residualEnergyJ) : '—']);
+    return rows;
+  };
+
   const renderResults = () => {
-    if (!timeline) {
+    if (!stack) {
       resultsBox.innerHTML = '<h2>Results</h2><p>No model for this munition yet.</p>';
       return;
     }
+    const timeline = stack.stages[0].timeline;
     const r = timeline.result;
     const rows: [string, string][] = [
       ['Mechanism', r.mechanism],
@@ -249,20 +378,21 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const debris = (r as unknown as { debris?: { halfAngleDeg: number } }).debris;
     if (debris) rows.push(['Debris behind the plate', `a cone of ${debris.halfAngleDeg.toFixed(0)}° half-angle`]);
     if ((r as unknown as { failedToFuze?: boolean }).failedToFuze) rows.push(['Fuzing', 'Too oblique: skidded off']);
+    const shown = stack.stages.length > 1 ? stackRows(stack) : rows;
     resultsBox.innerHTML = `
       <h2>Results</h2>
-      <dl class="readout">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      <dl class="readout"${stack.stages.length > 1 ? ' style="grid-template-columns: 1fr"' : ''}>${shown.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       <h3>What happened</h3>
-      <ol class="armor-events">${timeline.events.map((e) => `<li data-event="${e.t}"><time>${us(e.t)}</time> ${e.label}</li>`).join('')}</ol>`;
+      <ol class="armor-events">${stack.events.map((e) => `<li data-event="${e.t}"><time>${us(e.t)}</time> ${e.label}</li>`).join('')}</ol>`;
   };
 
   const step = (now: number) => {
     raf = requestAnimationFrame(step);
     const dt = (now - last) / 1000;
     last = now;
-    if (!playing || !timeline) return;
+    if (!playing || !stack) return;
     const factor = SPEEDS[Number(speedSel.value)].factor;
-    u += (dt * factor) / (PLAY_SECONDS * (timeline.fragments ? AFTERMATH_PLAY_FACTOR : 1));
+    u += (dt * factor) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
     if (u >= 1) {
       u = 1;
       playing = false;
@@ -273,20 +403,36 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const onInput = () => {
     syncControls();
   };
-  for (const el of [calibre, velocity, thickness, obliquity, materialSel]) el.addEventListener('input', onInput);
+  for (const el of [calibre, velocity, obliquity]) el.addEventListener('input', onInput);
+  for (const el of [thickness, materialSel]) {
+    el.addEventListener('input', () => {
+      custom();
+      onInput();
+    });
+  }
+  arrangementSel.addEventListener('input', () => {
+    if (arrangementSel.value === 'custom') return;
+    applyArrangement(arrangementSel.value);
+  });
+  addPlate.addEventListener('click', () => {
+    if (rows.length + 1 >= MAX_LAYERS) return;
+    rows.push({ materialId: 'rha', thicknessMm: 40, gapMm: 100 });
+    renderRows();
+    custom();
+  });
   familySel.addEventListener('input', () => {
     velocity.value = '';
     syncControls();
   });
   q('.armor-fire').addEventListener('click', fire);
   playBtn.addEventListener('click', () => {
-    if (!timeline) return;
+    if (!stack) return;
     if (u >= 1) u = 0;
     playing = !playing;
     redraw();
   });
   scrub.addEventListener('input', () => {
-    if (!timeline) return;
+    if (!stack) return;
     playing = false;
     u = Number(scrub.value) / 1000;
     redraw();
@@ -299,6 +445,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   obliquity.value = '0';
   familySel.value = 'apfsds';
   materialSel.value = DEFAULT_PLATE_MATERIAL_ID;
+  arrangementSel.value = 'single';
+  renderRows();
   syncControls();
   syncOverlays();
   resize();
@@ -314,12 +462,14 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       if (p.velocity !== undefined) velocity.value = String(p.velocity);
       if (p.material) materialSel.value = p.material;
       if (p.thicknessMm !== undefined) thickness.value = String(p.thicknessMm);
+      if (p.material || p.thicknessMm !== undefined) mainRef = { materialId: materialSel.value as PlateMaterialId, thicknessMm: Number(thickness.value) };
       if (p.obliquityDeg !== undefined) obliquity.value = String(p.obliquityDeg);
       if (p.overlay) {
         overlay = p.overlay;
         syncOverlays();
       }
       syncControls();
+      if (p.arrangement) applyArrangement(p.arrangement);
       return fire();
     },
     dispose() {

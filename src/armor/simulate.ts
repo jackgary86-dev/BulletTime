@@ -17,7 +17,8 @@ export function simulateArmor(shot: ArmorShot): ArmorTimeline {
   return withFragments(penetrate(shot));
 }
 
-function penetrate(shot: ArmorShot): ArmorTimeline {
+/** Runs the model for one plate without working out the thrown pieces (a stack does that once, for its last plate). */
+export function penetrate(shot: ArmorShot): ArmorTimeline {
   const family = shot.impact.family;
   // A kinetic round above its critical slope glances off, whatever the penetration models would say.
   if (ricochets(normalizeShot(shot))) return ricochetShot(shot);

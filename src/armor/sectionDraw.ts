@@ -46,6 +46,8 @@ export interface SectionStyle {
   overlay: OverlayId;
   /** Draw the thin jet as a bright line. */
   jet: boolean;
+  /** Painting a later plate of a stack over the same canvas: do not clear it or repaint the backdrop (#171). */
+  continued?: boolean;
 }
 
 function path(ctx: CanvasRenderingContext2D, points: Point[]): void {
@@ -57,6 +59,10 @@ function path(ctx: CanvasRenderingContext2D, points: Point[]): void {
 /** What is drawn around the section: the dimension line, and the room and pieces thrown from the plate (#165). */
 export interface SectionExtras {
   dimension?: DimensionLine;
+  /** More dimension lines: a stack's plate thicknesses and gaps (#171). */
+  dimensions?: DimensionLine[];
+  /** Set false to leave the legend off (a stack paints it once, with its last plate). */
+  legend?: boolean;
   room?: RoomShapes | null;
   fragments?: DrawnFragment[];
   /** A field (#166) painted over the sawn plate, with its legend. */
@@ -81,21 +87,23 @@ const FRAGMENT_COLOR: Record<DrawnFragment['kind'], string> = {
 export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes, style: SectionStyle, extras: SectionExtras = {}): void {
   const { layout } = shapes;
   const { width, height, plate, axisY } = layout;
-  ctx.clearRect(0, 0, width, height);
+  if (!style.continued) {
+    ctx.clearRect(0, 0, width, height);
 
-  // The lab behind the section.
-  const bg = ctx.createLinearGradient(0, 0, 0, height);
-  bg.addColorStop(0, '#12151a');
-  bg.addColorStop(1, '#0a0b0e');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(0, axisY);
-  ctx.lineTo(width, axisY);
-  ctx.stroke();
-  ctx.setLineDash([]);
+    // The lab behind the section.
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    bg.addColorStop(0, '#12151a');
+    bg.addColorStop(1, '#0a0b0e');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(0, axisY);
+    ctx.lineTo(width, axisY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   // The test room the pieces fly about in: floor, ceiling and outer walls.
   if (extras.room) drawRoom(ctx, extras.room, width);
@@ -200,7 +208,8 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
 
   if (extras.fragments) for (const f of extras.fragments) drawFragment(ctx, f);
   if (extras.dimension) drawDimension(ctx, extras.dimension);
-  if (extras.field) drawLegend(ctx, extras.field, width, height);
+  if (extras.dimensions) for (const d of extras.dimensions) drawDimension(ctx, d);
+  if (extras.field && extras.legend !== false) drawLegend(ctx, extras.field, width, height);
   if (extras.energy) drawEnergyBar(ctx, extras.energy);
   if (extras.scaleBar) drawScaleBar(ctx, extras.scaleBar, height);
 }

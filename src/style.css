@@ -2086,6 +2086,88 @@ body {
   width: 100%;
 }
 
+.armor-add-plate,
+.armor-layer-remove {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.armor-add-plate {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.armor-add-plate:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.armor-layers {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.armor-layer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  padding: 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.armor-layer-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.armor-layer label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.armor-layer select,
+.armor-layer-remove {
+  grid-column: 1 / -1;
+}
+
+.armor-layer-remove {
+  justify-self: end;
+  grid-column: 2;
+  grid-row: 1;
+  padding: 2px 8px;
+}
+
+.armor-layer input[type='number'] {
+  width: 4.6em;
+  font: inherit;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
+.armor-arrangement-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .armor-material-note {
   margin: 10px 0 0;
   font-size: 11px;
