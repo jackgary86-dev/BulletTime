@@ -19,6 +19,15 @@ const CSP = [
   "connect-src 'self'",
 ].join('; ');
 
+// CI smoke test (#206): runner machines have no GPU, so draw with the software renderer.
+const SMOKE = process.env.BULLETTIME_SMOKE === '1';
+if (SMOKE) {
+  // A fresh profile, so the first-launch content warning is exercised every time.
+  app.setPath('userData', require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(), 'bullettime-smoke-')));
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+}
+
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -73,6 +82,11 @@ function createWindow() {
       win.setFullScreen(false);
     }
   });
+  if (SMOKE) {
+    win.show();
+    require('./smoke.cjs')(win, `${SCHEME}://bullettime`, app);
+    return;
+  }
   win.loadURL(`${SCHEME}://bullettime/index.html`);
 }
 

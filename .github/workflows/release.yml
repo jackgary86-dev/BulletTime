@@ -7,7 +7,7 @@ on:
     tags: ['v*']
   # Pull requests that touch the desktop app check that all three installers still build.
   pull_request:
-    paths: ['electron/**', 'scripts/build-steam.mjs', 'steam/**', 'build/**', 'package.json', 'package-lock.json', '.github/workflows/release.yml']
+    paths: ['electron/**', 'scripts/build-steam.mjs', 'scripts/smoke-desktop.mjs', 'steam/**', 'build/**', 'package.json', 'package-lock.json', '.github/workflows/release.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,6 +32,13 @@ jobs:
       - run: npm run dist -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Smoke test (#206): open the built app, pass the content warning, check the launcher
+      # offers all four simulators, then load each one and fire a shot. dist-desktop/ is
+      # already built by the step above. Linux has no display, so it runs under xvfb.
+      - if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run -a npm run smoke -- --skip-build
+      - if: matrix.os != 'ubuntu-latest'
+        run: npm run smoke -- --skip-build
       # Steam depot content for this OS (#111): release/steam/<os>/.
       - run: npm run dist:steam
         env:

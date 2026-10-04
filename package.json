@@ -17,6 +17,7 @@
     "build:desktop": "tsc --noEmit && vite build --mode desktop --outDir dist-desktop",
     "desktop": "npm run build:desktop && electron .",
     "dist": "npm run build:desktop && electron-builder",
+    "smoke": "node scripts/smoke-desktop.mjs",
     "dist:steam": "node scripts/build-steam.mjs"
   },
   "dependencies": {

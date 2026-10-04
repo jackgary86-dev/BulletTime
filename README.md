@@ -83,7 +83,9 @@ It defaults to the **Ultra** quality tier, which the web build also offers with 
 - **Particles:** 1.6× the particles of High, with each look's cap doubled.
 - **Rendering:** full device pixel ratio, 4096 px shadows, bloom, ambient occlusion and depth of field.
 
-`npm run dist` builds the installer for the current OS: Windows NSIS `.exe`, macOS `.dmg`, Linux `AppImage` and `.deb`. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three on GitHub's runners and attaches them, plus the itch.io zip, to a draft GitHub release. The installers are unsigned: Windows SmartScreen and macOS Gatekeeper will warn until you add a code-signing certificate (`CSC_LINK`/`CSC_KEY_PASSWORD` secrets) and, for macOS, Apple notarization. Electron's and Chromium's own license files ship next to the executable.
+`npm run dist` builds the installer for the current OS: Windows NSIS `.exe`, macOS `.dmg`, Linux `AppImage` and `.deb`. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three on GitHub's runners and attaches them, plus the itch.io zip, to a draft GitHub release. The installers are unsigned: Windows SmartScreen and macOS Gatekeeper will warn until you add a code-signing certificate (`CSC_LINK`/`CSC_KEY_PASSWORD` secrets) and, for macOS, Apple notarization. The plan for that is in [docs/code-signing.md](docs/code-signing.md). Electron's and Chromium's own license files ship next to the executable.
+
+`npm run smoke` is the desktop smoke test: it opens the built app in Electron on a fresh profile, passes the content warning, checks the launcher offers all four simulators, then loads each one and fires a shot. The release workflow runs it on all three platforms (under xvfb on Linux) before building the installers.
 
 For Steam, `npm run dist:steam` builds the unpacked app per OS for SteamPipe; [steam/README.md](steam/README.md) has the Steamworks steps.
 
