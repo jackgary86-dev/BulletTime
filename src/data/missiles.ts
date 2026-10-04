@@ -49,12 +49,12 @@ export const DEFAULT_AIRFRAME_ID = 'guided-at';
 export const DEFAULT_WARHEAD_ID = 'shaped';
 
 /**
- * The jet's mass as a fraction of the airframe: the liner is a share of the warhead, so
- * the jet (and with it the depth it bores, about 4 to 6 calibres) follows the warhead
- * diameter, not the weight of the whole airframe.
+ * The jet's mass as a fraction of the airframe, so the jet (and with it the depth it
+ * bores) follows the warhead, not the weight of the whole airframe. The scale is tuned so
+ * a shaped charge bores about 4 to 5 calibres of armour plate and a tandem 5 to 6.
  */
-const JET_SHARE_OF_WARHEAD = 0.5;
-const jetFraction = (a: Airframe): number => (a.warheadKg * JET_SHARE_OF_WARHEAD) / a.massKg;
+const JET_MASS_SCALE = 1.8;
+const jetFraction = (a: Airframe): number => (a.warheadKg * JET_MASS_SCALE) / a.massKg;
 
 const blastFor = (head: string, a: Airframe): BlastSpec => {
   switch (head) {

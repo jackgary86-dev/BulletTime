@@ -120,3 +120,22 @@ describe('missile warheads', () => {
     for (const a of AIRFRAMES) expect(bore(a.id, 'tandem')).toBeGreaterThan(bore(a.id, 'shaped') * 1.1);
   });
 });
+
+describe('shaped-charge depth (#195, #193)', () => {
+  const calibres = (id: string) => {
+    const t = shoot(id, 'rha', 1.0);
+    return t.summary.penetrationM / (getBullet(id).caliberMm / 1000);
+  };
+
+  it('bores about four to five calibres of armour from every airframe that fits the plate', () => {
+    for (const a of ['light-rocket', 'shoulder-rocket', 'guided-at', 'air-surface']) {
+      const d = calibres(missileId(a, 'shaped'));
+      expect(d).toBeGreaterThan(3.5);
+      expect(d).toBeLessThan(6.5);
+    }
+  });
+
+  it('bores deeper with a tandem warhead, whose second jets follow the first hole', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(calibres(missileId(a, 'tandem'))).toBeGreaterThan(calibres(missileId(a, 'shaped')) * 1.1);
+  });
+});
