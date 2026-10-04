@@ -12,9 +12,10 @@ import {
   type FragmentSeed,
 } from './fragments';
 import { getPlateMaterial } from './materials';
-import type { ArmorShot } from './model';
+import type { ArmorShot, FragmentField } from './model';
 import { impactState, type MunitionFamilyId } from './munitions';
 import { simulateArmor } from './simulate';
+import { simulateStack } from './stack';
 
 const room = fragmentRoom(0.1);
 const seed = (over: Partial<FragmentSeed> = {}): FragmentSeed => ({
@@ -238,5 +239,56 @@ describe('what each shot throws (#165)', () => {
   it('adds nothing to a timeline that throws nothing', () => {
     const tl = simulateArmor(shotOf('apfsds', 0.3, 0, 'rha', 40));
     expect(withFragments(tl)).toBe(tl);
+  });
+});
+
+describe('pieces about as large as the room', () => {
+  /** Every track flies, lands and rests in order, with finite, sensible angles. */
+  const expectSettles = (field: FragmentField) => {
+    const { room } = field;
+    for (const tr of field.tracks) {
+      expect(tr.segments.length).toBeLessThan(MAX_SEGMENTS - 2);
+      expect(field.restS).toBeGreaterThanOrEqual(tr.t0);
+      for (let i = 1; i < tr.segments.length; i++) expect(tr.segments[i].t0).toBeGreaterThanOrEqual(tr.segments[i - 1].t0);
+      expect(fragmentStateAt(tr, tr.t0).resting).toBe(false);
+      const end = tr.segments[tr.segments.length - 1].t0;
+      for (let k = 0; k <= 50; k++) {
+        const s = fragmentStateAt(tr, tr.t0 + ((end - tr.t0) * k) / 50);
+        expect(Number.isFinite(s.angle)).toBe(true);
+        expect(Math.abs(s.angle)).toBeLessThan(100);
+        expect(s.x).toBeGreaterThanOrEqual(room.leftX - 1e-9);
+        expect(s.x).toBeLessThanOrEqual(room.rightX + 1e-9);
+        expect(s.y).toBeGreaterThanOrEqual(room.floorY - 1e-9);
+        expect(s.y).toBeLessThanOrEqual(room.ceilingY + 1e-9);
+      }
+      const rest = fragmentStateAt(tr, field.restS + 1);
+      expect(rest.resting).toBe(true);
+      expect(rest.y).toBeLessThan(0);
+    }
+  };
+
+  it('lands and rests the plug and the 88 mm shot thrown through 40 mm RHA', () => {
+    const stack = simulateStack({ impact: impactState('ap-shot', 88), layers: [{ material: getPlateMaterial('rha'), thicknessM: 0.04, gapBeforeM: 0 }], obliquityDeg: 0 });
+    const field = stack.fragments!;
+    expect(field.tracks.map((t) => t.kind).sort()).toEqual(['penetrator', 'plug']);
+    expectSettles(field);
+  });
+
+  it('lands and rests what large-calibre shots throw through thin plates', () => {
+    const families: MunitionFamilyId[] = ['ap-shot', 'apfsds', 'heat', 'hesh'];
+    let fields = 0;
+    for (const family of families) {
+      for (const calibreMm of [76, 88, 105, 120, 125]) {
+        for (const thicknessM of [0.005, 0.01, 0.02, 0.04]) {
+          for (const obliquityDeg of [0, 45]) {
+            const field = simulateArmor(shotOf(family, thicknessM, obliquityDeg, 'rha', calibreMm)).fragments;
+            if (!field) continue;
+            fields++;
+            expectSettles(field);
+          }
+        }
+      }
+    }
+    expect(fields).toBeGreaterThan(20);
   });
 });

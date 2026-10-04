@@ -46,6 +46,14 @@ export const MAX_SEGMENTS = 64;
 export const MAX_FRAGMENTS = 40;
 /** Height of the room's floor and ceiling from the shot line, as a multiple of the air either side of the plate. */
 export const ROOM_HALF_HEIGHT_FACTOR = 1.4;
+/**
+ * Largest a piece's collision half-size may be, as a share of the smaller side
+ * of the box it flies in. The room is only as big as the air the section view
+ * shows, and a big shot through a thin plate (an 88 mm shot through 40 mm) is
+ * about as large as that: it collides as a smaller body so it still has room
+ * to fly, land and slide, and is drawn at full size.
+ */
+export const MAX_COLLISION_SHARE = 0.25;
 /** Pieces start spinning at up to this many radians per second per m/s of speed per metre of length... kept simple: spin = this × speed / length. */
 export const SPIN_FACTOR = 0.35;
 export const MAX_SPIN = 60;
@@ -132,7 +140,7 @@ export function buildTrack(seed: FragmentSeed, room: FragmentRoom): FragmentTrac
   const xmin = right ? room.rearX : room.leftX;
   const xmax = right ? room.rightX : room.frontX;
   const r = Math.min(seed.widthM, seed.lengthM) / 2;
-  const half = Math.max(r, 0);
+  const half = Math.min(Math.max(r, 0), MAX_COLLISION_SHARE * Math.min(xmax - xmin, room.ceilingY - room.floorY));
   const minX = xmin + half;
   const maxX = xmax - half;
   const minY = room.floorY + half;
@@ -153,7 +161,7 @@ export function buildTrack(seed: FragmentSeed, room: FragmentRoom): FragmentTrac
   while (segments.length < MAX_SEGMENTS - 2) {
     push(0, -GRAVITY, 0);
     // Time to each surface.
-    const tWall = vx > 0 ? (maxX - x) / vx : vx < 0 ? (minX - x) / vx : Infinity;
+    const tWall = Math.max(0, vx > 0 ? (maxX - x) / vx : vx < 0 ? (minX - x) / vx : Infinity);
     const tFloor = timeToHeight(y, vy, -GRAVITY, minY);
     const tCeil = vy > 0 || y > maxY - 1e-9 ? timeToHeight(y, vy, -GRAVITY, maxY) : Infinity;
     const dt = Math.min(tWall, tFloor, tCeil);
@@ -194,8 +202,10 @@ export function buildTrack(seed: FragmentSeed, room: FragmentRoom): FragmentTrac
     vx = 0;
     vy = 0;
     y = Math.max(minY, Math.min(y, maxY));
-  } else if (Math.abs(vx) > 1e-9) {
-    const decel = FRICTION * GRAVITY;
+  } else if (Math.abs(vx) > 1e-9 && (vx > 0 ? maxX - x : x - minX) > 1e-9) {
+    // Friction stops it, or, if that would carry it into the wall, it fetches up against the wall.
+    const toWall = vx > 0 ? maxX - x : x - minX;
+    const decel = Math.max(FRICTION * GRAVITY, (vx * vx) / (2 * toWall));
     const slideT = Math.abs(vx) / decel;
     y = minY;
     push(-Math.sign(vx) * decel, 0, -omega / slideT);
@@ -339,7 +349,7 @@ export function withFragments(timeline: ArmorTimeline): ArmorTimeline {
   const { seeds, handoffS } = fragmentSeeds(timeline, rand);
   if (!seeds.length) return timeline;
   const tracks = seeds.slice(0, MAX_FRAGMENTS).map((s) => buildTrack(s, room));
-  const restS = tracks.reduce((end, tr) => Math.max(end, tr.segments[tr.segments.length - 1].t0), 0);
+  const restS = tracks.reduce((end, tr) => Math.max(end, tr.t0, tr.segments[tr.segments.length - 1].t0), 0);
   const field: FragmentField = { room, tracks, handoffS, restS };
   return { ...timeline, fragments: field };
 }
