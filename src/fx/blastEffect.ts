@@ -1,37 +1,22 @@
 import * as THREE from 'three';
-import { TARGET_FRONT_X } from '../models/targets';
-import type { MediumBehaviour } from '../data/media';
+import { TARGET_FRONT_X, layerGroupName } from '../models/targets';
+import { blastResponse, type LayerBlast } from '../sim/blastResponse';
 import type { TargetLayer } from '../sim/engine';
 import type { ShotEvent, Timeline } from '../sim/types';
-import type { BurstSpec, ParticleSystem } from './particles';
+import { FLOOR_Y, type BurstSpec, type ParticleSystem } from './particles';
 
 /**
  * Detonations (#180-#182): the fireball, smoke, sparks and flash at every
- * `detonate` event, plus, for charges in the test bed, how the material in front
- * of the blast responds to the overpressure that reaches it. Everything is a
- * scrubbable particle burst, like the rest of the effects.
+ * `detonate` event, plus, for charges in the test bed, how each material in
+ * front of the blast responds to the overpressure that reaches it (debris, and
+ * panels that topple or are blown away). Everything is driven by sim time, so
+ * it scrubs and replays like the rest of the effects.
  */
 
 /** Visual fireball radius per cube root of the yield (kg), in metres. */
 const FIREBALL_M_PER_KG13 = 0.5;
-/** Speed of sound in air, m/s. */
-const SOUND_MS = 343;
 
 const FIRE = { standard: 0xff9a3c, thermobaric: 0xffc060, incendiary: 0xff7a20 } as const;
-
-/** Overpressure (kPa) at which a material starts to fail, by behaviour: glass first, concrete and steel last. */
-const FAILURE_KPA: Record<MediumBehaviour, number> = {
-  glass: 5,
-  drywall: 12,
-  ice: 25,
-  wood: 40,
-  bone: 300,
-  concrete: 300,
-  steel: 4000,
-  sand: 2500,
-  gel: 1500,
-  water: 1500,
-};
 
 /** The fireball's size in metres for an event. */
 export function fireballRadius(yieldKg: number, kind: string | undefined): number {
@@ -52,8 +37,18 @@ export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], parti
     const axis = charge ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(-1, 0, 0);
     const spread = charge ? Math.PI : 1.5;
     fireball(particles, e, origin, axis, spread, yieldKg, kind, seed++);
-    if (charge) targetResponse(particles, e, layers, origin, seed++);
+    if (charge) {
+      groundRing(particles, e, origin, yieldKg, kind, seed++);
+      for (const response of responses(e, layers)) debris(particles, e, response, origin, layers, seed++);
+    }
   }
+}
+
+/** What each layer of the stack does when a charge detonates at `e`. */
+export function responses(e: ShotEvent, layers: TargetLayer[]): LayerBlast[] {
+  if (e.yieldKg === undefined || !layers.length) return [];
+  const standoff = Math.max(0.05, TARGET_FRONT_X + layers[0].offset - e.pos.x);
+  return blastResponse(e.yieldKg, standoff, layers).map((r) => ({ ...r, arriveS: r.arriveS }));
 }
 
 function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3, axis: THREE.Vector3, spread: number, yieldKg: number, kind: string, seed: number): void {
@@ -64,6 +59,10 @@ function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3
 
   // The fireball: hot cloud swelling out to its full size.
   particles.add({ ...base, look: 'dust', duration: 200e-6 * slow, count: 70, speed: [radius * 80, radius * 300], size: [radius * 0.35, radius * 0.7], life: [2e-3 * slow, 6e-3 * slow], drag: 700 / slow, color: fire, colorJitter: 0.25, grow: 2.4 });
+  if (kind === 'thermobaric') {
+    // The fuel cloud keeps burning: a second, slower swell of flame inside the first, then a rolling smoke head.
+    particles.add({ ...base, look: 'dust', t0: e.t + 1.5e-3, duration: 3e-3, count: 60, speed: [radius * 20, radius * 90], size: [radius * 0.5, radius * 0.9], life: [10e-3, 22e-3], drag: 200, color: 0xff8a2a, colorJitter: 0.2, grow: 2, seed: seed + 3 });
+  }
   // Smoke: dark and slow, hanging after the flame has gone.
   particles.add({ ...base, look: 'dust', t0: e.t + 400e-6, duration: 1.5e-3, count: 50, speed: [radius * 30, radius * 120], size: [radius * 0.4, radius * 0.9], life: [8e-3, 20e-3], drag: 300, color: 0x3a3733, colorJitter: 0.2, grow: 2.2, seed: seed + 1 });
   if (kind !== 'thermobaric') {
@@ -74,63 +73,143 @@ function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3
   particles.addFlash(e.t, lightPos, 6 * Math.cbrt(Math.max(0.05, yieldKg)), 500e-6 * slow, fire);
 }
 
-/** Debris thrown off the front of each material the blast reaches, if the overpressure is above what it can take. */
-function targetResponse(particles: ParticleSystem, e: ShotEvent, layers: TargetLayer[], origin: THREE.Vector3, seed: number): void {
-  const pressure = e.pressureKPa ?? 0;
-  const front = layers.filter((l) => l.stack === undefined || l.stack === layers[0].stack).slice(0, 1);
-  for (const layer of front) {
-    const medium = layer.medium;
-    const k = pressure / FAILURE_KPA[medium.behaviour];
-    if (k < 1) continue;
-    const faceX = TARGET_FRONT_X + layer.offset;
-    const range = Math.max(0.1, faceX - origin.x);
-    // The shock reaches the face a little before the sound would.
-    const arrive = e.t + range / (SOUND_MS + 0.6 * pressure);
-    const face = new THREE.Vector3(faceX, origin.y, origin.z);
-    const strength = Math.min(1, Math.log10(k) / 1.5 + 0.35);
-    const burst = (look: BurstSpec['look'], count: number, speed: [number, number], size: [number, number], color: number, life: [number, number], extra: Partial<BurstSpec> = {}): BurstSpec => ({
-      look,
-      t0: arrive,
-      duration: 300e-6,
-      origin: face,
-      originJitter: Math.min(medium.heightM, medium.widthM) * 0.3,
-      axis: new THREE.Vector3(-1, 0, 0),
-      spread: 1.3,
-      count: Math.round(count * strength),
-      speed,
-      size,
-      life,
-      drag: 30,
-      color,
-      colorJitter: 0.2,
-      seed,
-      ...extra,
-    });
-    const dust = (color: number) => burst('dust', 60, [3, 25], [0.04, 0.12], color, [4e-3, 14e-3], { grow: 3, drag: 200 });
-    switch (medium.behaviour) {
-      case 'glass':
-      case 'ice':
-        particles.add(burst('shard', 120, [20, 140], [0.008, 0.03], medium.behaviour === 'ice' ? 0xdcecf6 : 0xcfe8ee, [20e-3, 40e-3]));
-        break;
-      case 'wood':
-        particles.add(burst('splinter', 80, [15, 90], [0.01, 0.05], 0xc59a62, [20e-3, 40e-3], { stretch: 3 }));
-        particles.add(dust(0xa08258));
-        break;
-      case 'drywall':
-        particles.add(dust(0xe6e3dc));
-        particles.add(burst('chunk', 40, [5, 40], [0.015, 0.05], 0xdedad0, [20e-3, 40e-3]));
-        break;
-      case 'concrete':
-        particles.add(burst('chunk', 70, [10, 80], [0.015, 0.06], 0x9a978f, [20e-3, 40e-3]));
-        particles.add(dust(0xa8a59d));
-        break;
-      case 'sand':
-        particles.add(burst('grain', 160, [8, 60], [0.006, 0.014], 0xb09a70, [20e-3, 40e-3]));
-        particles.add(dust(0xa89468));
-        break;
-      default:
-        particles.add(burst('spark', 80, [30, 160], [0.004, 0.01], 0xffc070, [4e-3, 10e-3], { stretch: 3 }));
-        break;
+/** The ring of dust the blast wave kicks up off the floor, rolling outward. */
+function groundRing(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3, yieldKg: number, kind: string, seed: number): void {
+  if (kind === 'incendiary') return;
+  const radius = fireballRadius(yieldKg, kind);
+  const floor = new THREE.Vector3(origin.x, FLOOR_Y + 0.01, origin.z);
+  particles.add({
+    look: 'dust',
+    t0: e.t + 200e-6,
+    duration: 800e-6,
+    origin: floor,
+    originJitter: radius * 0.15,
+    axis: new THREE.Vector3(0, 1, 0),
+    spread: 1.5,
+    innerSpread: 1.2,
+    count: 60,
+    speed: [radius * 60, radius * 200],
+    size: [radius * 0.25, radius * 0.5],
+    life: [6e-3, 16e-3],
+    drag: 220,
+    color: 0x8a8378,
+    colorJitter: 0.2,
+    grow: 2.4,
+    seed,
+  });
+}
+
+/** Debris thrown off the front of a layer that fails, by what it is made of. */
+function debris(particles: ParticleSystem, e: ShotEvent, r: LayerBlast, origin: THREE.Vector3, layers: TargetLayer[], seed: number): void {
+  if (r.outcome === 'intact') return;
+  const medium = r.medium;
+  const layer = layers.find((l) => (l.stack ?? 0) === r.stack) ?? layers[0];
+  const faceX = TARGET_FRONT_X + layer.offset;
+  const face = new THREE.Vector3(faceX, origin.y, origin.z);
+  // How hard it fails, 0.35 at the threshold up to 1 well past it.
+  const strength = Math.min(1, Math.log10(Math.max(1, r.k)) / 1.5 + 0.35);
+  const arrive = e.t + r.arriveS;
+  const burst = (look: BurstSpec['look'], count: number, speed: [number, number], size: [number, number], color: number, life: [number, number], extra: Partial<BurstSpec> = {}): BurstSpec => ({
+    look,
+    t0: arrive,
+    duration: 300e-6,
+    origin: face,
+    originJitter: Math.min(medium.heightM, medium.widthM) * 0.3,
+    axis: new THREE.Vector3(-1, 0, 0),
+    spread: 1.3,
+    count: Math.round(count * strength),
+    speed,
+    size,
+    life,
+    drag: 30,
+    color,
+    colorJitter: 0.2,
+    seed,
+    ...extra,
+  });
+  const dust = (color: number) => burst('dust', 60, [3, 25], [0.04, 0.12], color, [4e-3, 14e-3], { grow: 3, drag: 200 });
+  switch (medium.behaviour) {
+    case 'glass':
+    case 'ice':
+      particles.add(burst('shard', 120, [20, 140], [0.008, 0.03], medium.behaviour === 'ice' ? 0xdcecf6 : 0xcfe8ee, [20e-3, 40e-3]));
+      break;
+    case 'wood':
+      particles.add(burst('splinter', 80, [15, 90], [0.01, 0.05], 0xc59a62, [20e-3, 40e-3], { stretch: 3 }));
+      particles.add(dust(0xa08258));
+      break;
+    case 'drywall':
+      particles.add(dust(0xe6e3dc));
+      particles.add(burst('chunk', 40, [5, 40], [0.015, 0.05], 0xdedad0, [20e-3, 40e-3]));
+      break;
+    case 'concrete':
+      particles.add(burst('chunk', 70, [10, 80], [0.015, 0.06], 0x9a978f, [20e-3, 40e-3]));
+      particles.add(dust(0xa8a59d));
+      break;
+    case 'sand':
+      particles.add(burst('grain', 160, [8, 60], [0.006, 0.014], 0xb09a70, [20e-3, 40e-3]));
+      particles.add(dust(0xa89468));
+      break;
+    default:
+      particles.add(burst('spark', 80, [30, 160], [0.004, 0.01], 0xffc070, [4e-3, 10e-3], { stretch: 3 }));
+      break;
+  }
+}
+
+/** Seconds a toppling panel takes to reach most of its final tilt. */
+const TOPPLE_TAU_S = 4e-3;
+
+interface Moving {
+  group: THREE.Object3D;
+  home: THREE.Vector3;
+  pivot: THREE.Vector3;
+  response: LayerBlast;
+  arrive: number;
+}
+
+/**
+ * Moves the target's layers when a charge goes off (#196): panels the blast
+ * destroys vanish as the shock reaches them, heavy and tall ones that it
+ * topples tip over away from the charge. Pure functions of sim time.
+ */
+export class BlastDamage {
+  private moving: Moving[] = [];
+
+  load(timeline: Timeline, target: THREE.Group, layers: TargetLayer[]): void {
+    this.clear();
+    const e = timeline.events.find((x) => x.type === 'detonate' && x.pressureKPa !== undefined);
+    if (!e) return;
+    for (const response of responses(e, layers)) {
+      if (response.outcome !== 'destroyed' && response.outcome !== 'toppled') continue;
+      const group = target.getObjectByName(layerGroupName(response.stack));
+      if (!group) continue;
+      // Tips about the bottom edge of the panel, on the far side from the charge.
+      const pivot = new THREE.Vector3(group.position.x + response.medium.thickness.default / 2, -response.medium.heightM / 2 - 0.02, 0);
+      this.moving.push({ group, home: group.position.clone(), pivot, response, arrive: e.t + response.arriveS });
     }
+  }
+
+  update(t: number): void {
+    for (const m of this.moving) {
+      const { group, home, pivot, response } = m;
+      const since = t - m.arrive;
+      if (response.outcome === 'destroyed') {
+        group.visible = since < 0;
+        continue;
+      }
+      const angle = since > 0 ? response.tiltRad * (1 - Math.exp(-since / TOPPLE_TAU_S)) : 0;
+      // Rotate about the base: the top swings toward +x, away from the charge.
+      group.rotation.z = -angle;
+      const rel = home.clone().sub(pivot).applyAxisAngle(new THREE.Vector3(0, 0, 1), -angle);
+      group.position.copy(pivot).add(rel);
+    }
+  }
+
+  clear(): void {
+    for (const { group, home } of this.moving) {
+      group.visible = true;
+      group.rotation.z = 0;
+      group.position.copy(home);
+    }
+    this.moving = [];
   }
 }

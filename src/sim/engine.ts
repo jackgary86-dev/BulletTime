@@ -1,3 +1,4 @@
+import { blastResponse, overpressureKPa } from './blastResponse';
 import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
@@ -798,15 +799,8 @@ const TANDEM_DELAY_S = 40e-6;
 /** TNT's specific energy, in joules per kilogram, for the energy line in the results. */
 export const TNT_J_PER_KG = 4.184e6;
 
-/**
- * Overpressure from a free-air blast at `rangeM` from `yieldKg` of TNT, in kPa:
- * a standard curve fit by scaled distance (Mills). Close in it is an estimate
- * of the incident pressure, good enough to rank materials, not for engineering.
- */
-export function blastOverpressureKPa(yieldKg: number, rangeM: number): number {
-  const z = Math.max(0.3, rangeM) / Math.cbrt(Math.max(1e-6, yieldKg));
-  return 1772 / z ** 3 - 114 / z ** 2 + 108 / z;
-}
+/** Free-air overpressure from a blast, in kPa (see blastResponse.ts); kept under its old name for the tests. */
+export const blastOverpressureKPa = overpressureKPa;
 
 /** Throws a cone of fragments (and shaped-charge jets) from `origin` along `axis`. */
 function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec: NonNullable<BulletSpec['blast']>, cone: number, t: number): void {
@@ -964,6 +958,15 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
     passedThrough: blast ? !!blastExit : !!finalExit && !ricocheted,
     exitSpeed: blast ? (blastExit?.speed ?? 0) : finalExit && !ricocheted ? finalExit.speed : 0,
     ...(blast ? { yieldKg: blast.yieldKg, blastKPa: detonation?.pressureKPa } : {}),
+    ...(ctx.setup.bullet.behaviour === 'charge' && blast
+      ? {
+          blastLayers: blastResponse(blast.yieldKg, ctx.setup.standOffM, ctx.setup.layers).map((l) => ({
+            name: l.medium.name,
+            pressureKPa: l.pressureKPa,
+            outcome: l.outcome,
+          })),
+        }
+      : {}),
     finalState: primary.finalState,
     finalDiameter: last.diameter,
     fragments: ctx.tracks.filter((t) => t.kind === 'fragment').length,

@@ -6,6 +6,7 @@ import { AIRFRAMES, MISSILES, WARHEADS, findMissile, missileId } from '../data/m
 import { MODES, roundsForMode } from '../data/modes';
 import { getMedium } from '../data/media';
 import { blastOverpressureKPa, layersFor, simulate } from './engine';
+import { blastResponse, outcomeFor } from './blastResponse';
 
 function shoot(id: string, medium: string, thickness: number) {
   const m = getMedium(medium);
@@ -137,5 +138,48 @@ describe('shaped-charge depth (#195, #193)', () => {
 
   it('bores deeper with a tandem warhead, whose second jets follow the first hole', () => {
     for (const a of ['light-rocket', 'guided-at']) expect(calibres(missileId(a, 'tandem'))).toBeGreaterThan(calibres(missileId(a, 'shaped')) * 1.1);
+  });
+});
+
+describe('blast response of the material (#196)', () => {
+  const layer = (id: string, offset = 0, stack = 0) => {
+    const medium = getMedium(id);
+    return { medium, thickness: medium.thickness.default, offset, stack };
+  };
+
+  it('fails glass, drywall and wood well before concrete, and steel last', () => {
+    const at = (id: string) => blastResponse(1.3, 1.2, [layer(id)])[0].k;
+    expect(at('glass')).toBeGreaterThan(at('drywall'));
+    expect(at('drywall')).toBeGreaterThan(at('pine'));
+    expect(at('pine')).toBeGreaterThan(at('concrete'));
+    expect(at('concrete')).toBeGreaterThan(at('steel-mild'));
+  });
+
+  it('destroys brittle panels, topples a wood panel in the middle range and cracks heavy ones', () => {
+    expect(outcomeFor('glass', 1.1).outcome).toBe('destroyed');
+    expect(outcomeFor('wood', 1.5).outcome).toBe('toppled');
+    expect(outcomeFor('wood', 3).outcome).toBe('destroyed');
+    expect(outcomeFor('concrete', 3).outcome).toBe('cracked');
+    expect(outcomeFor('concrete', 8).outcome).toBe('toppled');
+    expect(outcomeFor('steel', 0.5).outcome).toBe('intact');
+  });
+
+  it('shields later panels behind one that holds, but not behind one that is blown away', () => {
+    const behindHeld = blastResponse(6.5, 2, [layer('steel-mild'), layer('glass', 0.3, 1)])[1];
+    const behindGone = blastResponse(6.5, 2, [layer('glass'), layer('glass', 0.3, 1)])[1];
+    expect(behindHeld.pressureKPa).toBeLessThan(behindGone.pressureKPa * 0.4);
+  });
+
+  it('reports each layer of the stack on the charge summary, and more stand-off means less pressure', () => {
+    const near = shoot('charge-block', 'pine', 0.038).summary.blastLayers![0];
+    const far = simulate({
+      bullet: { ...getBullet('charge-block'), standoffM: 4 },
+      layers: layersFor(getMedium('pine'), 0.038),
+      angleDeg: 0,
+      impactPoint: { x: -0.2, y: 0.16, z: 0 },
+      standOffM: 4,
+    }).summary.blastLayers![0];
+    expect(near.name).toBe('Pine plank');
+    expect(far.pressureKPa).toBeLessThan(near.pressureKPa / 5);
   });
 });

@@ -115,6 +115,8 @@ export interface ShotSummary {
   /** Detonating rounds only: TNT-equivalent yield (kg) and overpressure at the face (kPa, charges). */
   yieldKg?: number;
   blastKPa?: number;
+  /** Charges only: how each target layer fared, front to back. */
+  blastLayers?: { name: string; pressureKPa: number; outcome: 'intact' | 'cracked' | 'toppled' | 'destroyed' }[];
 }
 
 /** One shot within a timeline: a single fire, or one round of a group or burst (#22). */

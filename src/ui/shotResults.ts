@@ -234,6 +234,8 @@ function text(content: string, x: number, y: number, anchor: 'start' | 'middle' 
   return node;
 }
 
+const BLAST_OUTCOME = { intact: 'Intact', cracked: 'Cracked', toppled: 'Toppled over', destroyed: 'Destroyed' } as const;
+
 function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
   // A charge in the test bed has no impact speed: show the blast and what the fragments did.
   if (s.blastKPa !== undefined) {
@@ -245,6 +247,8 @@ function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
       ['Fragments', String(s.fragments)],
       ['Deepest fragment hit', s.penetrationM > 0 ? formatDepth(s.penetrationM) : 'None'],
       ['Fragment passed through', s.passedThrough ? 'Yes' : 'No'],
+      // How each layer fared, front to back, with the pressure that reached it.
+      ...(s.blastLayers ?? []).map((l): [string, string] => [l.name, `${BLAST_OUTCOME[l.outcome]}<small>${l.pressureKPa >= 100 ? Math.round(l.pressureKPa) : l.pressureKPa.toFixed(1)} kPa</small>`]),
     ];
     if (hasCavity) rows.push(['Max temp. cavity', s.maxCavityDiameter > 0 ? formatDepth(s.maxCavityDiameter) : '—']);
     return rows;

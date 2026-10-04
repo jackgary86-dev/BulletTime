@@ -25,12 +25,14 @@ export interface BulletSelectorOptions {
 export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOptions): void {
   const mode = options.mode ?? 'bullet';
   const missile = mode === 'missile';
+  const explosion = mode === 'explosion';
   const panel = document.createElement('section');
   panel.className = 'panel bullet-panel';
   panel.innerHTML = `
     <label class="field-label" for="bullet-select">${MODES[mode].pickerLabel}</label>
     <select id="bullet-select"></select>
     ${missile ? '<label class="field-label" for="warhead-select">Warhead</label><select id="warhead-select"></select>' : ''}
+    ${explosion ? '<label class="field-label" for="standoff-range">Stand-off <output class="standoff-value"></output></label><input id="standoff-range" type="range" min="0.05" max="6" step="0.05" />' : ''}
     <canvas class="bullet-preview" aria-label="Selected projectile at true scale"></canvas>
     <p class="scale-note">True scale, ruler in mm</p>
     <dl class="bullet-data"></dl>
@@ -40,6 +42,8 @@ export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOp
 
   const select = panel.querySelector<HTMLSelectElement>('#bullet-select')!;
   const warheadSelect = panel.querySelector<HTMLSelectElement>('#warhead-select');
+  const standoff = panel.querySelector<HTMLInputElement>('#standoff-range');
+  const standoffValue = panel.querySelector<HTMLOutputElement>('.standoff-value');
   const data = panel.querySelector<HTMLDListElement>('.bullet-data')!;
   const description = panel.querySelector<HTMLParagraphElement>('.bullet-description')!;
   const preview = createBulletPreview(panel.querySelector<HTMLCanvasElement>('.bullet-preview')!);
@@ -67,7 +71,15 @@ export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOp
     }
   }
 
-  const current = (): BulletSpec => (missile ? missileSpec(select.value, warheadSelect!.value) : getBullet(select.value));
+  const showStandoff = (m: number) => {
+    if (standoffValue) standoffValue.textContent = m <= 0.05 ? 'contact' : `${m.toFixed(2)} m`;
+  };
+  const current = (): BulletSpec => {
+    if (missile) return missileSpec(select.value, warheadSelect!.value);
+    const spec = getBullet(select.value);
+    // A charge can be moved: the slider overrides its stand-off from the face.
+    return standoff ? { ...spec, standoffM: Number(standoff.value) } : spec;
+  };
 
   const show = (spec: BulletSpec) => {
     const grams = gramsFromGrains(spec.massGrains);
@@ -97,7 +109,18 @@ export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOp
     show(spec);
     options.onChange(spec);
   };
-  select.addEventListener('change', changed);
+  select.addEventListener('change', () => {
+    // A new charge starts at its own usual stand-off.
+    if (standoff) {
+      standoff.value = String(getBullet(select.value).standoffM ?? 1);
+      showStandoff(Number(standoff.value));
+    }
+    changed();
+  });
+  standoff?.addEventListener('input', () => {
+    showStandoff(Number(standoff.value));
+    changed();
+  });
   warheadSelect?.addEventListener('change', changed);
 
   if (missile) {
@@ -106,6 +129,10 @@ export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOp
     warheadSelect!.value = head;
   } else {
     select.value = options.initialId;
+    if (standoff) {
+      standoff.value = String(getBullet(options.initialId).standoffM ?? 1);
+      showStandoff(Number(standoff.value));
+    }
   }
   show(current());
 }
