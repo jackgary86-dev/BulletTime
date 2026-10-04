@@ -21,8 +21,8 @@ When Steam launches the game it sets `SteamAppId`, and the app switches the GPU 
 2. **App Admin → Installation → General**: add launch options. Windows: executable `BulletTime.exe`. macOS: `BulletTime.app`. Linux: `BulletTime`. One per OS.
 3. **SteamPipe → Depots**: create one depot per OS and set each depot's operating system.
 4. Put your App ID and depot IDs into `app_build.vdf` and the three `depot_build_*.vdf` files here, replacing `1000000`–`1000003`.
-5. **Store page → Mature content survey**: tick *Frequent violence or gore* (simulated blood on human-shaped targets) and mention the optional reduced-gore setting and the in-game content warning.
-6. Set the price, release date and store assets (capsule images, screenshots, trailer).
+5. **Store page → Mature content survey**: tick *Frequent violence or gore* (simulated blood on human-shaped targets) and mention the optional reduced-gore setting and the in-game content warning. The game now has four simulators (bullets, artillery, missiles and explosions, shown as lab tests), so describe all four; [store-page.md](store-page.md) has wording for the survey.
+6. Set the price, release date and store assets. [store-page.md](store-page.md) has a draft description, tags, a list of screenshots to take and a trailer outline.
 
 ## 3. Upload
 

@@ -1,41 +1,47 @@
-name: Quality gate
-
-# Fast checks on every pull request and push to main, separate from the slower
-# deploy.yml (build + Pages) and release.yml (installers): typecheck, tests with
-# the simulator catalogues, a dependency audit, and the production build size.
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: quality-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      - run: npm run typecheck
-      - run: npm test
-      # Reports known vulnerabilities (see the audit ticket); does not block merging yet.
-      - run: npm audit --audit-level=high
-        continue-on-error: true
-      - run: npm run build
-      - name: Bundle size
-        run: |
-          echo "### Bundle size" >> "$GITHUB_STEP_SUMMARY"
-          du -sh dist >> "$GITHUB_STEP_SUMMARY"
-          du -k dist/assets/*.js | sort -rn | head -5 >> "$GITHUB_STEP_SUMMARY"
+name: Quality gate
+
+# Fast checks on every pull request and push to main, separate from the slower
+# deploy.yml (build + Pages) and release.yml (installers): typecheck, tests with
+# the simulator catalogues, a dependency audit, and the production build size.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm run typecheck
+      - run: npm test
+      # Reports known vulnerabilities (see the audit ticket); does not block merging yet.
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+      - run: npm run build
+      - name: Bundle size
+        run: |
+          echo "### Bundle size" >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist >> "$GITHUB_STEP_SUMMARY"
+          du -k dist/assets/*.js | sort -rn | head -5 >> "$GITHUB_STEP_SUMMARY"
+      # Size budget (#205): the biggest script, gzipped, stays under 600 KB (about 360 KB with all four simulators).
+      - name: Bundle size budget
+        run: |
+          biggest=$(ls dist/assets/*.js | xargs -I{} sh -c 'gzip -c {} | wc -c' | sort -rn | head -1)
+          echo "Largest script, gzipped: $biggest bytes"
+          test "$biggest" -lt 614400
