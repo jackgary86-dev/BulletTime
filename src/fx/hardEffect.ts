@@ -5,6 +5,8 @@ import type { ShotEvent, Timeline, Track } from '../sim/types';
 import type { BurstSpec } from './particles';
 import type { HoleMarks } from './holes';
 import type { ParticleSystem } from './particles';
+import type { MediumSpec } from '../data/media';
+import { concreteFootprint } from './concreteDamage';
 
 /**
  * Concrete, cinder block and steel plate: craters, cracks, dents, sparks, lead
@@ -38,7 +40,10 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
     const track = timeline.tracks.find((tr) => tr.id === e.trackId);
     if (!track || track.kind === 'fragment') continue;
     const ctx = makeContext(track, e);
-    if (medium.behaviour === 'concrete') concreteEvent(ctx, e, frontShell, particles, holes, seed++);
+    if (medium.behaviour === 'concrete') {
+      const struck = timeline.events.find((x) => (x.type === 'impact' || x.type === 'enter') && x.layer === e.layer && x.trackId === e.trackId);
+      concreteEvent(ctx, e, frontShell, medium, layers[e.layer].thickness, struck?.t ?? e.t, particles, holes, seed++);
+    }
     else if (medium.behaviour === 'steel') {
       const perforated = timeline.events.some((x) => x.type === 'exit' && x.layer === e.layer && x.trackId === e.trackId);
       steelEvent(ctx, e, medium.look === 'ar500', perforated, particles, holes, seed++);
@@ -72,11 +77,14 @@ function makeContext(track: Track, e: ShotEvent): Context {
   };
 }
 
-function concreteEvent(c: Context, e: ShotEvent, frontShell: boolean, particles: ParticleSystem, holes: HoleMarks, seed: number): void {
+function concreteEvent(c: Context, e: ShotEvent, frontShell: boolean, medium: MediumSpec, thicknessM: number, impactT: number, particles: ParticleSystem, holes: HoleMarks, seed: number): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
+  const debris = medium.concreteDamage?.debris;
 
   if (e.type === 'impact' || e.type === 'enter' || e.type === 'ricochet') {
     const glancing = e.type === 'ricochet';
+    // Measured panels leave a spall crater of a known size; every other concrete scales with the bullet.
+    const spall = glancing ? undefined : concreteFootprint(medium, thicknessM, 'spall');
     holes.add({
       t: e.t,
       pos: e.pos,
@@ -85,31 +93,59 @@ function concreteEvent(c: Context, e: ShotEvent, frontShell: boolean, particles:
       ragged: 0.8,
       color: CONCRETE.hole,
       noOpening: glancing,
-      crater: { radius: d * (glancing ? 1.5 : 2 + 2.5 * k), color: CONCRETE.fresh },
-      cracks: glancing ? undefined : { count: 3 + Math.round(4 * k), length: [d * 3, d * (5 + 8 * k)], width: 0.0007, color: CONCRETE.crack },
+      crater: spall
+        ? { radius: spall.w / 2, color: CONCRETE.fresh, irregularity: 0.35, stretch: spall.h / spall.w }
+        : { radius: d * (glancing ? 1.5 : 2 + 2.5 * k), color: CONCRETE.fresh },
+      cracks: glancing
+        ? undefined
+        : spall
+          ? { count: 5, length: [spall.w * 0.6, spall.w * 1.1], width: 0.0007, color: CONCRETE.crack }
+          : { count: 3 + Math.round(4 * k), length: [d * 3, d * (5 + 8 * k)], width: 0.0007, color: CONCRETE.crack },
       seed,
     });
     // Blow-back: grey dust and fine grit fanning back up the shot line and outward.
-    particles.add(dust(e.t, origin, normal, 1.0, 140 * w * (0.4 + k), 0.026, [2, 18 + 14 * k]));
+    if (debris && !glancing) {
+      // A measured panel: a big pale cloud (4-5 bullet lengths across by 1 ms) that lingers longer the stronger the concrete.
+      const puff = dust(e.t, origin, normal, 1.35, debris.frontDust * w, 0.04, [40, 190]);
+      particles.add({ ...puff, duration: 1.2e-3, grow: 2.2, life: [3e-3 * debris.frontLife, 6e-3 * debris.frontLife], drag: 90 });
+    } else particles.add(dust(e.t, origin, normal, 1.0, 140 * w * (0.4 + k), 0.026, [2, 18 + 14 * k]));
     particles.add(bits('grain', e.t, origin, normal, 1.1, 120 * w * (0.4 + k), [8, 30 + 40 * k], [0.0008, 0.0025], CONCRETE.grit));
     particles.add(bits('chunk', e.t, origin, normal, 0.9, 14 * w * k, [4, 15], [0.002, 0.006], CONCRETE.fresh));
     if (glancing) particles.add(sparks(e.t, origin, normal, c.dir, 25 * w * k));
   } else if (e.type === 'exit') {
+    // The back scab is the wider half of the hourglass; its cracks run out toward the scab edge.
+    const scab = concreteFootprint(medium, thicknessM, 'scab');
+    // The scab bulges and cracks, then lets go some ms after impact; the bullet is long gone by then.
+    const releaseT = debris ? Math.max(e.t, impactT + debris.scabReleaseS) : e.t;
     holes.add({
-      t: e.t,
+      t: releaseT,
       pos: e.pos,
       normal,
       radius: d * 0.7,
       ragged: 0.9,
       color: CONCRETE.hole,
-      crater: { radius: d * (3 + 3 * k), color: CONCRETE.fresh },
-      cracks: { count: 4 + Math.round(4 * k), length: [d * 4, d * (6 + 10 * k)], width: 0.0008, color: CONCRETE.crack },
+      crater: scab
+        ? { radius: scab.w / 2, color: CONCRETE.fresh, irregularity: 0.35, stretch: scab.h / scab.w }
+        : { radius: d * (3 + 3 * k), color: CONCRETE.fresh },
+      cracks: scab
+        ? { count: 8, length: [scab.w * 0.55, scab.w * 0.85], width: 0.0009, color: CONCRETE.crack }
+        : { count: 4 + Math.round(4 * k), length: [d * 4, d * (6 + 10 * k)], width: 0.0008, color: CONCRETE.crack },
       seed,
     });
     if (frontShell) {
       // Inside the hollow core: dust from the front-shell perforation billows slowly round the cell.
       particles.add({ ...dust(e.t, origin, normal, 1.5, 220 * w, 0.028, [1, 10]), duration: 1.2e-3, grow: 5, life: [3e-3, 9e-3], drag: 300 });
       particles.add(bits('grain', e.t, origin, normal, 0.6, 60 * w * (0.5 + k), [10, 50 + 60 * k], [0.0008, 0.002], CONCRETE.grit));
+    } else if (debris && scab) {
+      // The hole the bullet leaves: a short, fast jet of dust along the axis.
+      particles.add({ ...dust(e.t, origin, normal, 0.3, 90 * w, 0.02, [25, 70]), duration: 600e-6, grow: 2, life: [3e-3, 6e-3] });
+      // Then the scab lets go: a cloud and angular chips over its whole footprint, and for strong concrete a few big slabs.
+      const scatter = scab.w * 0.35;
+      const at = (t0: number): BurstSpec => ({ ...dust(t0, origin, normal, 1.2, debris.rearDust * w, 0.035, [30, 150]), originJitter: scatter, duration: 1.4e-3, grow: 2.3, life: [3e-3 * debris.rearLife, 7e-3 * debris.rearLife], drag: 110 });
+      particles.add(at(releaseT));
+      particles.add({ ...bits('chunk', releaseT, origin, normal, 0.9, debris.chips.count * w, [...debris.chips.speed], [...debris.chips.size], CONCRETE.fresh), originJitter: scatter, duration: 800e-6, life: [8e-3, 20e-3] });
+      if (debris.slabs)
+        particles.add({ ...bits('chunk', releaseT, origin, normal, 0.6, debris.slabs.count, [...debris.slabs.speed], [...debris.slabs.size], CONCRETE.fresh), originJitter: scatter, duration: 200e-6, life: [10e-3, 25e-3], drag: 4 });
     } else {
       // Exit plume: a dense dust cone travelling with the bullet, and a wide fan of grit and chunks.
       const speed = Math.max(40, e.speed * 0.35);

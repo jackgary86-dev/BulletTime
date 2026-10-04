@@ -61,6 +61,22 @@ export interface RangeM {
   default: number;
 }
 
+/** Debris of a concrete panel, per grade (#224). Sizes in metres, speeds in m/s, counts for a full-weight round. */
+export interface ConcreteDebris {
+  /** Time from impact until the back scab lets go, in seconds. */
+  scabReleaseS: number;
+  /** Front blow-back cloud: particle count and how long it lingers, as a multiple of a normal dust puff. */
+  frontDust: number;
+  frontLife: number;
+  /** Cloud thrown with the scab, and how long it lingers. */
+  rearDust: number;
+  rearLife: number;
+  /** Angular chips thrown with the scab. */
+  chips: { count: number; size: readonly [number, number]; speed: readonly [number, number] };
+  /** A few big pieces of the scab, for the strongest grade. */
+  slabs?: { count: number; size: readonly [number, number]; speed: readonly [number, number] };
+}
+
 export interface MediumSpec {
   id: string;
   name: string;
@@ -105,6 +121,22 @@ export interface MediumSpec {
   dummyOnly?: boolean;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
   shape?: ObjectShape;
+  /**
+   * Concrete panels (#225): the bullet loses most of its speed crossing the panel (about 0.5 ms), then keeps
+   * slowing gently while it drags through the broken back scab. Deceleration in m/s² and how long it lasts.
+   */
+  exitTail?: { decelMs2: number; durationS: number };
+  /**
+   * Concrete panels (#223): measured damage footprints, width × height in metres, for the front spall and the
+   * back scab at the reference thickness. They grow or shrink with the panel thickness (see fx/concreteDamage.ts).
+   */
+  concreteDamage?: {
+    spallM: readonly [number, number];
+    scabM: readonly [number, number];
+    refThicknessM: number;
+    /** What the panel throws (#224): when the scab lets go, and the dust, chips and slabs it sheds. */
+    debris: ConcreteDebris;
+  };
 }
 
 export const MEDIA: MediumSpec[] = [
@@ -309,10 +341,18 @@ export const MEDIA: MediumSpec[] = [
     angleAdjustable: true,
     dragCoefficient: 2.4,
     resistancePa: 48e6,
+    exitTail: { decelMs2: 6000, durationS: 2e-3 },
     hardness: 0.6,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
     allowsExpansion: false,
+    concreteDamage: {
+      spallM: [0.08, 0.07],
+      scabM: [0.15, 0.13],
+      refThicknessM: 0.045,
+      // Many small pieces and a heavy dust cloud.
+      debris: { scabReleaseS: 1.8e-3, frontDust: 150, frontLife: 1, rearDust: 210, rearLife: 1, chips: { count: 80, size: [0.0012, 0.005], speed: [15, 60] } },
+    },
   },
   {
     id: 'concrete-c75',
@@ -327,10 +367,18 @@ export const MEDIA: MediumSpec[] = [
     angleAdjustable: true,
     dragCoefficient: 1.5,
     resistancePa: 72e6,
+    exitTail: { decelMs2: 4000, durationS: 2e-3 },
     hardness: 0.65,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
     allowsExpansion: false,
+    concreteDamage: {
+      spallM: [0.1, 0.1],
+      scabM: [0.18, 0.16],
+      refThicknessM: 0.045,
+      // Fewer, bigger chips and less dust.
+      debris: { scabReleaseS: 2.2e-3, frontDust: 115, frontLife: 1.2, rearDust: 160, rearLife: 1.2, chips: { count: 50, size: [0.0025, 0.0075], speed: [12, 48] } },
+    },
   },
   {
     id: 'concrete-c110',
@@ -345,10 +393,26 @@ export const MEDIA: MediumSpec[] = [
     angleAdjustable: true,
     dragCoefficient: 2.4,
     resistancePa: 76e6,
+    exitTail: { decelMs2: 3500, durationS: 2e-3 },
     hardness: 0.7,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
     allowsExpansion: false,
+    concreteDamage: {
+      spallM: [0.08, 0.09],
+      scabM: [0.22, 0.2],
+      refThicknessM: 0.045,
+      // A few large slabs, and the front cloud that lasts longest.
+      debris: {
+        scabReleaseS: 2.8e-3,
+        frontDust: 95,
+        frontLife: 1.8,
+        rearDust: 190,
+        rearLife: 1.8,
+        chips: { count: 44, size: [0.003, 0.008], speed: [10, 36] },
+        slabs: { count: 3, size: [0.02, 0.035], speed: [8, 30] },
+      },
+    },
   },
   {
     id: 'cinder-block',

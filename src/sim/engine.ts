@@ -289,6 +289,9 @@ interface Body {
   noseDragFactor: number;
   /** Bullet-only behaviour; fragments and pellets get simplified behaviour. */
   bullet?: BulletSpec;
+  /** After leaving a panel the bullet keeps losing speed to its broken back scab (#225): deceleration in m/s² until this time. */
+  tailDecel?: number;
+  tailUntil?: number;
   state: FinalState;
   expanding: boolean;
   expansionStartDist: number;
@@ -548,7 +551,8 @@ function integrate(ctx: Context, body: Body): void {
       force = 0.5 * P.airDensity * P.airDragCoefficient * area * body.speed ** 2;
     }
 
-    const dv = (force / body.mass) * dt;
+    const tailing = !medium && body.tailUntil !== undefined && body.t < body.tailUntil;
+    const dv = (force / body.mass) * dt + (tailing ? (body.tailDecel ?? 0) * dt : 0);
     let newSpeed = Math.max(0, body.speed - dv);
     // The motor keeps pushing in the air until the missile is up to speed.
     if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * dt);
@@ -710,6 +714,10 @@ function exitLayer(ctx: Context, body: Body, index: number): void {
   event(ctx, body, 'exit', { normal: scale(ctx.normal, Math.sign(cosOut) || 1), layer: index });
   if (medium.exitDeflectionDeg) {
     body.dir = perturb(body.dir, (medium.exitDeflectionDeg * Math.PI) / 180, ctx.rand);
+  }
+  if (medium.exitTail && body.kind !== 'fragment') {
+    body.tailDecel = medium.exitTail.decelMs2;
+    body.tailUntil = body.t + medium.exitTail.durationS;
   }
   if (medium.behaviour === 'steel' && body.kind !== 'fragment' && body.mass > 0) {
     // Punching through a plate tears the bullet (and plate spall) into a wide cone of fragments.

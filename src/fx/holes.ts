@@ -39,6 +39,8 @@ export interface HoleSpec {
     metalness?: number;
     /** Edge irregularity, 0–1 (default 0.45). */
     irregularity?: number;
+    /** Height ÷ width of the pit, on top of the hole's own stretch (spall and scab are not round). */
+    stretch?: number;
   };
   /** Thin cracks radiating from the hole (concrete). */
   cracks?: {
@@ -109,7 +111,7 @@ export class HoleMarks {
         const a = (i / 36) * Math.PI * 2;
         const jag = c.irregularity ?? 0.45;
         const r = c.radius * (1 - jag * 0.55 + jag * rand());
-        rim.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r * stretch));
+        rim.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r * stretch * (c.stretch ?? 1)));
       }
       const crater = new THREE.Mesh(
         new THREE.ShapeGeometry(new THREE.Shape(rim)),
