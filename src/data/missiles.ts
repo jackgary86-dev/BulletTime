@@ -39,6 +39,8 @@ export const AIRFRAMES: Airframe[] = [
 
 export const WARHEADS: WarheadHead[] = [
   { id: 'shaped', name: 'Shaped charge', description: 'A hollow-charge jet: very narrow and very fast.' },
+  { id: 'shaped-large', name: 'Large-calibre shaped charge', description: 'A wide, long-cone hollow charge: a faster, heavier jet that bores about 5 to 6 calibres of armour, deeper than the standard charge.' },
+  { id: 'efp', name: 'Explosively formed penetrator', description: 'A plate that folds into a single slug at about 2 km/s: it keeps its punch at long stand-off but bores far less than a jet.' },
   { id: 'tandem', name: 'Tandem shaped charge', description: 'Two shaped charges in a row: the first clears the way for the second.' },
   { id: 'blast-frag', name: 'Blast-fragmentation', description: 'A cased high-explosive warhead: a burst and a cone of fragments.' },
   { id: 'penetrator', name: 'Kinetic penetrator', description: 'A solid dense core with no explosive: all its energy in a narrow bar.' },
@@ -60,6 +62,10 @@ const blastFor = (head: string, a: Airframe): BlastSpec => {
   switch (head) {
     case 'shaped':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a) }, fireball: 'standard' };
+    case 'shaped-large':
+      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 8400, massFraction: jetFraction(a) * 2.0 }, fireball: 'standard' };
+    case 'efp':
+      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 4, fragmentSpeedMs: 1000, jet: { count: 1, speedMs: 2200, massFraction: jetFraction(a) * 0.7 }, fireball: 'standard' };
     case 'tandem':
       return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), tandem: true }, fireball: 'standard' };
     case 'blast-frag':

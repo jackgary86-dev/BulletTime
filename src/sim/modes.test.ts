@@ -35,10 +35,10 @@ describe('simulator catalogues', () => {
     expect(Math.max(...calibres)).toBe(240);
   });
 
-  it('builds five airframes with five warheads each', () => {
+  it('builds five airframes with seven warheads each', () => {
     expect(AIRFRAMES).toHaveLength(5);
-    expect(WARHEADS).toHaveLength(5);
-    expect(MISSILES).toHaveLength(25);
+    expect(WARHEADS).toHaveLength(7);
+    expect(MISSILES).toHaveLength(35);
     expect(findMissile(missileId('cruise', 'thermobaric'))?.mode).toBe('missile');
     expect(findMissile('missile:nope:shaped')).toBeUndefined();
   });
@@ -138,6 +138,21 @@ describe('shaped-charge depth (#195, #193)', () => {
 
   it('bores deeper with a tandem warhead, whose second jets follow the first hole', () => {
     for (const a of ['light-rocket', 'guided-at']) expect(calibres(missileId(a, 'tandem'))).toBeGreaterThan(calibres(missileId(a, 'shaped')) * 1.1);
+  });
+});
+
+describe('more shaped-charge heads (#260)', () => {
+  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
+
+  it('a large-calibre head bores deeper than the standard shaped charge', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-large'))).toBeGreaterThan(depth(missileId(a, 'shaped')) * 1.1);
+    // Light rocket: 70 mm calibre, over 5.5 calibres into the plate.
+    expect(depth(missileId('light-rocket', 'shaped-large')) / 0.07).toBeGreaterThan(5.5);
+  });
+
+  it('an explosively formed penetrator is a single slug that bores less than a jet', () => {
+    expect(getBullet(missileId('guided-at', 'efp')).blast?.jet?.count).toBe(1);
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'efp'))).toBeLessThan(depth(missileId(a, 'shaped')));
   });
 });
 
