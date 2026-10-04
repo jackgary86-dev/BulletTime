@@ -6,7 +6,7 @@ import { TARGET_FRONT_X } from './models/targets';
 import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { CameraDirector } from './scene/cameraDirector';
-import { getBullet, type BulletSpec } from './data/bullets';
+import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
@@ -28,6 +28,7 @@ import type { Timeline } from './sim/types';
 import { attachLoader } from './ui/loader';
 import { contentGate } from './ui/contentWarning';
 import { chooseSimulator } from './ui/launcher';
+import { mountArmorLab } from './ui/armorLab';
 import { buildCues, CueTrack } from './audio/cues';
 import { playSound, unlockAudio } from './audio/sounds';
 
@@ -43,7 +44,15 @@ async function bootstrap(): Promise<void> {
 
   // Nothing renders until the player has seen the mature-content warning (#109).
   await contentGate();
-  const mode = await chooseSimulator();
+  const choice = await chooseSimulator();
+  if (choice === 'armor') {
+    // The Armor lab is a 2D teaching screen: no renderer, no lane.
+    document.body.classList.add('mode-armor');
+    mountArmorLab(overlay);
+    loader.finish();
+    return;
+  }
+  const mode: SimulatorId = choice;
   const modeInfo = MODES[mode];
   document.body.classList.add(`mode-${mode}`);
   await loader.progress(0.1, 'Starting the renderer');

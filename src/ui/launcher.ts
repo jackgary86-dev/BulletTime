@@ -7,8 +7,11 @@ import type { SimulatorId } from '../data/bullets';
 
 export type { SimulatorId };
 
+/** What the launcher can open: the four simulators, or the Armor lab (#157), which is its own screen. */
+export type LauncherChoice = SimulatorId | 'armor';
+
 interface Simulator {
-  id: SimulatorId;
+  id: LauncherChoice;
   name: string;
   range: string;
   blurb: string;
@@ -20,6 +23,7 @@ const SIMULATORS: Simulator[] = [
   { id: 'artillery', name: 'Artillery', range: '20 mm to 240 mm', blurb: 'AP, HE, HEAT and HESH shells from autocannon to siege howitzers against plate, concrete and earth.', ready: true },
   { id: 'missile', name: 'Missile', range: '5 missiles, 5 warheads', blurb: 'Five basic missiles, each fitted with a different warhead.', ready: true },
   { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: true },
+  { id: 'armor', name: 'Armor lab', range: 'A cross-section of the plate', blurb: 'Shot, long rods, shaped-charge jets and squash heads against armour plate, with temperature, stress and energy.', ready: true },
 ];
 
 /** Which card keyboard focus moves to: arrow keys step through the grid, Home and End jump to the ends. */
@@ -42,13 +46,13 @@ export function nextCard(index: number, key: string, count: number, columns: num
   }
 }
 
-function requestedMode(): SimulatorId | null {
+function requestedMode(): LauncherChoice | null {
   const id = new URLSearchParams(location.search).get('mode');
   return SIMULATORS.find((s) => s.id === id && s.ready)?.id ?? null;
 }
 
 /** Resolves with the simulator the player picks. */
-export function chooseSimulator(): Promise<SimulatorId> {
+export function chooseSimulator(): Promise<LauncherChoice> {
   const direct = requestedMode();
   if (direct) return Promise.resolve(direct);
   return new Promise((resolve) => {
@@ -94,7 +98,7 @@ export function chooseSimulator(): Promise<SimulatorId> {
       const card = (e.target as HTMLElement).closest<HTMLButtonElement>('.launcher-card:not([disabled])');
       if (!card) return;
       screen.remove();
-      resolve(card.dataset.mode as SimulatorId);
+      resolve(card.dataset.mode as LauncherChoice);
     });
   });
 }

@@ -1997,3 +1997,271 @@ body {
 .mode-explosion .range-start {
   display: none;
 }
+
+/* Armor lab screen (#157, #168): a 2D teaching view, its own page on top of the empty 3D view. */
+.armor-lab {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'head head head'
+    'controls stage side';
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  pointer-events: auto;
+  background: radial-gradient(ellipse at 50% 30%, #161a20 0%, #07080a 75%);
+  color: var(--fg);
+}
+
+.armor-head {
+  grid-area: head;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.armor-head h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 26px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.armor-head h1 span {
+  color: var(--fg);
+}
+
+.armor-head p {
+  margin: 0;
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.armor-head button,
+.armor-fire,
+.armor-play,
+.armor-overlays button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.armor-head button:hover,
+.armor-overlays button:not(:disabled):hover,
+.armor-play:hover {
+  background: var(--control-hover);
+}
+
+.armor-fire {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  font-size: 14px;
+  color: #1a1206;
+  background: linear-gradient(180deg, #f5be6a, #c9862f);
+  border-color: #c9862f;
+}
+
+.armor-controls {
+  grid-area: controls;
+  position: static;
+  overflow-y: auto;
+}
+
+.armor-controls select,
+.armor-controls input[type='range'] {
+  width: 100%;
+}
+
+.armor-material-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.armor-stage {
+  grid-area: stage;
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.armor-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+}
+
+.armor-hud {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  text-shadow: 0 1px 3px #000;
+}
+
+.armor-caption {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 62px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 0 1px 4px #000;
+}
+
+.armor-notice {
+  position: absolute;
+  inset: 40% 12% auto;
+  margin: 0;
+  padding: 12px 14px;
+  text-align: center;
+  font-size: 13px;
+  background: rgba(14, 16, 20, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.armor-overlays {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 55%;
+}
+
+.armor-overlays button.active {
+  color: #1a1206;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.armor-overlays button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.armor-playback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(10, 11, 14, 0.9);
+  border-top: 1px solid var(--border);
+}
+
+.armor-scrub {
+  flex: 1;
+}
+
+.armor-speed {
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.armor-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.armor-side .panel {
+  position: static;
+  width: auto;
+}
+
+.armor-side h2 {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.armor-side h3 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.armor-explainer p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.armor-diagram {
+  width: 100%;
+  height: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.armor-events {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.armor-events li.reached {
+  color: var(--fg);
+}
+
+.armor-events time {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+@media (max-width: 1000px) {
+  .armor-lab {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(260px, 45vh) auto;
+    grid-template-areas: 'head' 'controls' 'stage' 'side';
+    overflow-y: auto;
+  }
+
+  .armor-controls,
+  .armor-side {
+    overflow: visible;
+  }
+}
