@@ -4,6 +4,7 @@ import { createBulletModel, disposeBulletModel, type BulletModel } from '../mode
 import { BULLET_MATERIALS } from '../models/materials';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
+import { createMissileTrail, type MissileTrail } from './missileTrail';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
 const MAX_FRAGMENTS = 256;
@@ -27,13 +28,15 @@ const tmpPos = new THREE.Vector3();
 export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
-  private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][] }[] = [];
+  private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][]; trail?: MissileTrail }[] = [];
   /**
    * Wakes and streaks from earlier shots, kept for the next one: freeing their
    * materials would make three.js drop the shaders and compile them again on
    * every Fire (#127).
    */
   private spareAir: { wake: Wake; streak: MotionStreak }[] = [];
+  /** Missile trails from earlier shots, kept for the next one for the same reason. */
+  private spareTrails: MissileTrail[] = [];
   private pellets: THREE.Mesh[] = [];
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
@@ -80,14 +83,21 @@ export class ShotRenderer {
         const { wake, streak } = this.spareAir.pop() ?? newAir();
         streak.setColor(spec.shape === 'roundNose' && spec.type.toLowerCase().includes('lead') ? 0x8a8f96 : 0xc0804c);
         this.group.add(model.group, wake.group);
-        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
+        // Powered missiles carry a rocket plume and a smoke trail; a kinetic penetrator coasts.
+        const trail = spec.shape === 'missile' ? this.spareTrails.pop() ?? createMissileTrail() : undefined;
+        if (trail) this.group.add(trail.group);
+        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, trail, air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
       }
     }
   }
 
   clear(): void {
-    for (const { model, wake, streak } of this.bullets) {
+    for (const { model, wake, streak, trail } of this.bullets) {
       this.group.remove(model.group, wake.group);
+      if (trail) {
+        this.group.remove(trail.group);
+        this.spareTrails.push(trail);
+      }
       disposeBulletModel(model);
       this.spareAir.push({ wake, streak });
     }
@@ -107,6 +117,8 @@ export class ShotRenderer {
       streak.dispose();
     }
     this.spareAir = [];
+    for (const trail of this.spareTrails) trail.dispose();
+    this.spareTrails = [];
   }
 
   /** Places every projectile at sim time `t`; `shutterS` is one frame's exposure, for motion blur (#74). */
@@ -114,7 +126,7 @@ export class ShotRenderer {
     const timeline = this.timeline;
     if (!timeline) return;
 
-    for (const { model, trackId, wake, streak, air } of this.bullets) {
+    for (const { model, trackId, wake, streak, air, trail } of this.bullets) {
       const frame = sampleTrack(timeline.tracks[trackId], t);
       model.group.visible = !!frame;
       if (frame) {
@@ -128,6 +140,13 @@ export class ShotRenderer {
       wake.update(inAir, frame?.speed ?? 0, frame?.diameter ?? 0, model.length);
       wake.group.visible = !!frame;
       streak.update(!!frame, (frame?.speed ?? 0) * shutterS, frame?.diameter ?? 0);
+      if (trail) {
+        if (frame) {
+          trail.group.position.copy(model.group.position);
+          trail.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
+        }
+        trail.update(inAir, model.length, frame?.diameter ?? 0, performance.now() / 1000);
+      }
     }
 
     for (const pellet of this.pellets) {
