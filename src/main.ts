@@ -355,6 +355,8 @@ async function bootstrap(): Promise<void> {
       scrubber.sync();
     }
   }
+  // A replay link may change the target and round after start-up, which re-frames the view: snap to it in still mode.
+  if (isStill()) director.reset();
   // Tells a screenshot run (#243) the scene is built and any replay link is parked.
   document.body.dataset.ready = 'true';
 }
