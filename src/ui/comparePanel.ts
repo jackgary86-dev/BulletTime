@@ -1,7 +1,7 @@
 import { getBullet, type BulletSpec, type SimulatorId } from '../data/bullets';
 import { MISSILES } from '../data/missiles';
 import { roundsForMode } from '../data/modes';
-import { MEDIA, getMedium } from '../data/media';
+import { MEDIA, getMedium, mediumListedIn } from '../data/media';
 import { STACK_PRESETS, presetLayers } from '../data/stacks';
 import type { TargetSetup } from './stackEditor';
 
@@ -44,10 +44,10 @@ export function mountComparePanel(root: HTMLElement, initial: { bulletId: string
   for (const b of rounds) bulletSelect.append(new Option(`${b.name} ${b.type}`, b.id));
   const materials = document.createElement('optgroup');
   materials.label = 'Materials';
-  for (const m of MEDIA.filter((m) => !m.dummyOnly)) materials.append(new Option(m.name, `medium:${m.id}`));
+  for (const m of MEDIA.filter((m) => mediumListedIn(m, initial.mode ?? 'bullet'))) materials.append(new Option(m.name, `medium:${m.id}`));
   const stacks = document.createElement('optgroup');
   stacks.label = 'Layered targets';
-  for (const p of STACK_PRESETS) stacks.append(new Option(p.name, `preset:${p.id}`));
+  for (const p of STACK_PRESETS.filter((p) => !p.heavy || (initial.mode ?? 'bullet') !== 'bullet')) stacks.append(new Option(p.name, `preset:${p.id}`));
   targetSelect.append(materials, stacks);
   bulletSelect.value = initial.bulletId;
   targetSelect.value = `medium:${initial.mediumId}`;

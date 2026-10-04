@@ -1,4 +1,4 @@
-import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium } from '../data/media';
+import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium, mediumListedIn } from '../data/media';
 import { DUMMY_PRESET_ID, DUMMY_REGIONS, getRegion, regionLayers, type DummyRegionId } from '../data/dummy';
 import { MAX_GAP_M, MAX_STACK_LAYERS, STACK_PRESETS, presetLayers, type StackLayer } from '../data/stacks';
 
@@ -13,6 +13,8 @@ export interface TargetSetup {
 
 export interface StackEditorOptions {
   initialId: string;
+  /** Simulator mode: heavy targets are listed outside the Bullet lab only. */
+  mode?: string;
   onChange(setup: TargetSetup): void;
 }
 
@@ -57,13 +59,13 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   const gapSlider = q<HTMLInputElement>('#gap-slider');
   const angleSlider = q<HTMLInputElement>('#angle-slider');
 
-  for (const p of STACK_PRESETS) preset.append(new Option(p.name, p.id));
+  for (const p of STACK_PRESETS.filter((p) => !p.heavy || options.mode !== undefined && options.mode !== 'bullet')) preset.append(new Option(p.name, p.id));
   preset.append(new Option('Ballistic test dummy', DUMMY_PRESET_ID));
   const materials = document.createElement('optgroup');
   materials.label = 'Materials';
   const objects = document.createElement('optgroup');
   objects.label = 'Objects';
-  for (const medium of MEDIA.filter((m) => !m.dummyOnly)) (medium.shape ? objects : materials).append(new Option(medium.name, medium.id));
+  for (const medium of MEDIA.filter((m) => mediumListedIn(m, options.mode ?? 'bullet'))) (medium.shape ? objects : materials).append(new Option(medium.name, medium.id));
   select.append(materials, objects);
 
   const initial = getMedium(options.initialId);
