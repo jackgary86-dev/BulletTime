@@ -113,6 +113,15 @@ export function mountScrubber(root: HTMLElement, playback: Playback): Scrubber {
         mark.title = `${e.type} at ${formatTime(e.t)}`;
         markers.append(mark);
       }
+      // The stretches the impact beat slows (#238), drawn as a soft band under the markers.
+      for (const [from, to] of playback.beatSpans) {
+        const band = document.createElement('span');
+        band.className = 'beat-band';
+        band.style.left = `${(Math.max(0, from) / timeline.duration) * 100}%`;
+        band.style.width = `${((Math.min(to, timeline.duration) - Math.max(0, from)) / timeline.duration) * 100}%`;
+        band.title = 'Slow-motion beat at impact';
+        markers.append(band);
+      }
       // Dead air between rounds that playback jumps over (#153), drawn as a hatched band.
       for (const [from, to] of playback.skipped) {
         if (from < 0 || from >= timeline.duration) continue;

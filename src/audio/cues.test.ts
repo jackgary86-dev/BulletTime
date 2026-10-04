@@ -3,7 +3,7 @@ import { getBullet } from '../data/bullets';
 import { getMedium } from '../data/media';
 import type { TargetLayer } from '../sim/engine';
 import type { ShotEvent, ShotInfo, Timeline } from '../sim/types';
-import { buildCues, CueTrack, MAX_CUES_PER_FRAME, shotSound } from './cues';
+import { buildCues, CueTrack, MAX_CUES_PER_FRAME, shotSound, MIN_SOUND_STRETCH, cueStretch } from './cues';
 import { getSound } from './sounds';
 
 function shot(start: number, impactTime: number, bulletId: string, firstTrack = 0, trackCount = 1): ShotInfo {
@@ -122,5 +122,26 @@ describe('heavy sounds (#199)', () => {
     expect(cuesFor('charge-satchel', boom(6.5, 'standard'))).toEqual([{ t: 0.0015, sound: 'blast-large' }]);
     expect(cuesFor('charge-thermobaric', boom(3.5, 'thermobaric'))).toEqual([{ t: 0.0015, sound: 'blast-thermobaric' }]);
     for (const c of [...cuesFor('155mm-he', boom(8, 'standard')), ...cuesFor('missile:cruise:thermobaric', boom(630, 'thermobaric'))]) expect(() => getSound(c.sound)).not.toThrow();
+  });
+});
+
+describe('cue stretch for the impact beat (#238)', () => {
+  it('leaves the muzzle report alone and slows the sounds at the target with the beat', () => {
+    expect(cueStretch('shot-rifle', 0.1)).toBe(1);
+    expect(cueStretch('shot-howitzer', 0.1)).toBe(1);
+    expect(cueStretch('missile-launch', 0.1)).toBe(1);
+    expect(cueStretch('impact-gel', 1)).toBe(1);
+    expect(cueStretch('impact-steel', 0.1)).toBe(MIN_SOUND_STRETCH);
+    expect(cueStretch('blast-large', 0.1)).toBe(MIN_SOUND_STRETCH);
+    const half = cueStretch('impact-gel', 0.5);
+    expect(half).toBeGreaterThan(MIN_SOUND_STRETCH);
+    expect(half).toBeLessThan(1);
+    // Monotonic: a deeper beat is never a faster sound.
+    let prev = 1;
+    for (let b = 1; b >= 0; b -= 0.05) {
+      const s = cueStretch('ricochet', b);
+      expect(s).toBeLessThanOrEqual(prev);
+      prev = s;
+    }
   });
 });

@@ -88,6 +88,22 @@ export function buildCues(timeline: Timeline, layers: TargetLayer[], bullet: (id
   return cues.sort((a, b) => a.t - b.t);
 }
 
+/** The impact beat (#238) never stretches a sound below half speed, where it stops reading as the same sound. */
+export const MIN_SOUND_STRETCH = 0.5;
+
+/**
+ * How much a cue is slowed and pitched down while the impact beat (#238) is
+ * slowing playback by `beat` (1 = not at all, 0.1 = a tenth speed): the muzzle
+ * report plays at real speed, as it is heard from the camera and not from the
+ * target, and everything at the target stretches with the slow motion, gently
+ * (a tenth-speed beat is a half-speed sound), never below `MIN_SOUND_STRETCH`.
+ */
+export function cueStretch(sound: string, beat: number): number {
+  if (sound.startsWith('shot-') || sound === 'missile-launch') return 1;
+  const b = Math.min(1, Math.max(0, beat));
+  return Math.min(1, Math.max(MIN_SOUND_STRETCH, b ** 0.35));
+}
+
 /**
  * Plays a timeline's cues in step with the slow-motion playhead: a cue sounds
  * the frame playback carries the playhead past it, so at 1/1,000 an impact is

@@ -28,6 +28,8 @@ npx vitest run                            # all tests (about 400, a few seconds)
 npm run build && npm run build:itch       # production build and the itch.io zip
 ```
 
+Playback has an impact beat (#238, `src/sim/impactBeat.ts`): the clock eases to a tenth of the chosen rate just before each impact or detonation, holds for a millisecond, ramps back over three, and never goes below the slowest preset. It is a warp of real time only; scrubbing, stepping and replay links see true sim time. The "Slow down at impact" toggle in the controls panel is remembered (`src/ui/beatSetting.ts`); the Armor lab honours the same setting with a beat scaled to its playback length. Sounds at the target stretch with the beat (`cueStretch` in `src/audio/cues.ts`, `playSound(id, rate)`); the muzzle report does not.
+
 URL shortcuts: `?mode=bullet|artillery|missile|explosion|armor` skips the launcher; `?ultra` raises quality.
 
 CI: `deploy.yml` (test, build, Pages), `quality.yml` (type check, tests, `npm audit`, gzipped-bundle budget of 600 KB), `release.yml` (installers on `v*` tags, with a launcher smoke test). Dependabot is on.
