@@ -131,7 +131,7 @@ export class ShotRenderer {
       model.group.visible = !!frame;
       if (frame) {
         place(model.group, frame);
-        model.setDiameter(frame.diameter);
+        model.setDiameter(frame.diameter, frame.crush);
         // The wake follows the flight path, not the bullet's yaw.
         wake.group.position.copy(model.group.position);
         wake.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));

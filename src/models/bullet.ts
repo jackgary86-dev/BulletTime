@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { BulletSpec } from '../data/bullets';
+import { CRUSH_STUB, CRUSH_WIDEN, CRUSH_ZONE } from '../sim/crush';
 import { BULLET_MATERIALS as M } from './materials';
 
 /**
@@ -14,8 +15,8 @@ export interface BulletModel {
   group: THREE.Group;
   /** Overall length in metres (nose to base). */
   length: number;
-  /** Shows the bullet expanded to `diameter` (metres); it shortens as it mushrooms. */
-  setDiameter(diameter: number): void;
+  /** Shows the bullet expanded to `diameter` (metres); it shortens as it mushrooms. `crush` (0-1) shows it crushed by concrete (#226). */
+  setDiameter(diameter: number, crush?: number): void;
 }
 
 const SEGMENTS = 48;
@@ -477,6 +478,9 @@ interface DeformStyle {
   fullRatio: number;
 }
 
+/** A bullet crushed by concrete (#226): a short stub with a wide flat face. */
+const CRUSH_STYLE: DeformStyle = { zone: CRUSH_ZONE, petals: 0, smear: 0.08, stub: CRUSH_STUB, fullRatio: 1 + CRUSH_WIDEN };
+
 function deformStyle(spec: BulletSpec): DeformStyle {
   const full = spec.expansionRatio ?? 1.8;
   switch (spec.shape) {
@@ -559,22 +563,26 @@ export function createBulletModel(spec: BulletSpec): BulletModel {
   // Small add-ons on the nose (skive slits) disappear once the petals tear open along them.
   const noseBits = meshes.filter((m) => m instanceof THREE.Mesh && !(m.geometry instanceof THREE.LatheGeometry) && m.position.y > length * style.zone);
   let shownRatio = 1;
+  let shownCrushed = false;
   const v = new THREE.Vector3();
 
   return {
     group,
     length,
-    setDiameter(diameter) {
-      const ratio = Math.max(1, diameter / baseDiameter);
-      if (Math.abs(ratio - shownRatio) < 1e-4 || isShot) return;
+    setDiameter(diameter, crush = 0) {
+      const crushed = crush > 0 && !isShot;
+      const ratio = Math.max(1, diameter / baseDiameter, crushed ? 1 + CRUSH_WIDEN * crush : 1);
+      if ((Math.abs(ratio - shownRatio) < 1e-4 && crushed === shownCrushed) || isShot) return;
       shownRatio = ratio;
-      const k = Math.min(1, (ratio - 1) / Math.max(1e-3, style.fullRatio - 1));
+      shownCrushed = crushed;
+      const shape = crushed ? CRUSH_STYLE : style;
+      const k = Math.min(1, (ratio - 1) / Math.max(1e-3, shape.fullRatio - 1));
       let top = 0;
       for (const { mesh, rest } of parts) {
         const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
         for (let i = 0; i < pos.count; i++) {
           v.fromArray(rest, i * 3);
-          deformVertex(v, r, length, ratio, k, style);
+          deformVertex(v, r, length, ratio, k, shape);
           pos.setXYZ(i, v.x, v.y, v.z);
           top = Math.max(top, v.y);
         }

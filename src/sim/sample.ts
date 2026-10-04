@@ -34,6 +34,7 @@ export function sampleTrack(track: Track, t: number): Keyframe | null {
     speed: mix(a.speed, b.speed),
     yaw: mix(a.yaw, b.yaw),
     diameter: mix(a.diameter, b.diameter),
+    ...(a.crush !== undefined || b.crush !== undefined ? { crush: mix(a.crush ?? 0, b.crush ?? 0) } : {}),
   };
 }
 

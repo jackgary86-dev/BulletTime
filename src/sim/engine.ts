@@ -3,6 +3,7 @@ import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
 import { PHYSICS as P, STANDARD_RESOLUTION, type SimResolution } from '../data/physics';
+import { crushFromSpeed } from './crush';
 import { seededRandom } from './random';
 import type {
   CavitySample,
@@ -313,6 +314,8 @@ interface Body {
   lastMaterialT: number;
   /** Speed at first contact with the target. */
   impactSpeed: number;
+  /** Crushed by concrete, 0-1; only ever grows (#226). */
+  crush: number;
   impacted: boolean;
   ricocheted: boolean;
   /** A tandem warhead's second jets fly down the first group's hole, so the medium resists them less. */
@@ -456,6 +459,7 @@ function makeBody(
     travelled: 0,
     lastMaterialT: t,
     impactSpeed: speed,
+    crush: 0,
     impacted: false,
     ricocheted: false,
   };
@@ -480,7 +484,11 @@ function event(ctx: Context, body: Body, type: ShotEvent['type'], extra: Partial
 
 function integrate(ctx: Context, body: Body): void {
   const keyframes: Keyframe[] = [];
-  const record = () =>
+  const record = () => {
+    // Concrete crushes the bullet as it takes its energy; the stub flies on as a flattened slug (#226).
+    if (body.kind === 'bullet' && body.layer >= 0 && ctx.setup.layers[body.layer]?.medium.behaviour === 'concrete') {
+      body.crush = Math.max(body.crush, crushFromSpeed(body.speed, body.impactSpeed));
+    }
     keyframes.push({
       t: body.t,
       pos: { ...body.pos },
@@ -488,7 +496,9 @@ function integrate(ctx: Context, body: Body): void {
       speed: body.speed,
       yaw: body.yaw,
       diameter: body.diameter,
+      ...(body.crush > 0 ? { crush: body.crush } : {}),
     });
+  };
   record();
 
   const isPrimary = body.id === 0 || body.kind === 'pellet';

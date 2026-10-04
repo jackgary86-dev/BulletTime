@@ -18,6 +18,8 @@ export interface Keyframe {
   yaw: number;
   /** Current effective diameter (grows as it expands or flattens). */
   diameter: number;
+  /** How far a concrete panel has crushed the bullet, 0-1 (#226). Absent when untouched. */
+  crush?: number;
 }
 
 export type TrackKind = 'bullet' | 'pellet' | 'fragment';
