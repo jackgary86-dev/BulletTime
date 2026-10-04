@@ -37,6 +37,7 @@ export interface ControlsOptions {
   onReset(): void;
   onRateChange(rate: number): void;
   onImpactBeatChange(on: boolean): void;
+  onCleanFrame(): void;
   onCameraChange(mode: CameraMode): void;
   onLightingChange(mode: LightingMode): void;
   onQualityChange(level: QualityLevel): void;
@@ -76,6 +77,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
     <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="${MAX_EXPONENT}" step="0.01" />
     <label class="impact-beat" title="Playback eases to a tenth of the chosen speed for the first millisecond after contact, then ramps back"><input type="checkbox" class="impact-beat-toggle" /> Slow down at impact</label>
+    <button type="button" class="clean-frame-open" title="Hide every panel for a screenshot (H)">Clean frame</button>
     <dl class="readout">
       <div><dt>Sim time</dt><dd class="readout-time">0 µs</dd></div>
       <div><dt>Velocity</dt><dd class="readout-speed">0 m/s</dd></div>
@@ -144,6 +146,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
   beatToggle.checked = options.initialImpactBeat;
   beatToggle.addEventListener('change', () => options.onImpactBeatChange(beatToggle.checked));
   fire.addEventListener('click', () => options.onFire());
+  panel.querySelector('.clean-frame-open')!.addEventListener('click', () => options.onCleanFrame());
   setRate(options.initialRate);
 
   return {

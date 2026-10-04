@@ -1217,12 +1217,50 @@ body {
   box-shadow: 0 0 6px rgba(255, 59, 48, 0.8);
 }
 
-/* Narrow screens: keep the timecode and frame rate only. */
-@media (max-width: 900px) {
-  .camera-hud .hud-shutter,
-  .camera-hud .hud-frame {
-    display: none;
-  }
+/* While a shot plays the results wait off screen, and the panel's own time and speed give way to the readout (#239). */
+.shot-results {
+  transition: opacity 0.25s ease;
+}
+
+.shot-playing .shot-results {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shot-playing .controls .readout {
+  visibility: hidden;
+}
+
+/* Clean frame: no panels, no readout, only the scene (#239). */
+.clean-frame #overlay > :not(.clean-hint),
+.clean-frame .range-start {
+  display: none !important;
+}
+
+.clean-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--fg);
+  background: rgba(10, 11, 14, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.clean-hint[hidden] {
+  display: none;
+}
+
+.controls .clean-frame-open {
+  width: 100%;
+  margin: 6px 0 4px;
+  padding: 7px 0;
+  font-size: 13px;
 }
 
 /* Comparing: the compare bar grows, so drop the readout below it. */

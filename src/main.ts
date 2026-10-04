@@ -30,6 +30,7 @@ import { attachLoader } from './ui/loader';
 import { contentGate } from './ui/contentWarning';
 import { chooseSimulator } from './ui/launcher';
 import { mountArmorLab } from './ui/armorLab';
+import { mountCleanFrame } from './ui/cleanFrame';
 import { loadImpactBeat, saveImpactBeat } from './ui/beatSetting';
 import { buildCues, CueTrack, cueStretch } from './audio/cues';
 import { playSound, unlockAudio } from './audio/sounds';
@@ -69,6 +70,7 @@ async function bootstrap(): Promise<void> {
   mountOverlay(overlay, modeInfo.title);
 
   const hud = mountCameraHud(overlay);
+  const cleanFrame = mountCleanFrame(overlay);
   const scrubber = mountScrubber(overlay, playback);
   const results = mountShotResults(overlay, 'lane-a');
   const resultsB = mountShotResults(overlay, 'lane-b');
@@ -149,6 +151,7 @@ async function bootstrap(): Promise<void> {
       director.reset();
     },
     onFire: () => fireShot(shotsPanel.plan()),
+    onCleanFrame: () => cleanFrame.toggle(),
   });
 
   /** Fires `plan` from lane A (and lane B when comparing) and starts the replay; returns lane A's timeline. */
@@ -166,7 +169,8 @@ async function bootstrap(): Promise<void> {
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
     }
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth, laneA.faceSpan);
+    // The side view stays on the target; only the close-up and the auto cuts follow the aim (#239).
+    director.setAim(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
     unlockAudio();
     playback.start(clock, laneA.lastFireStart);
     cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
@@ -297,11 +301,13 @@ async function bootstrap(): Promise<void> {
     const delta = Math.max(0, Math.min(timer.getDelta(), 0.1));
     // Read before update: the frame that reaches the end of the shot stops playback but still plays its sounds.
     const advancing = playback.isPlaying;
+    // While a shot plays only the two readouts sit over the scene; the results come in when it stops (#239).
+    overlay.classList.toggle('shot-playing', advancing);
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
-      hud.set(t, playback.fps, playback.shutterS);
+      hud.set(t, primary?.speed ?? 0);
       scrubber.sync();
       results.update(t);
       if (laneB) resultsB.update(t);

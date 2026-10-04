@@ -1,11 +1,11 @@
 /**
- * Burned-in readout of a high-speed camera (#75), as on Phantom footage: a
- * recording dot, the timecode since the trigger, the frame rate the current
- * slow-motion rate implies, the shutter, and the frame number.
+ * Burned-in readout of a high-speed camera (#75), kept to two readouts while
+ * a shot plays (#239): the timecode since the trigger, in true simulated time,
+ * and the round's speed. Everything else waits for the results panel.
  */
 export interface CameraHud {
-  /** Shows the readout at sim time `t`, filmed at `fps` with a `shutterS` exposure. */
-  set(t: number, fps: number, shutterS: number): void;
+  /** Shows the readout at sim time `t` with the round at `speedMs` (m/s). */
+  set(t: number, speedMs: number): void;
   hide(): void;
 }
 
@@ -15,25 +15,18 @@ export function mountCameraHud(root: HTMLElement): CameraHud {
   hud.setAttribute('aria-hidden', 'true');
   hud.hidden = true;
   hud.innerHTML = `
-    <span class="hud-rec">REC</span>
     <span class="hud-time"></span>
-    <span class="hud-fps"></span>
-    <span class="hud-shutter"></span>
-    <span class="hud-frame"></span>
+    <span class="hud-speed"></span>
   `;
   root.append(hud);
   const time = hud.querySelector<HTMLSpanElement>('.hud-time')!;
-  const fpsText = hud.querySelector<HTMLSpanElement>('.hud-fps')!;
-  const shutter = hud.querySelector<HTMLSpanElement>('.hud-shutter')!;
-  const frame = hud.querySelector<HTMLSpanElement>('.hud-frame')!;
+  const speed = hud.querySelector<HTMLSpanElement>('.hud-speed')!;
 
   return {
-    set(t, fps, shutterS) {
+    set(t, speedMs) {
       hud.hidden = false;
       time.textContent = formatTimecode(t);
-      fpsText.textContent = `${formatCount(fps)} fps`;
-      shutter.textContent = formatShutter(shutterS);
-      frame.textContent = `F ${String(Math.floor(t * fps + 1e-6)).padStart(6, '0')}`;
+      speed.textContent = formatSpeed(speedMs);
     },
     hide() {
       hud.hidden = true;
@@ -47,6 +40,11 @@ export function formatTimecode(seconds: number): string {
   const whole = Math.floor(us / 1e6);
   const frac = String(us % 1e6).padStart(6, '0');
   return `T+${whole}.${frac.slice(0, 3)} ${frac.slice(3)} s`;
+}
+
+/** A speed for the readout, e.g. 1 250 m/s. */
+export function formatSpeed(speedMs: number): string {
+  return `${formatCount(Math.max(0, speedMs))} m/s`;
 }
 
 /** A whole number with thin-space thousands, e.g. 60 000. */
