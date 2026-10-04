@@ -1991,12 +1991,9 @@ body {
   color: var(--muted);
 }
 
-/* Range challenge and comparison are Bullet-only. */
+/* The range challenge is Bullet-only (#203); comparison works in every simulator. */
 .mode-artillery .range-start,
 .mode-missile .range-start,
-.mode-explosion .range-start,
-.mode-artillery .compare-toggle,
-.mode-missile .compare-toggle,
-.mode-explosion .compare-toggle {
+.mode-explosion .range-start {
   display: none;
 }

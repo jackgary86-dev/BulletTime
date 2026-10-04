@@ -1,4 +1,6 @@
-import { BULLETS, getBullet, type BulletSpec } from '../data/bullets';
+import { getBullet, type BulletSpec, type SimulatorId } from '../data/bullets';
+import { MISSILES } from '../data/missiles';
+import { roundsForMode } from '../data/modes';
 import { MEDIA, getMedium } from '../data/media';
 import { STACK_PRESETS, presetLayers } from '../data/stacks';
 import type { TargetSetup } from './stackEditor';
@@ -19,7 +21,7 @@ export interface ComparePanel {
  * Comparison mode (#14): a toggle and shot B's round and target. Shot A is the
  * main setup on the left; B plays on the right, on the same clock.
  */
-export function mountComparePanel(root: HTMLElement, initial: { bulletId: string; mediumId: string }, options: ComparePanelOptions): ComparePanel {
+export function mountComparePanel(root: HTMLElement, initial: { bulletId: string; mediumId: string; mode?: SimulatorId }, options: ComparePanelOptions): ComparePanel {
   const panel = document.createElement('section');
   panel.className = 'panel compare-panel';
   panel.innerHTML = `
@@ -37,7 +39,9 @@ export function mountComparePanel(root: HTMLElement, initial: { bulletId: string
   const bulletSelect = panel.querySelector<HTMLSelectElement>('.compare-bullet')!;
   const targetSelect = panel.querySelector<HTMLSelectElement>('.compare-target')!;
 
-  for (const b of BULLETS) bulletSelect.append(new Option(`${b.name} ${b.type}`, b.id));
+  // Shot B picks from the same simulator as shot A; missiles are every airframe with every warhead.
+  const rounds = initial.mode === 'missile' ? MISSILES : roundsForMode(initial.mode ?? 'bullet');
+  for (const b of rounds) bulletSelect.append(new Option(`${b.name} ${b.type}`, b.id));
   const materials = document.createElement('optgroup');
   materials.label = 'Materials';
   for (const m of MEDIA.filter((m) => !m.dummyOnly)) materials.append(new Option(m.name, `medium:${m.id}`));

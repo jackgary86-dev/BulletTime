@@ -196,7 +196,7 @@ async function bootstrap(): Promise<void> {
 
   /** Lane B's emptied scene, reused the next time Compare turns on (see Lane's constructor, #133). */
   let spareScene: THREE.Scene | undefined;
-  const compare = mountComparePanel(overlay, { bulletId: '9mm-jhp', mediumId: DEFAULT_MEDIUM_ID }, {
+  const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: DEFAULT_MEDIUM_ID, mode }, {
     onToggle: (on) => {
       if (on) {
         laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
