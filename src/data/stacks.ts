@@ -50,6 +50,39 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'glass', thickness: 0.006 }, { medium: 'gel10', gapM: 0.3, thickness: 0.4 }],
   },
   {
+    id: 'car-door',
+    name: 'Car door',
+    // Outer skin, the hollow door, inner skin: the same two skins as the door in front of gel. A shot at the
+    // window regulator would meet more steel; the model has no regulator, so this is a shot through clear door.
+    layers: [
+      { medium: 'steel-mild', thickness: 0.0009, look: 'carDoorOuter' },
+      { medium: 'steel-mild', thickness: 0.0009, gapM: 0.1, look: 'carDoorInner' },
+    ],
+  },
+  {
+    id: 'drywall-wall',
+    name: 'Drywall wall',
+    // Two sheets of gypsum board over a 9 cm stud bay.
+    layers: [{ medium: 'drywall' }, { medium: 'drywall', gapM: 0.09 }],
+  },
+  {
+    id: 'water-jug',
+    name: 'Water jug',
+    // A thin polyethylene skin round water: skin, 20 cm of water, skin.
+    layers: [{ medium: 'polyethylene' }, { medium: 'water', thickness: 0.2, gapM: 0 }, { medium: 'polyethylene', gapM: 0 }],
+  },
+  {
+    id: 'smartphone',
+    name: 'Smartphone',
+    // Cover glass, battery pouch, aluminium back.
+    layers: [{ medium: 'phone-glass' }, { medium: 'phone-cell', gapM: 0.001 }, { medium: 'phone-frame', gapM: 0.001 }],
+  },
+  {
+    id: 'phone-book',
+    name: 'Phone book',
+    layers: [{ medium: 'phonebook' }],
+  },
+  {
     id: 'concrete-gel',
     name: 'Cinder block + gel',
     layers: [{ medium: 'cinder-block' }, { medium: 'gel10', gapM: 0.1, thickness: 0.4 }],
