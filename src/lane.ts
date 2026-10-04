@@ -107,6 +107,7 @@ export class Lane {
   /** Particle budget, post-processing and shadows for a quality level (#16). New shots use the new particle budget. */
   setQuality(quality: QualitySettings): void {
     this.quality = quality;
+    this.shot.setQuality(quality);
     this.effects.particles.density = quality.particleDensity;
     this.effects.particles.capScale = quality.particleCap;
     this.studio.setShadowMapSize(Math.max(quality.shadowMapSize, 256));

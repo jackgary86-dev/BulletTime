@@ -5,7 +5,7 @@ import { BULLET_MATERIALS } from '../models/materials';
 import { bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
-import { createMissileTrail, type MissileTrail } from './missileTrail';
+import { createMissileTrail, motorLight, type MissileTrail } from './missileTrail';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
 const MAX_FRAGMENTS = 256;
@@ -40,6 +40,13 @@ export class ShotRenderer {
   /** Missile trails from earlier shots, kept for the next one for the same reason. */
   private spareTrails: MissileTrail[] = [];
   private pellets: THREE.Mesh[] = [];
+  /**
+   * One light for the nearest burning motor (#247). It is always in the scene, at zero intensity
+   * when nothing burns, so a missile shot never changes the light count and recompiles shaders.
+   */
+  private readonly motor = new THREE.PointLight(0xff9a4a, 0, 10, 2);
+  private plumeLayers: 1 | 2 | 3 = 3;
+  private motorLightOn = true;
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
   private readonly jacketCurls: THREE.InstancedMesh;
@@ -47,6 +54,8 @@ export class ShotRenderer {
 
   constructor() {
     this.group.name = 'shot';
+    this.motor.name = 'motor-light';
+    this.group.add(this.motor);
     const instanced = (geometry: THREE.BufferGeometry, material: THREE.Material) => {
       const mesh = new THREE.InstancedMesh(geometry, material, MAX_FRAGMENTS);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -106,6 +115,7 @@ export class ShotRenderer {
       this.spareAir.push({ wake, streak });
     }
     this.bullets = [];
+    this.motor.intensity = 0;
     for (const pellet of this.pellets) this.group.remove(pellet);
     this.pellets = [];
     this.fragments.count = 0;
@@ -125,11 +135,18 @@ export class ShotRenderer {
     this.spareTrails = [];
   }
 
+  /** Plume layers and the motor light for a quality level (#247). */
+  setQuality(quality: { plumeLayers: 1 | 2 | 3; motorLight: boolean }): void {
+    this.plumeLayers = quality.plumeLayers;
+    this.motorLightOn = quality.motorLight;
+  }
+
   /** Places every projectile at sim time `t`; `shutterS` is one frame's exposure, for motion blur (#74). */
   update(t: number, shutterS = 0): void {
     const timeline = this.timeline;
     if (!timeline) return;
 
+    let lit = false;
     for (const { model, trackId, wake, streak, air, trail, crumples } of this.bullets) {
       const track = timeline.tracks[trackId];
       let frame = sampleTrack(track, t);
@@ -161,9 +178,20 @@ export class ShotRenderer {
           trail.group.position.copy(model.group.position);
           trail.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
         }
-        trail.update(inAir, model.length, frame?.diameter ?? 0, performance.now() / 1000);
+        const now = performance.now() / 1000;
+        trail.layers = this.plumeLayers;
+        trail.update(inAir, model.length, frame?.diameter ?? 0, now);
+        if (inAir && frame && this.motorLightOn && !lit) {
+          lit = true;
+          const light = motorLight(model.length, frame.diameter, now);
+          this.motor.position.set(-light.offset, 0, 0).applyQuaternion(trail.group.quaternion).add(trail.group.position);
+          this.motor.intensity = light.intensity;
+          this.motor.distance = light.distance;
+        }
       }
     }
+
+    if (!lit) this.motor.intensity = 0;
 
     for (const pellet of this.pellets) {
       const frame = sampleTrack(timeline.tracks[pellet.userData.trackId as number], t);
