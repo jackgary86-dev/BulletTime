@@ -16,7 +16,7 @@ The game opens on a launcher with five cards:
 | Explosion | 7 charges in a test bed, per-layer blast response | `src/data/explosives.ts`, `src/sim/blastResponse.ts` |
 | Armor lab | 2D teaching cross-section of plate defeat | `src/armor/`, `src/ui/armorLab.ts` |
 
-The first four share one engine (`src/sim/engine.ts`) and one material catalogue (`src/data/media.ts`). The Armor lab is separate: its own models, no 3D renderer.
+The first four share one engine (`src/sim/engine.ts`) and one material catalogue (`src/data/media.ts`). The Armor lab is separate: its own models; its 3D view (#172) has its own renderer in `src/armor/view3d.ts`.
 
 ## Commands
 
@@ -52,7 +52,7 @@ Split of work between the two sessions that were running:
 What display work is left:
 
 - **#167, overlays:** only the Energy overlay works. Temperature, stress and pressure show as disabled buttons. When #166 lands, add the field data to the timeline (an optional `fields` on `ArmorFrame`, agreed with whoever owns #166), draw it in `sectionDraw.ts`, add legends with units, and flip `ready: true` in `OVERLAYS`.
-- **#172, 3D sectioned plate in the main scene:** not started. The cross-section geometry in `section.ts` is the thing to extrude.
+- **#172, 3D sectioned plate:** done. `section3d.ts` (pure: the plate, crater and bulge as profiles revolved half a turn, the cut-face outline, the round and the pieces in metres) and `view3d.ts` (three.js: the lab studio, a steel bench, the cut face painted with the 2D section drawing so the overlays match, emissive crater wall, fragment meshes). The "2D section / 3D view" toggle in `armorLab.ts` shares the playback clock; the 3D view is created on first use and falls back to the section without WebGL. Tests: `src/armor/section3d.test.ts`. Not done: post-processing (no bloom in the 3D view), and the plate radius follows the fragment room, so a shot wider than the plate is thin (the room sizing in `fragments.ts` is the thing to fix).
 - **#173, classroom mode:** not started. `ArmorLabHandle.preset({...})` in `armorLab.ts` already sets the controls and fires, so a lesson is a list of presets with captions. Also wanted: a range stage and store screenshots.
 - The explainer diagrams for HESH and HE fragments exist but those families have no model yet; the lab shows a notice ("not modelled yet") until #164 and #170 land.
 - Un-modelled families throw from `simulateArmor`; the screen catches that and shows the message.
