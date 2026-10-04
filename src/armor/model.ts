@@ -96,7 +96,7 @@ export interface ArmorFrame {
 }
 
 /** Event kinds. Later models extend this union with their own. */
-export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop';
+export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop' | 'skid';
 
 export interface ArmorEvent {
   /** Time since impact, s. */
@@ -111,7 +111,7 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion';
+export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
@@ -121,6 +121,16 @@ export interface ArmorEjecta {
   /** Thickness along the shot line, m. */
   thicknessM: number;
   diameterM: number;
+}
+
+/** What sprays out behind a perforated plate (a jet's debris cone). */
+export interface ArmorDebris {
+  /** Half-angle of the cone, degrees. */
+  halfAngleDeg: number;
+  /** Jet particles: total mass (kg) and the speed they leave at (m/s). */
+  jetParticles: { massKg: number; velocity: number };
+  /** Plate material knocked off the rear face: total mass (kg) and speed (m/s). */
+  spall: { massKg: number; velocity: number };
 }
 
 /**
@@ -148,6 +158,10 @@ export interface ArmorResult {
   residualMassKg: number;
   /** The plug sheared out of the plate, when there is one. */
   plug?: ArmorEjecta;
+  /** The debris cone behind a perforated plate, for a jet. */
+  debris?: ArmorDebris;
+  /** A shaped-charge round that hit too steeply to fuze and skidded off. */
+  failedToFuze?: boolean;
   /** Whether the penetrator broke up on the plate. */
   shattered: boolean;
   /** How many pieces it broke into (0 when intact). */

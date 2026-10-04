@@ -27,12 +27,17 @@ describe('simulateArmor', () => {
     expect(tl.result.mechanism).toBe('Hydrodynamic erosion');
   });
 
+  it('runs the jet model for HEAT', () => {
+    const tl = simulateArmor(rhaShot({ impact: impactState('heat', 120), thicknessM: 0.3 }));
+    expect(tl.result.mechanism).toBe('Jet penetration');
+  });
+
   it('applies the model’s own obliquity limit', () => {
     expect(simulateArmor(rhaShot({ obliquityDeg: 85 })).shot.obliquityDeg).toBe(75);
   });
 
   it('throws for the families later tickets will model', () => {
-    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds')) {
+    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds' && f.id !== 'heat')) {
       expect(() => simulateArmor(rhaShot({ impact: impactState(family.id, 120) }))).toThrow(/not model/);
     }
   });
