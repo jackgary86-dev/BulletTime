@@ -8,7 +8,7 @@ import { seededRandom } from '../sim/random';
  * Each look is one InstancedMesh, so thousands of particles cost a few draw calls.
  */
 
-export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain' | 'flake' | 'vapour';
+export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'splinter' | 'shard' | 'grain' | 'flake' | 'vapour' | 'chain';
 
 /** Looks drawn as soft, camera-facing cloud cards. */
 const CLOUD: ReadonlySet<ParticleLook> = new Set(['dust', 'vapour']);
@@ -129,6 +129,12 @@ function lookConfigs(): Record<ParticleLook, LookConfig> {
       cap: 1500,
     },
     grain: { geometry: rockGeometry(0.5, 0, 0.25, 5), material: lit({ roughness: 0.95, flatShading: true }), cap: 3000 },
+    // A grain carrying load in a force chain: drawn glowing and on top, as an X-ray view through the opaque target.
+    chain: {
+      geometry: new THREE.SphereGeometry(0.5, 10, 8),
+      material: new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, toneMapped: false }),
+      cap: 800,
+    },
   };
 }
 
@@ -351,7 +357,7 @@ export class ParticleSystem {
         }
         tmpMatrix.compose(tmpPos, tmpQuat, tmpScale);
         mesh.setMatrixAt(n, tmpMatrix);
-        mesh.setColorAt(n, look === 'spark' ? sparkColor(q, lifeK) : q.color);
+        mesh.setColorAt(n, look === 'spark' ? sparkColor(q, lifeK) : look === 'chain' ? tmpColor.copy(q.color).multiplyScalar(Math.min(1, lifeK * 12) * (1 - lifeK) ** 1.2) : q.color);
         n++;
       }
       mesh.count = n;
