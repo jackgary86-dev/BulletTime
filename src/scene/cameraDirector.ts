@@ -45,7 +45,10 @@ interface Pose {
  */
 export class CameraDirector {
   mode: CameraMode = 'side';
+  /** What the side view frames: the middle of the target's front face. It does not follow the aim point, so firing never moves the camera (#239). */
   private impactPoint = new THREE.Vector3();
+  /** Where the round is aimed, for the close-up. */
+  private aimPoint = new THREE.Vector3();
   private targetDepth = 0.4;
   /** Largest face dimension of the target, and the stand-off the view should take in. */
   private span = 0.3;
@@ -72,8 +75,14 @@ export class CameraDirector {
   /** Where the target's front face is struck and how deep the target is, for framing. */
   setTarget(impactPoint: THREE.Vector3, depth: number, span = 0.3): void {
     this.impactPoint.copy(impactPoint);
+    this.aimPoint.copy(impactPoint);
     this.targetDepth = depth;
     this.span = span;
+  }
+
+  /** Where the next round is aimed. Only the close-up follows it. */
+  setAim(aim: THREE.Vector3): void {
+    this.aimPoint.copy(aim);
   }
 
   /** How far in front of the face the action starts (a charge's stand-off), in metres, so the side view includes it. */
@@ -186,7 +195,7 @@ export class CameraDirector {
   }
 
   private closeupPose(pose: Pose): void {
-    const i = this.impactPoint;
+    const i = this.aimPoint;
     pose.position.set(i.x - 0.2, i.y + 0.07, 0.3);
     pose.look.set(i.x + 0.05, i.y, 0);
     pose.ease = EASE_RATE.closeup;

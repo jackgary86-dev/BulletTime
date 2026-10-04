@@ -36,6 +36,8 @@ export interface ControlsOptions {
   onReplay(): void;
   onReset(): void;
   onRateChange(rate: number): void;
+  /** Hides every panel for a screenshot (#239). */
+  onCleanFrame(): void;
   onImpactBeatChange(on: boolean): void;
   onCameraChange(mode: CameraMode): void;
   onLightingChange(mode: LightingMode): void;
@@ -72,6 +74,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
         </select>
       </div>
     </div>
+    <button type="button" class="clean-frame-btn" title="Hide every panel for a screenshot. Press H or Esc to bring them back.">Clean frame <kbd>H</kbd></button>
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
     <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="${MAX_EXPONENT}" step="0.01" />
@@ -115,6 +118,8 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
       options.onLightingChange(button.dataset.mode as LightingMode);
     });
   }
+
+  panel.querySelector('.clean-frame-btn')!.addEventListener('click', () => options.onCleanFrame());
 
   const quality = panel.querySelector<HTMLSelectElement>('#quality-select')!;
   quality.value = options.initialQuality;
