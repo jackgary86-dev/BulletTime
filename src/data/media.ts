@@ -124,8 +124,9 @@ export interface MediumSpec {
   /**
    * Concrete panels (#225): the bullet loses most of its speed crossing the panel (about 0.5 ms), then keeps
    * slowing gently while it drags through the broken back scab. Deceleration in m/s² and how long it lasts.
+   * `burst` is an optional short, hard phase first: the slug shoving the scab it has just broken free.
    */
-  exitTail?: { decelMs2: number; durationS: number };
+  exitTail?: { decelMs2: number; durationS: number; burst?: { decelMs2: number; durationS: number } };
   /**
    * Concrete panels (#223): measured damage footprints, width × height in metres, for the front spall and the
    * back scab at the reference thickness. They grow or shrink with the panel thickness (see fx/concreteDamage.ts).
@@ -341,7 +342,9 @@ export const MEDIA: MediumSpec[] = [
     angleAdjustable: true,
     dragCoefficient: 2.4,
     resistancePa: 48e6,
-    exitTail: { decelMs2: 6000, durationS: 2e-3 },
+    // The C35 trace is at 68 m/s 0.1 ms after the bullet leaves the panel at about 76 (#225): it loses about
+    // 7 m/s in the first 0.1 ms shoving the loose scab, then slows at about 6 m/s per ms (55 m/s at 2.7 ms).
+    exitTail: { decelMs2: 6000, durationS: 2e-3, burst: { decelMs2: 70000, durationS: 1e-4 } },
     hardness: 0.6,
     ricochetAngleDeg: 65,
     yawNeckScale: 0.1,
