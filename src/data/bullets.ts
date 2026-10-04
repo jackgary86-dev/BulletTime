@@ -75,6 +75,8 @@ export interface BulletSpec {
   fun?: boolean;
   /** A hardened steel or tungsten core: it does not flatten, splash or tumble against armour, so it keeps its frontage (AP shot, long rods). */
   hardCore?: boolean;
+  /** Powered flight (missiles): the round starts `runM` metres back, at `startFraction` of its speed, and its motor accelerates it to full speed over 70% of the run. */
+  launch?: { runM: number; startFraction: number };
   /** Heading the selector groups this round under (artillery, for now). */
   group?: string;
   /** Which simulator lists this round (bullet when left out). */

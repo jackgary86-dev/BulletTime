@@ -314,6 +314,9 @@ interface Body {
   ricocheted: boolean;
   /** A tandem warhead's second jets fly down the first group's hole, so the medium resists them less. */
   followsJet?: boolean;
+  /** A motor still burning: the speed it is accelerating to and how fast, in m/s and m/s². */
+  thrustTo?: number;
+  thrustAccel?: number;
   /** Extra flight allowed before a fragment gives up: a charge's pieces first cross the stand-off to the target. */
   extraRangeM?: number;
 }
@@ -358,7 +361,9 @@ export function simulate(setup: ShotSetup): Timeline {
   };
 
   const b = setup.bullet;
-  const start = sub(setup.impactPoint, v3(setup.standOffM, 0, 0));
+  // A powered missile begins its launch run further back.
+  const run = b.launch?.runM ?? 0;
+  const start = sub(setup.impactPoint, v3(setup.standOffM + run, 0, 0));
   const pellets = b.behaviour === 'shot' ? (b.pellets ?? 9) : 1;
   if (b.behaviour === 'charge') placeCharge(ctx, b, start);
   else for (let i = 0; i < pellets; i++) {
@@ -368,7 +373,14 @@ export function simulate(setup: ShotSetup): Timeline {
       const a = ((i - 1) / (pellets - 1)) * Math.PI * 2;
       dir = normalize(v3(1, Math.sin(a) * b.spreadPerMetre, Math.cos(a) * b.spreadPerMetre));
     }
-    ctx.queue.push(makeBody(ctx, pellets > 1 ? 'pellet' : 'bullet', start, dir, b.muzzleVelocityMs, bulletMassKg(b), b.caliberMm / 1000, 0, b));
+    const launch = b.launch;
+    const body = makeBody(ctx, pellets > 1 ? 'pellet' : 'bullet', start, dir, launch ? b.muzzleVelocityMs * launch.startFraction : b.muzzleVelocityMs, bulletMassKg(b), b.caliberMm / 1000, 0, b);
+    if (launch) {
+      body.thrustTo = b.muzzleVelocityMs;
+      // Full speed after 70% of the run, from v0: v² = v0² + 2 a s.
+      body.thrustAccel = (b.muzzleVelocityMs ** 2 - body.speed ** 2) / (2 * 0.7 * launch.runM);
+    }
+    ctx.queue.push(body);
   }
 
   while (ctx.queue.length) integrate(ctx, ctx.queue.shift()!);
@@ -537,7 +549,9 @@ function integrate(ctx: Context, body: Body): void {
     }
 
     const dv = (force / body.mass) * dt;
-    const newSpeed = Math.max(0, body.speed - dv);
+    let newSpeed = Math.max(0, body.speed - dv);
+    // The motor keeps pushing in the air until the missile is up to speed.
+    if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * dt);
     const dx = ((body.speed + newSpeed) / 2) * dt;
     if (medium) {
       const deposited = 0.5 * body.mass * (body.speed ** 2 - newSpeed ** 2);

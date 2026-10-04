@@ -97,6 +97,8 @@ export function missileSpec(airframeId: string, headId: string): BulletSpec {
     noseDragFactor: kinetic ? 0.25 : 0.5,
     hardCore: kinetic || undefined,
     blast: kinetic ? undefined : blastFor(h.id, a),
+    // A powered missile is seen leaving its launch point and accelerating; a kinetic core is already at speed.
+    launch: kinetic ? undefined : { runM: Math.min(3, Math.max(1, (a.lengthMm / 1000) * 1.5)), startFraction: 0.25 },
   };
 }
 

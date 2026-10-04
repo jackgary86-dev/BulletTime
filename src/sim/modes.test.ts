@@ -216,3 +216,24 @@ describe('debris scaling (#192)', () => {
     expect(debrisScale(0)).toBe(0.15);
   });
 });
+
+describe('missile launch run (#194)', () => {
+  it('starts a powered missile slowly, well back from the target, and has it at full speed by impact', () => {
+    const spec = getBullet(missileId('guided-at', 'shaped'));
+    const t = shoot(spec.id, 'rha', 0.1);
+    const frames = t.tracks[0].keyframes;
+    expect(frames[0].speed).toBeCloseTo(spec.muzzleVelocityMs * 0.25, 0);
+    expect(frames[0].pos.x).toBeLessThan(-0.2 - 0.5 - 1);
+    expect(t.summary.impactSpeed).toBeCloseTo(spec.muzzleVelocityMs, 0);
+    // Speed never goes down on the way in.
+    const before = frames.filter((f) => f.pos.x < -0.2);
+    for (let i = 1; i < before.length; i++) expect(before[i].speed).toBeGreaterThanOrEqual(before[i - 1].speed - 0.01);
+  });
+
+  it('gives a kinetic penetrator no launch run, and keeps the run bounded for the biggest airframe', () => {
+    expect(getBullet(missileId('guided-at', 'penetrator')).launch).toBeUndefined();
+    const cruise = getBullet(missileId('cruise', 'shaped'));
+    expect(cruise.launch!.runM).toBe(3);
+    expect(shoot(cruise.id, 'rha', 0.1).duration).toBeLessThan(0.05);
+  });
+});

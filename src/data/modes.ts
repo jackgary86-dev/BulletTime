@@ -38,6 +38,7 @@ export function roundsForMode(mode: SimulatorId): BulletSpec[] {
 /** How far in front of the face the side view should reach: a charge's stand-off, or the round's own length (capped for the longest missiles). */
 export function framingReach(spec: BulletSpec): number {
   if (spec.standoffM) return spec.standoffM;
+  if (spec.launch) return Math.min(3.5, 0.5 + spec.launch.runM + 0.2);
   return Math.min(2.5, Math.max(0.5, spec.lengthMm / 1000 + 0.2));
 }
 
