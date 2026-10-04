@@ -10,12 +10,13 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 
 ## Features
 
+- **Four simulators:** the game opens on a launcher with Bullet, Artillery, Missile and Explosion. Each is an experimental impact test on the same material catalogue. **Bullet** (.22 LR up to 20 mm) is playable now. Artillery (20 mm to 240 mm), Missile (five missiles with swappable warheads) and Explosion (every kind of blast in a test bed) are listed as coming soon. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186). Add `?mode=bullet` to the URL to skip the launcher.
 - **12 rounds** from .22 LR to .50 BMG: FMJ, hollow points, soft points, a fragmenting 5.56, buckshot, a slug, and a 20 mm HEI shell just for fun. Each has a true-scale 3D model and real-world data.
 - **Targets:**
   - 10% ballistic gel and a water tank.
-  - Pine and oak boards and drywall.
-  - A concrete block and a hollow cinder block.
-  - Mild and AR500 steel plate, a sandbag, glass and ice.
+  - Pine and oak boards, plywood, drywall, cardboard and a phone book.
+  - A concrete block, a brick wall and a hollow cinder block.
+  - Mild and AR500 steel plate, thin sheet metal, an aluminium plate, a sandbag, glass, acrylic and ice.
   - Organic lab targets: gel with blood packs, MythBusters style, and a clinical **ballistic test dummy** with bone, brain, lung and organ simulants.
   - **Objects** to destroy: a bowling ball, a 10 cm steel ball, a steel gong on chains, a watermelon and a glass bottle of water. Round objects keep the aim inside their outline, and an off-centre shot crosses a shorter chord.
 - **Layered targets:** stack up to four layers with air gaps, for example a wall, a wooden fence, a car door, auto glass or a cinder block in front of a gel block.
@@ -24,7 +25,7 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
   - Gel and water: the cavity, splash and bubbles.
   - Wood: splinters and exit spall.
   - Concrete: craters and dust.
-  - Steel: sparks and splatter.
+  - Steel: sparks and splatter. A bullet that punches through a plate sheds about half its mass as a wide cone of fragments, with a heavy spray of sparks and spall out the back.
   - Glass: radial and concentric cracks, and shards.
   - Organic targets: bursting blood packs and bone fragments.
   - Objects: the watermelon swells and bursts into rind and flesh, the bottle shatters round a burst of water, a rifle round cracks the bowling ball into chunks, the steel ball throws sparks and lead spray, and the gong shudders or is holed.
