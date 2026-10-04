@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { wallClockS } from './still';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
@@ -90,7 +91,7 @@ export function createPostFx(
       bloom.resolution.set(width, height);
     },
     render() {
-      grade.tick(performance.now() / 1000);
+      grade.tick(wallClockS());
       composer.render();
     },
   };

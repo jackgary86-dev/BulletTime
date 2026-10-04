@@ -45,3 +45,27 @@ jobs:
           biggest=$(ls dist/assets/*.js | xargs -I{} sh -c 'gzip -c {} | wc -c' | sort -rn | head -1)
           echo "Largest script, gzipped: $biggest bytes"
           test "$biggest" -lt 614400
+
+  # Visual regression (#243): one frame per shot in software WebGL, compared with
+  # tests/visual/references. On failure the actual, expected and diff images are
+  # uploaded; accept an intended change with `npm run visual:update`.
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npx playwright install --with-deps chromium
+      - run: npm run visual
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: test-results/
+          retention-days: 14

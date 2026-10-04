@@ -5,6 +5,7 @@ import { BULLET_MATERIALS } from '../models/materials';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
 import { createMissileTrail, type MissileTrail } from './missileTrail';
+import { wallClockS } from '../scene/still';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
 const MAX_FRAGMENTS = 256;
@@ -145,7 +146,7 @@ export class ShotRenderer {
           trail.group.position.copy(model.group.position);
           trail.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
         }
-        trail.update(inAir, model.length, frame?.diameter ?? 0, performance.now() / 1000);
+        trail.update(inAir, model.length, frame?.diameter ?? 0, wallClockS());
       }
     }
 

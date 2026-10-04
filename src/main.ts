@@ -11,6 +11,7 @@ import { MODES, framingReach } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
+import { isStill } from './scene/still';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
@@ -53,6 +54,7 @@ async function bootstrap(): Promise<void> {
     document.body.classList.add('mode-armor');
     mountArmorLab(overlay);
     loader.finish();
+    document.body.dataset.ready = 'true';
     return;
   }
   const mode: SimulatorId = choice;
@@ -288,7 +290,9 @@ async function bootstrap(): Promise<void> {
 
   await loader.progress(0.5, 'Compiling shaders');
   await warmUp(laneA, renderer, camera, shotsPanel.plan(), (fraction, text) => loader.progress(0.5 + 0.45 * fraction, text));
-  director.intro();
+  // Still mode (#243) starts on the settled framing, so a screenshot never catches the opening glide.
+  if (isStill()) director.reset();
+  else director.intro();
 
   const timer = new THREE.Timer();
   timer.connect(document);
@@ -351,6 +355,8 @@ async function bootstrap(): Promise<void> {
       scrubber.sync();
     }
   }
+  // Tells a screenshot run (#243) the scene is built and any replay link is parked.
+  document.body.dataset.ready = 'true';
 }
 
 /**

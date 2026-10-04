@@ -14,6 +14,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "visual": "npm run build && playwright test",
+    "visual:update": "npm run build && playwright test --update-snapshots",
     "build:desktop": "tsc --noEmit && vite build --mode desktop --outDir dist-desktop",
     "desktop": "npm run build:desktop && electron .",
     "dist": "npm run build:desktop && electron-builder",
@@ -28,6 +30,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/three": "^0.186.0",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
