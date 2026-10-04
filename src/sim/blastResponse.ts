@@ -47,6 +47,11 @@ const PASSES_INTACT = 0.15;
 const PASSES_CRACKED = 0.5;
 const PASSES_FAILED = 0.8;
 
+/** How big the debris from a burst is, as a multiple of a 1 kg charge's: tiny for a 20 mm shell, large for a 240 mm one. */
+export function debrisScale(yieldKg: number): number {
+  return Math.min(2.5, Math.max(0.15, Math.cbrt(Math.max(1e-6, yieldKg))));
+}
+
 /** Free-air overpressure (Mills fit) at a range from a yield of TNT, in kPa. */
 export function overpressureKPa(yieldKg: number, rangeM: number): number {
   const z = Math.max(0.3, rangeM) / Math.cbrt(Math.max(1e-6, yieldKg));

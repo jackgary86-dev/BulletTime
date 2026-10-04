@@ -6,7 +6,7 @@ import { AIRFRAMES, MISSILES, WARHEADS, findMissile, missileId } from '../data/m
 import { MODES, roundsForMode } from '../data/modes';
 import { getMedium } from '../data/media';
 import { blastOverpressureKPa, layersFor, simulate } from './engine';
-import { blastResponse, outcomeFor } from './blastResponse';
+import { blastResponse, debrisScale, outcomeFor } from './blastResponse';
 
 function shoot(id: string, medium: string, thickness: number) {
   const m = getMedium(medium);
@@ -207,8 +207,7 @@ describe('results for warheads and charges (#200)', () => {
 });
 
 describe('debris scaling (#192)', () => {
-  it('sizes the debris from a burst by its yield, small for a 20 mm shell and capped for the biggest', async () => {
-    const { debrisScale } = await import('../fx/blastEffect');
+  it('sizes the debris from a burst by its yield, small for a 20 mm shell and capped for the biggest', () => {
     expect(debrisScale(0.01)).toBeCloseTo(0.215, 2);
     expect(debrisScale(1)).toBe(1);
     expect(debrisScale(8)).toBe(2);

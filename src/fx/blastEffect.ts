@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TARGET_FRONT_X, layerGroupName } from '../models/targets';
-import { blastResponse, type LayerBlast } from '../sim/blastResponse';
+import { blastResponse, debrisScale, type LayerBlast } from '../sim/blastResponse';
 import type { TargetLayer } from '../sim/engine';
 import type { ShotEvent, Timeline } from '../sim/types';
 import { FLOOR_Y, type BurstSpec, type ParticleSystem } from './particles';
@@ -44,11 +44,6 @@ export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], parti
       contactDebris(particles, e, layers, origin, yieldKg, seed++);
     }
   }
-}
-
-/** How big the debris from a burst is, as a multiple of a 1 kg charge's: tiny for a 20 mm shell, large for a 240 mm one. */
-export function debrisScale(yieldKg: number): number {
-  return Math.min(2.5, Math.max(0.15, Math.cbrt(Math.max(1e-6, yieldKg))));
 }
 
 /** A shell or warhead bursting on the face throws up the material it is on, sized by its yield. */
