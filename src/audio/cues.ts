@@ -1,4 +1,4 @@
-import type { BulletSpec } from '../data/bullets';
+import { bulletMassKg, type BulletSpec } from '../data/bullets';
 import type { MediumBehaviour } from '../data/media';
 import type { TargetLayer } from '../sim/engine';
 import type { Timeline } from '../sim/types';
@@ -27,10 +27,29 @@ const IMPACT_SOUNDS: Record<MediumBehaviour, string> = {
   ice: 'impact-glass',
 };
 
-/** The muzzle report for a round: shotgun shells, then rifles by muzzle speed, else a pistol. */
+/** Mass (kg) from which a shell is a cannon, and from which a howitzer. */
+const CANNON_KG = 0.3;
+const HOWITZER_KG = 20;
+
+/**
+ * The muzzle report for a round: shotgun shells, then rifles by muzzle speed, else a pistol;
+ * cannon and howitzer reports by shell mass (#199), a launch roar for missiles, and nothing
+ * for a charge that just sits there.
+ */
 export function shotSound(spec: BulletSpec): string {
+  if (spec.shape === 'charge') return '';
+  if (spec.shape === 'missile') return 'missile-launch';
   if (spec.shape === 'buckshot' || spec.shape === 'fosterSlug') return 'shot-shotgun';
+  const kg = bulletMassKg(spec);
+  if (kg >= HOWITZER_KG) return 'shot-howitzer';
+  if (kg >= CANNON_KG) return 'shot-cannon';
   return spec.muzzleVelocityMs > 600 ? 'shot-rifle' : 'shot-pistol';
+}
+
+/** The bang of a detonation, by yield and fireball look. */
+export function blastSound(yieldKg: number, fireball?: string): string {
+  if (fireball === 'thermobaric') return 'blast-thermobaric';
+  return yieldKg < 0.5 ? 'blast-small' : 'blast-large';
 }
 
 export function impactSound(behaviour: MediumBehaviour): string {
@@ -47,7 +66,8 @@ export function buildCues(timeline: Timeline, layers: TargetLayer[], bullet: (id
   const cues: SoundCue[] = [];
   for (const shot of timeline.shots) {
     const spec = bullet(shot.bulletId);
-    cues.push({ t: shot.start, sound: shotSound(spec) });
+    const report = shotSound(spec);
+    if (report) cues.push({ t: shot.start, sound: report });
     if (spec.muzzleVelocityMs > SPEED_OF_SOUND_MS)
       cues.push({ t: (shot.start + shot.impactTime) / 2, sound: 'supersonic-crack' });
 
@@ -56,7 +76,8 @@ export function buildCues(timeline: Timeline, layers: TargetLayer[], bullet: (id
     for (const e of timeline.events) {
       if (e.trackId < shot.firstTrack || e.trackId >= last) continue;
       let sound: string | null = null;
-      if (e.type === 'ricochet') sound = 'ricochet';
+      if (e.type === 'detonate' && e.yieldKg !== undefined) sound = blastSound(e.yieldKg, e.fireball);
+      else if (e.type === 'ricochet') sound = 'ricochet';
       else if ((e.type === 'impact' || e.type === 'enter') && e.layer !== undefined && layers[e.layer])
         sound = impactSound(layers[e.layer].medium.behaviour);
       if (!sound || heard.has(sound)) continue;

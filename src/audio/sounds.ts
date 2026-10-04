@@ -4,7 +4,7 @@
  * filtered noise bursts and pitched tones scheduled on one AudioContext.
  */
 
-export type SoundGroup = 'Shots' | 'Impacts';
+export type SoundGroup = 'Shots' | 'Impacts' | 'Heavy';
 
 export interface SoundSpec {
   id: string;
@@ -226,6 +226,76 @@ export const SOUNDS: readonly SoundSpec[] = [
     play(ctx, out, t) {
       tone(ctx, out, t, { duration: 0.15, gain: 0.6, type: 'sine', hz: 90, toHz: 40 });
       noise(ctx, out, t, { duration: 0.4, gain: 0.45, filter: 'bandpass', hz: 1800, toHz: 700, q: 0.6, attack: 0.005 });
+    },
+  },
+  // Artillery, missiles and explosions (#199): longer, lower and louder.
+  {
+    id: 'shot-cannon',
+    label: 'Cannon shot',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      noise(ctx, out, t, { duration: 0.05, gain: 1, filter: 'highpass', hz: 1500 });
+      noise(ctx, out, t, { duration: 1.1, gain: 0.9, filter: 'lowpass', hz: 3500, toHz: 120, attack: 0.004 });
+      tone(ctx, out, t, { duration: 0.6, gain: 0.9, type: 'sine', hz: 90, toHz: 25 });
+      noise(ctx, out, t, { at: 0.1, duration: 1.4, gain: 0.2, filter: 'bandpass', hz: 500, toHz: 150, attack: 0.05 });
+    },
+  },
+  {
+    id: 'shot-howitzer',
+    label: 'Howitzer shot',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      noise(ctx, out, t, { duration: 0.08, gain: 1, filter: 'highpass', hz: 900 });
+      noise(ctx, out, t, { duration: 2, gain: 1, filter: 'lowpass', hz: 1800, toHz: 70, attack: 0.006 });
+      tone(ctx, out, t, { duration: 1.2, gain: 1, type: 'sine', hz: 55, toHz: 18 });
+      // The valley answering back.
+      noise(ctx, out, t, { at: 0.4, duration: 2.5, gain: 0.18, filter: 'bandpass', hz: 300, toHz: 90, attack: 0.2 });
+    },
+  },
+  {
+    id: 'missile-launch',
+    label: 'Missile launch',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      noise(ctx, out, t, { duration: 0.06, gain: 0.8, filter: 'highpass', hz: 1500 });
+      // The motor catching, then a rising hiss and roar as it accelerates away.
+      noise(ctx, out, t, { at: 0.02, duration: 1.6, gain: 0.7, filter: 'bandpass', hz: 500, toHz: 2800, q: 0.5, attack: 0.15 });
+      tone(ctx, out, t, { at: 0.02, duration: 1.4, gain: 0.35, type: 'sawtooth', hz: 70, toHz: 180, attack: 0.2 });
+    },
+  },
+  {
+    id: 'blast-small',
+    label: 'Small blast',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      noise(ctx, out, t, { duration: 0.04, gain: 1, filter: 'highpass', hz: 1800, attack: 0.001 });
+      noise(ctx, out, t, { duration: 0.7, gain: 0.9, filter: 'lowpass', hz: 3000, toHz: 140, attack: 0.002 });
+      tone(ctx, out, t, { duration: 0.4, gain: 0.9, type: 'sine', hz: 100, toHz: 30 });
+    },
+  },
+  {
+    id: 'blast-large',
+    label: 'Large blast',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      noise(ctx, out, t, { duration: 0.06, gain: 1, filter: 'highpass', hz: 1000, attack: 0.001 });
+      noise(ctx, out, t, { duration: 1.8, gain: 1, filter: 'lowpass', hz: 2200, toHz: 60, attack: 0.003 });
+      tone(ctx, out, t, { duration: 1.2, gain: 1, type: 'sine', hz: 60, toHz: 16 });
+      // Debris raining down afterwards.
+      for (let i = 0; i < 10; i++) {
+        noise(ctx, out, t, { at: 0.3 + i * 0.12 + Math.random() * 0.08, duration: 0.05, gain: 0.18, filter: 'bandpass', hz: 800 + Math.random() * 2500, q: 2 });
+      }
+    },
+  },
+  {
+    id: 'blast-thermobaric',
+    label: 'Thermobaric blast',
+    group: 'Heavy',
+    play(ctx, out, t) {
+      // A soft whump of igniting fuel, then a long, deep roar and rumble.
+      noise(ctx, out, t, { duration: 0.15, gain: 0.8, filter: 'lowpass', hz: 1200, toHz: 200, attack: 0.03 });
+      noise(ctx, out, t, { at: 0.05, duration: 2.6, gain: 0.9, filter: 'lowpass', hz: 900, toHz: 45, attack: 0.08 });
+      tone(ctx, out, t, { at: 0.04, duration: 2, gain: 1, type: 'sine', hz: 45, toHz: 14, attack: 0.1 });
     },
   },
   {

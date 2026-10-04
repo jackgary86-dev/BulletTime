@@ -104,3 +104,23 @@ describe('cue track', () => {
     expect(track.update(0.003, true)).toEqual(['a', 'b', 'c']);
   });
 });
+
+describe('heavy sounds (#199)', () => {
+  it('picks cannon and howitzer reports by shell mass, a launch for missiles and nothing for a charge', () => {
+    expect(shotSound(getBullet('30mm-ap'))).toBe('shot-cannon');
+    expect(shotSound(getBullet('105mm-heat'))).toBe('shot-cannon');
+    expect(shotSound(getBullet('155mm-he'))).toBe('shot-howitzer');
+    expect(shotSound(getBullet('240mm-he'))).toBe('shot-howitzer');
+    expect(shotSound(getBullet('missile:guided-at:shaped'))).toBe('missile-launch');
+    expect(shotSound(getBullet('charge-block'))).toBe('');
+  });
+
+  it('cues a blast sized by yield and fireball, and every cue names a real sound', () => {
+    const boom = (yieldKg: number, fireball: string): ShotEvent => ({ ...event(0.0015, 'detonate', 0, 0), yieldKg, fireball });
+    const cuesFor = (id: string, e: ShotEvent) => buildCues(timeline([shot(0, 0.0015, id)], [e]), [layer('pine')], getBullet);
+    expect(cuesFor('charge-flash', boom(0.1, 'standard'))).toEqual([{ t: 0.0015, sound: 'blast-small' }]);
+    expect(cuesFor('charge-satchel', boom(6.5, 'standard'))).toEqual([{ t: 0.0015, sound: 'blast-large' }]);
+    expect(cuesFor('charge-thermobaric', boom(3.5, 'thermobaric'))).toEqual([{ t: 0.0015, sound: 'blast-thermobaric' }]);
+    for (const c of [...cuesFor('155mm-he', boom(8, 'standard')), ...cuesFor('missile:cruise:thermobaric', boom(630, 'thermobaric'))]) expect(() => getSound(c.sound)).not.toThrow();
+  });
+});

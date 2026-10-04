@@ -14,7 +14,7 @@ export function mountSoundBoard(root: HTMLElement, opener: HTMLElement, muteButt
   dialog.className = 'about sound-board';
   dialog.setAttribute('aria-labelledby', 'sound-board-title');
 
-  const groups: SoundGroup[] = ['Shots', 'Impacts'];
+  const groups: SoundGroup[] = ['Shots', 'Heavy', 'Impacts'];
   dialog.innerHTML = `
     <h2 id="sound-board-title">Sounds</h2>
     <div class="sound-levels">
