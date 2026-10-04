@@ -250,6 +250,7 @@ function findDenseDamage(index: LayerDamage, pos: Vec3, bodyRadius: number, near
 
 /** How much of the medium's strength is left where the body is, given earlier shots' damage. */
 function damageFactor(ctx: Context, body: Body, layer: number): number {
+  if (body.followsJet) return DAMAGED_CHANNEL_FACTOR;
   if (!ctx.setup.damage?.length) return 1;
   const pos = body.pos;
   const bodyRadius = body.diameter / 2;
@@ -310,6 +311,8 @@ interface Body {
   impactSpeed: number;
   impacted: boolean;
   ricocheted: boolean;
+  /** A tandem warhead's second jets fly down the first group's hole, so the medium resists them less. */
+  followsJet?: boolean;
 }
 
 interface Context {
@@ -817,7 +820,9 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
         const m = (body.mass * jet.massFraction) / jet.count;
         const dir = perturb(axis, 0.012 * Math.sqrt(ctx.rand()), ctx.rand);
         const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
-        ctx.queue.push(makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S));
+        const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);
+        piece.followsJet = g > 0;
+        ctx.queue.push(piece);
       }
     }
   }

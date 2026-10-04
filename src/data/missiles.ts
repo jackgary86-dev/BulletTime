@@ -48,12 +48,20 @@ export const WARHEADS: WarheadHead[] = [
 export const DEFAULT_AIRFRAME_ID = 'guided-at';
 export const DEFAULT_WARHEAD_ID = 'shaped';
 
+/**
+ * The jet's mass as a fraction of the airframe: the liner is a share of the warhead, so
+ * the jet (and with it the depth it bores, about 4 to 6 calibres) follows the warhead
+ * diameter, not the weight of the whole airframe.
+ */
+const JET_SHARE_OF_WARHEAD = 0.5;
+const jetFraction = (a: Airframe): number => (a.warheadKg * JET_SHARE_OF_WARHEAD) / a.massKg;
+
 const blastFor = (head: string, a: Airframe): BlastSpec => {
   switch (head) {
     case 'shaped':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: 0.12 }, fireball: 'standard' };
+      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a) }, fireball: 'standard' };
     case 'tandem':
-      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: 0.12, tandem: true }, fireball: 'standard' };
+      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), tandem: true }, fireball: 'standard' };
     case 'blast-frag':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 56, fragmentSpeedMs: 1500, fireball: 'standard' };
     case 'thermobaric':

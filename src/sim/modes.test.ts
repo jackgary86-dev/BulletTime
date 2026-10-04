@@ -99,3 +99,24 @@ describe('artillery and missile impacts', () => {
     expect(t.events.find((e) => e.type === 'detonate')?.yieldKg).toBe(8);
   });
 });
+
+describe('missile warheads', () => {
+  const bore = (airframe: string, head: string) => {
+    const b = getBullet(missileId(airframe, head));
+    return simulate({ bullet: b, layers: layersFor(getMedium('rha'), 4), angleDeg: 0, impactPoint: { x: -0.2, y: 0.16, z: 0 }, standOffM: b.standoffM ?? 0.5 }).summary.penetrationM;
+  };
+
+  it('bores deeper with a wider warhead, a few calibres into armour', () => {
+    const depths = AIRFRAMES.map((a) => bore(a.id, 'shaped'));
+    for (let i = 1; i < depths.length; i++) expect(depths[i]).toBeGreaterThan(depths[i - 1]);
+    AIRFRAMES.forEach((a, i) => {
+      const calibres = depths[i] / (a.caliberMm / 1000);
+      expect(calibres).toBeGreaterThan(2.5);
+      expect(calibres).toBeLessThan(7);
+    });
+  });
+
+  it('sends a tandem warhead second jets down the first hole, so it bores deeper than a single charge', () => {
+    for (const a of AIRFRAMES) expect(bore(a.id, 'tandem')).toBeGreaterThan(bore(a.id, 'shaped') * 1.1);
+  });
+});
