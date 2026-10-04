@@ -105,6 +105,12 @@ export const STACK_PRESETS: StackPreset[] = [
   },
 ];
 
+/** Whether a mode's target presets list this one (#245): heavy ones outside the Bullet lab, and only heavy ones for Missile. */
+export function presetListedIn(preset: StackPreset, mode: string): boolean {
+  if (mode === 'missile') return !!preset.heavy;
+  return !preset.heavy || mode !== 'bullet';
+}
+
 export function presetLayers(preset: StackPreset): StackLayer[] {
   return preset.layers.map((l, i) => {
     const medium = getMedium(l.medium);

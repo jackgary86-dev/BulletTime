@@ -41,16 +41,26 @@ export function parseReplayLink(search: string): ReplayLink | null {
   };
 }
 
-/** Sets the pickers the way a person would, so the panels show what is being fired. Unknown values are left alone. */
-export function applyReplayLink(root: ParentNode, link: ReplayLink): void {
+/**
+ * Sets the pickers the way a person would, so the panels show what is being fired. Values the mode does not list
+ * (a gel block in the Missile lab, #245) are left alone, and named in the result so the page can say so.
+ */
+export function applyReplayLink(root: ParentNode, link: ReplayLink): string[] {
+  const ignored: string[] = [];
   const choose = (selector: string, value: string | undefined) => {
     const select = root.querySelector<HTMLSelectElement>(selector);
-    if (!select || value === undefined || ![...select.options].some((o) => o.value === value)) return;
+    if (value === undefined) return;
+    if (!select || ![...select.options].some((o) => o.value === value)) {
+      ignored.push(value);
+      return;
+    }
     select.value = value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
   };
   choose('#bullet-select', link.bullet);
   choose('#medium-select', link.medium);
+  // A material this mode does not offer keeps its own thickness out of the way too.
+  if (link.medium !== undefined && ignored.includes(link.medium)) return ignored;
   const slider = root.querySelector<HTMLInputElement>('#thickness-slider');
   if (slider && link.thicknessM !== undefined) {
     // Keep it inside what the material allows.
@@ -58,4 +68,5 @@ export function applyReplayLink(root: ParentNode, link: ReplayLink): void {
     slider.value = String(clamped);
     slider.dispatchEvent(new Event('input', { bubbles: true }));
   }
+  return ignored;
 }
