@@ -10,7 +10,8 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 
 ## Features
 
-- **Four simulators:** the game opens on a launcher with **Bullet**, **Artillery**, **Missile** and **Explosion**. Each is an experimental impact or blast test on the same material catalogue, with slow-motion playback, per-material effects and a results panel. Add `?mode=artillery` (or `bullet`, `missile`, `explosion`) to the URL to skip the launcher. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186).
+- **Four simulators:** the game opens on a launcher with **Bullet**, **Artillery**, **Missile** and **Explosion**. Each is an experimental impact or blast test on the same material catalogue, with slow-motion playback, per-material effects and a results panel. Add `?mode=artillery` (or `bullet`, `missile`, `explosion`, `armor`) to the URL to skip the launcher. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186).
+- **Armor lab:** a fifth card on the launcher, a 2D teaching screen (no 3D renderer) showing a cut-away cross-section of metal plate as a munition defeats it: full-bore AP shot (De Marre ballistic limit, plugging), APFSDS long rods (Alekseevskii–Tate erosion) and shaped-charge jets (density law, debris cone), with HESH, ricochet, HE fragments and temperature, stress and pressure overlays to come. Pick a family and calibre (40–150 mm), plate material, thickness (10–300 mm) and angle, then fire; the results panel and a short explainer with a labelled diagram say what happened. Tracked in epic [#157](https://github.com/jackgary86-dev/BulletTime/issues/157). Models are simplified teaching models of impact outcomes only.
   - **Bullet:** .22 LR up to the 20 mm cannon shell.
   - **Artillery:** about 30 shells from 20 mm to 240 mm, grouped as autocannon, anti-tank and field guns, naval guns, mortars, recoilless rifles, howitzers and tank guns. AP and APFSDS shot punch through; HE shells burst on the face and throw fragments; HEAT fires a shaped-charge jet; HESH spalls the far side. Heavy targets (armour plate, reinforced concrete, packed earth) are added for them.
   - **Missile:** five basic airframes (light rocket, shoulder rocket, guided anti-tank, air-to-surface, cruise-class), each fitted with any of five warheads: shaped charge, tandem, blast-fragmentation, kinetic penetrator or thermobaric.
@@ -106,14 +107,17 @@ On itch.io (needs your account):
 ```
 src/
   data/      catalogue and tuning: bullets.ts, artillery.ts, missiles.ts, explosives.ts, modes.ts, media.ts, physics.ts, stacks.ts, organic.ts, dummy.ts
-  sim/       engine.ts (the physics), session.ts (multi-shot), playback.ts, *.test.ts
+  sim/       engine.ts (the physics), blastResponse.ts (what a blast does to each layer), session.ts (multi-shot), playback.ts, *.test.ts
+  armor/     the Armor lab: materials, munitions, one penetration model per family (fullBore, longRod, jet), model.ts (the shared ArmorTimeline), section.ts and sectionDraw.ts (the cross-section)
   models/    procedural 3D: bullet.ts, targets.ts, dummy.ts, textures.ts
   fx/        impact effects, all pure functions of sim time so they scrub
   scene/     renderer, studio, camera director, post-processing, quality levels
-  ui/        the panels
+  ui/        the panels, launcher.ts (the four simulators and the Armor lab), armorLab.ts (the Armor lab screen)
   lane.ts    one shooting lane (scene + target + shots); compare mode runs two
   main.ts    wires it all together
 ```
+
+For the next person or agent picking this up, see [docs/HANDOFF.md](docs/HANDOFF.md): what is done, what is open, how the pieces fit and the traps to avoid.
 
 A shot is simulated once, up front, into a `Timeline`. That timeline holds the projectile tracks (keyframes), events (impact, enter, exit, expand, ricochet and so on) and cavity samples. Playback, the camera and every effect just read that timeline at the current sim time.
 
