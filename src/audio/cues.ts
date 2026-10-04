@@ -25,6 +25,7 @@ const IMPACT_SOUNDS: Record<MediumBehaviour, string> = {
   sand: 'impact-sandbag',
   glass: 'impact-glass',
   ice: 'impact-glass',
+  plastic: 'impact-drywall',
 };
 
 /** Mass (kg) from which a shell is a cannon, and from which a howitzer. */

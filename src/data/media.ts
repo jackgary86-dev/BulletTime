@@ -19,6 +19,7 @@ export type MediumBehaviour =
   | 'sand' // grains scatter, strong stopping power
   | 'glass' // radial + concentric cracks, shards, deflection
   | 'ice' // brittle, cracks and chunks
+  | 'plastic' // thin polymer: a clean hole, a few white chips (#240)
   | 'bone'; // bone simulant: hard, brittle, cracks and throws fragments
 
 /** Which procedural look builds the target. */
@@ -39,6 +40,10 @@ export type MediumLook =
   | 'glass'
   | 'ice'
   | 'bone'
+  /** Milky polyethylene, a water jug's wall (#240). */
+  | 'plasticJug'
+  /** A phone's battery pouch: dark laminate (#240). */
+  | 'phoneCell'
   // Showpiece objects (#156)
   | 'bowlingBall'
   | 'steelBall'
@@ -117,7 +122,7 @@ export interface MediumSpec {
   exitDeflectionDeg?: number;
   /** Organic gel targets: which blood-pack layout is suspended inside (see `data/organic.ts`). */
   organicLayout?: string;
-  /** Simulants that only appear inside the test dummy (#25), not in the material list. */
+  /** Parts that only appear inside a preset (the test dummy's simulants #25, a phone's layers #240), not in the material list. */
   dummyOnly?: boolean;
   /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
   heavy?: boolean;
@@ -841,6 +846,81 @@ export const MEDIA: MediumSpec[] = [
     yawNeckScale: 1,
     cavityPressurePa: 1.0e6,
     allowsExpansion: true,
+    dummyOnly: true,
+  },
+  {
+    id: 'polyethylene',
+    name: 'Polyethylene sheet (jug wall)',
+    description: 'Thin milky HDPE, like a gallon water jug. A bullet makes a clean hole and barely notices it.',
+    behaviour: 'plastic',
+    look: 'plasticJug',
+    density: 950,
+    thickness: { min: 0.0005, max: 0.006, default: 0.001 },
+    heightM: 0.25,
+    widthM: 0.2,
+    angleAdjustable: true,
+    dragCoefficient: 0.5,
+    resistancePa: 25e6, // HDPE yield strength
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+  },
+  // Smartphone layers (#240): 150 x 75 mm, each only in the Smartphone preset.
+  {
+    id: 'phone-glass',
+    name: 'Phone display glass',
+    description: 'Chemically strengthened cover glass. 1.2 mm here: thinner than a rifle round covers in one 1 microsecond step.',
+    behaviour: 'glass',
+    look: 'glass',
+    density: 2450,
+    thickness: { min: 0.001, max: 0.002, default: 0.0012 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 60e6,
+    hardness: 0.6,
+    ricochetAngleDeg: 82,
+    yawNeckScale: 0.2,
+    allowsExpansion: false,
+    exitDeflectionDeg: 3,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-cell',
+    name: 'Phone battery pouch',
+    description: 'Lithium-polymer pouch cell: foil and polymer laminate about 4 mm thick.',
+    behaviour: 'plastic',
+    look: 'phoneCell',
+    density: 2400,
+    thickness: { min: 0.002, max: 0.008, default: 0.004 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.6,
+    resistancePa: 40e6,
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-frame',
+    name: 'Phone aluminium back',
+    description: 'A thin aluminium back plate and frame.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 2700,
+    thickness: { min: 0.0008, max: 0.002, default: 0.001 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 1.15e9,
+    hardness: 0.45,
+    ricochetAngleDeg: 62,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
     dummyOnly: true,
   },
   // --- Showpiece objects (#156): everyday things to destroy, with their own models and effects. ---
