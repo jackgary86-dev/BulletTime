@@ -32,7 +32,7 @@ jobs:
       # The itch.io upload: a relative-path build zipped with index.html at the root (#110).
       - run: npm run build:itch
       - if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bullettime-web-itch
           path: release/bullettime-web-*.zip
