@@ -234,7 +234,9 @@ function blastShock(events: Timeline['events'], t: number): { center: THREE.Vect
     const w = Math.cbrt(Math.max(0.01, e.yieldKg));
     // Fast and strong at first (several times the speed of sound), then slowing to it as it weakens.
     const radius = Math.max(1e-4, 343 * since * (1 + 2.5 * Math.exp(-since / (1.5e-3 * Math.max(0.5, w)))));
-    const strength = Math.min(1, 0.25 * w) * (1 - since / BLAST_SHOCK_END_S) ** 2 / (1 + radius / (0.6 * w));
+    // A charge in the open sends a stronger front than a shell bursting on a face.
+    const gain = e.pressureKPa !== undefined ? 0.4 : 0.25;
+    const strength = Math.min(1, gain * w) * (1 - since / BLAST_SHOCK_END_S) ** 2 / (1 + radius / (0.6 * w));
     blastCenter.set(e.pos.x, e.pos.y, e.pos.z);
     return { center: blastCenter, radius, strength };
   }

@@ -40,8 +40,22 @@ export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], parti
     if (charge) {
       groundRing(particles, e, origin, yieldKg, kind, seed++);
       for (const response of responses(e, layers)) debris(particles, e, response, origin, layers, seed++);
+    } else if (e.layer !== undefined && layers[e.layer]) {
+      contactDebris(particles, e, layers, origin, yieldKg, seed++);
     }
   }
+}
+
+/** How big the debris from a burst is, as a multiple of a 1 kg charge's: tiny for a 20 mm shell, large for a 240 mm one. */
+export function debrisScale(yieldKg: number): number {
+  return Math.min(2.5, Math.max(0.15, Math.cbrt(Math.max(1e-6, yieldKg))));
+}
+
+/** A shell or warhead bursting on the face throws up the material it is on, sized by its yield. */
+function contactDebris(particles: ParticleSystem, e: ShotEvent, layers: TargetLayer[], origin: THREE.Vector3, yieldKg: number, seed: number): void {
+  const layer = layers[e.layer!];
+  const response: LayerBlast = { stack: layer.stack ?? 0, medium: layer.medium, rangeM: 0, pressureKPa: 0, k: 1 + 10 * Math.cbrt(Math.max(1e-6, yieldKg)), outcome: 'cracked', arriveS: 0, tiltRad: 0 };
+  debris(particles, e, response, origin, layers, seed, debrisScale(yieldKg));
 }
 
 /** What each layer of the stack does when a charge detonates at `e`. */
@@ -62,6 +76,10 @@ function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3
   if (kind === 'thermobaric') {
     // The fuel cloud keeps burning: a second, slower swell of flame inside the first, then a rolling smoke head.
     particles.add({ ...base, look: 'dust', t0: e.t + 1.5e-3, duration: 3e-3, count: 60, speed: [radius * 20, radius * 90], size: [radius * 0.5, radius * 0.9], life: [10e-3, 22e-3], drag: 200, color: 0xff8a2a, colorJitter: 0.2, grow: 2, seed: seed + 3 });
+  }
+  if (kind === 'thermobaric') {
+    // The burnt fuel rolls up into a dark, rising smoke head.
+    particles.add({ ...base, look: 'dust', t0: e.t + 4e-3, duration: 4e-3, axis: new THREE.Vector3(0, 1, 0), spread: 0.9, count: 45, speed: [radius * 15, radius * 50], size: [radius * 0.5, radius], life: [14e-3, 30e-3], drag: 120, color: 0x2e2b28, colorJitter: 0.15, grow: 2.5, seed: seed + 4 });
   }
   // Smoke: dark and slow, hanging after the flame has gone.
   particles.add({ ...base, look: 'dust', t0: e.t + 400e-6, duration: 1.5e-3, count: 50, speed: [radius * 30, radius * 120], size: [radius * 0.4, radius * 0.9], life: [8e-3, 20e-3], drag: 300, color: 0x3a3733, colorJitter: 0.2, grow: 2.2, seed: seed + 1 });
@@ -100,7 +118,7 @@ function groundRing(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vecto
 }
 
 /** Debris thrown off the front of a layer that fails, by what it is made of. */
-function debris(particles: ParticleSystem, e: ShotEvent, r: LayerBlast, origin: THREE.Vector3, layers: TargetLayer[], seed: number): void {
+function debris(particles: ParticleSystem, e: ShotEvent, r: LayerBlast, origin: THREE.Vector3, layers: TargetLayer[], seed: number, scale = 1): void {
   if (r.outcome === 'intact') return;
   const medium = r.medium;
   const layer = layers.find((l) => (l.stack ?? 0) === r.stack) ?? layers[0];
@@ -117,9 +135,9 @@ function debris(particles: ParticleSystem, e: ShotEvent, r: LayerBlast, origin: 
     originJitter: Math.min(medium.heightM, medium.widthM) * 0.3,
     axis: new THREE.Vector3(-1, 0, 0),
     spread: 1.3,
-    count: Math.round(count * strength),
-    speed,
-    size,
+    count: Math.round(count * strength * (0.4 + 0.6 * scale)),
+    speed: [speed[0] * (0.6 + 0.4 * scale), speed[1] * (0.6 + 0.4 * scale)],
+    size: [size[0] * scale, size[1] * scale],
     life,
     drag: 30,
     color,

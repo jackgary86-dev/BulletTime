@@ -205,3 +205,15 @@ describe('results for warheads and charges (#200)', () => {
     expect(s.penetrator?.curve.length ?? 0).toBeGreaterThan(1);
   });
 });
+
+describe('debris scaling (#192)', () => {
+  it('sizes the debris from a burst by its yield, small for a 20 mm shell and capped for the biggest', async () => {
+    const { debrisScale } = await import('../fx/blastEffect');
+    expect(debrisScale(0.01)).toBeCloseTo(0.215, 2);
+    expect(debrisScale(1)).toBe(1);
+    expect(debrisScale(8)).toBe(2);
+    expect(debrisScale(30)).toBe(2.5);
+    expect(debrisScale(5000)).toBe(2.5);
+    expect(debrisScale(0)).toBe(0.15);
+  });
+});

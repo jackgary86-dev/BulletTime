@@ -40,3 +40,25 @@ export const CONCRETE_REFERENCE: readonly ConcretePanelReference[] = [
 
 /** Time for the bullet to lose most of its speed crossing the panel, in ms (all three strengths). */
 export const CONCRETE_DECEL_MS = 0.5;
+
+import type { BulletSpec } from './bullets';
+
+/**
+ * The projectile the lab figures do not describe, standing in for it: a 14 mm hard-steel ogive, about 60 g.
+ * Only its ballistic limits matter, so it is tuned together with the concrete grades. It is not in the
+ * round selector.
+ */
+export const CONCRETE_REFERENCE_BULLET: BulletSpec = {
+  id: 'concrete-ref',
+  name: 'Concrete test projectile',
+  type: 'Hard steel ogive',
+  description: 'Stand-in for the projectile in the concrete panel tests.',
+  caliberMm: 14,
+  lengthMm: 50,
+  massGrains: 925,
+  muzzleVelocityMs: 155,
+  behaviour: 'intact',
+  shape: 'roundNose',
+  hardCore: true,
+  noseDragFactor: 0.8,
+};
