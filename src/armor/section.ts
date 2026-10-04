@@ -11,7 +11,8 @@
  * unit-tested. `sectionDraw.ts` paints them.
  */
 
-import type { ArmorFrame, ArmorTimeline } from './model';
+import { viewMargin, type ArmorFrame, type ArmorTimeline, type FragmentKind } from './model';
+import { ROOM_HALF_HEIGHT_FACTOR, fragmentStateAt } from './fragments';
 
 export interface Point {
   x: number;
@@ -50,17 +51,12 @@ export interface SectionShapes {
   /** The dome pushed out of the rear face, as a closed outline; empty when flat. */
   bulge: Point[];
   /** The penetrator's body: nose position, length and diameter in pixels. */
-  penetrator: { noseX: number; tailX: number; radiusPx: number };
+  penetrator: { noseX: number; tailX: number; radiusPx: number; /** The fragment tracks have taken it over, so it is not drawn. */ hidden: boolean };
   /** Cumulative energy deposited, as a share (0 to 1) of the impact energy, for the heat glow. */
   heat: number;
   /** How far the crater has progressed through the plate, 0 to 1 (by depth over line-of-sight thickness). */
   progress: number;
 }
-
-/** Fraction of the view kept clear to the left and right of the plate. */
-export const VIEW_MARGIN = 0.7;
-/** Smallest view width in metres, so a thin plate is not drawn as a sliver. */
-export const MIN_VIEW_M = 0.12;
 
 /** The penetrator's diameter at impact, m (the jet's width, the shot's or rod's own, or a fragment's). */
 export function penetratorDiameter(timeline: ArmorTimeline): number {
@@ -75,15 +71,18 @@ export function penetratorDiameter(timeline: ArmorTimeline): number {
 
 /**
  * Fits the plate and some air either side into a canvas. The view is as wide
- * as the plate plus a margin of `VIEW_MARGIN` plate thicknesses either side
- * (never less than `MIN_VIEW_M`), and the plate takes the whole height.
+ * as the plate plus the air either side (`viewMargin`, never less than
+ * `MIN_VIEW_M` wide in all), and the plate takes the whole height. When the
+ * canvas is too flat to show the floor and ceiling of the fragment room, the
+ * view is scaled down to fit them, with the plate kept in the middle.
  */
 export function sectionLayout(timeline: ArmorTimeline, width: number, height: number): SectionLayout {
   const tLos = timeline.result.losThicknessM;
-  const margin = Math.max(VIEW_MARGIN * tLos, (MIN_VIEW_M - tLos) / 2, 0.03);
+  const margin = viewMargin(tLos);
   const viewM = tLos + 2 * margin;
-  const pxPerM = width / viewM;
-  const frontX = margin * pxPerM;
+  const roomHeightM = 2 * ROOM_HALF_HEIGHT_FACTOR * margin;
+  const pxPerM = Math.min(width / viewM, height / roomHeightM);
+  const frontX = (width - tLos * pxPerM) / 2;
   const rearX = frontX + tLos * pxPerM;
   return {
     width,
@@ -97,7 +96,7 @@ export function sectionLayout(timeline: ArmorTimeline, width: number, height: nu
 }
 
 /** The shapes for one frame of a timeline. */
-export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout: SectionLayout): SectionShapes {
+export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout: SectionLayout, fragmentT = frame.t): SectionShapes {
   const { pxPerM, frontX, rearX, axisY } = layout;
   const tLos = timeline.result.losThicknessM;
   const depth = Math.min(frame.depth, tLos);
@@ -146,14 +145,98 @@ export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout
   const length = Math.max(0, frame.penetratorLength) * pxPerM;
   const radiusPx = Math.max(1.2, (penetratorDiameter(timeline) / 2) * pxPerM);
 
+  const handoff = timeline.fragments ? timeline.fragments.handoffS : null;
   const total = timeline.result.impactEnergyJ;
   return {
     layout,
     crater,
     throughHole: through,
     bulge,
-    penetrator: { noseX, tailX: noseX - length, radiusPx },
+    penetrator: { noseX, tailX: noseX - length, radiusPx, hidden: handoff !== null && fragmentT >= handoff },
     heat: total > 0 ? Math.min(1, Math.max(0, frame.energyDepositedJ / total)) : 0,
     progress: tLos > 0 ? Math.min(1, depth / tLos) : 0,
   };
+}
+
+/** A piece thrown from the plate, in pixels. */
+export interface DrawnFragment {
+  kind: FragmentKind;
+  x: number;
+  y: number;
+  /** Tilt, radians (screen y points down, so this is already flipped). */
+  angle: number;
+  lengthPx: number;
+  widthPx: number;
+  hot: boolean;
+  resting: boolean;
+}
+
+/** The test room the pieces fly about in, in pixels: the floor, the ceiling and the two outer walls. */
+export interface RoomShapes {
+  floorY: number;
+  ceilingY: number;
+  leftX: number;
+  rightX: number;
+}
+
+/** The room in pixels, or null when the timeline throws nothing. */
+export function roomShapes(timeline: ArmorTimeline, layout: SectionLayout): RoomShapes | null {
+  const field = timeline.fragments;
+  if (!field) return null;
+  const { room } = field;
+  return {
+    floorY: layout.axisY - room.floorY * layout.pxPerM,
+    ceilingY: layout.axisY - room.ceilingY * layout.pxPerM,
+    leftX: layout.frontX + room.leftX * layout.pxPerM,
+    rightX: layout.frontX + room.rightX * layout.pxPerM,
+  };
+}
+
+/** Smallest a piece is drawn, px, so a speck is still seen. */
+export const MIN_FRAGMENT_PX = 2.5;
+
+/** The pieces in flight at `fragmentT` seconds after impact, in pixels. Pieces not yet thrown are left out. */
+export function fragmentShapes(timeline: ArmorTimeline, fragmentT: number, layout: SectionLayout): DrawnFragment[] {
+  const field = timeline.fragments;
+  if (!field) return [];
+  const out: DrawnFragment[] = [];
+  for (const track of field.tracks) {
+    if (fragmentT < track.t0) continue;
+    const s = fragmentStateAt(track, fragmentT);
+    out.push({
+      kind: track.kind,
+      x: layout.frontX + s.x * layout.pxPerM,
+      y: layout.axisY - s.y * layout.pxPerM,
+      angle: -s.angle,
+      lengthPx: Math.max(MIN_FRAGMENT_PX, track.lengthM * layout.pxPerM),
+      widthPx: Math.max(MIN_FRAGMENT_PX * 0.7, track.widthM * layout.pxPerM),
+      hot: track.hot && fragmentT - track.t0 < 0.02,
+      resting: s.resting,
+    });
+  }
+  return out;
+}
+
+/** The dimension line along the plate: where it runs and what it says. */
+export interface DimensionLine {
+  x0: number;
+  x1: number;
+  y: number;
+  label: string;
+}
+
+/** Distance of the dimension line above the bottom of the view, px. */
+const DIMENSION_FROM_BOTTOM = 58;
+
+const mmText = (m: number) => `${(m * 1000).toFixed(m < 0.01 ? 1 : 0)} mm`;
+
+/** Line-of-sight thickness along the plate, with the plate's own thickness and slope when it is sloped. */
+export function dimensionLine(timeline: ArmorTimeline, layout: SectionLayout): DimensionLine {
+  const { shot, result } = timeline;
+  const sloped = shot.obliquityDeg > 0.05;
+  const label = sloped
+    ? `line of sight ${mmText(result.losThicknessM)}  (plate ${mmText(shot.thicknessM)} at ${shot.obliquityDeg.toFixed(0)}°)`
+    : `plate ${mmText(result.losThicknessM)}`;
+  // Low on the plate, clear of the time readout and the overlay buttons along the top.
+  return { x0: layout.frontX, x1: layout.rearX, y: Math.max(22, layout.height - DIMENSION_FROM_BOTTOM), label };
 }

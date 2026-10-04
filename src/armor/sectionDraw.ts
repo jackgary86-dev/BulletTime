@@ -8,7 +8,7 @@
  */
 
 import type { PenetratorMaterial } from './munitions';
-import type { Point, SectionShapes } from './section';
+import type { DimensionLine, DrawnFragment, Point, RoomShapes, SectionShapes } from './section';
 
 /** The field shown over the plate. Only 'energy' is drawn so far; the rest wait for the field models (#166). */
 export type OverlayId = 'none' | 'energy' | 'temperature' | 'stress' | 'pressure';
@@ -52,8 +52,25 @@ function path(ctx: CanvasRenderingContext2D, points: Point[]): void {
   ctx.closePath();
 }
 
+/** What is drawn around the section: the dimension line, and the room and pieces thrown from the plate (#165). */
+export interface SectionExtras {
+  dimension?: DimensionLine;
+  room?: RoomShapes | null;
+  fragments?: DrawnFragment[];
+}
+
+/** Colour of each kind of thrown piece. */
+const FRAGMENT_COLOR: Record<DrawnFragment['kind'], string> = {
+  plug: '#9aa3ad',
+  scab: '#b4bcc6',
+  penetrator: '#c4ccd8',
+  shard: '#d0d6de',
+  jet: '#e39a55',
+  spall: '#a8b0ba',
+};
+
 /** Paints one frame. The canvas is cleared first. */
-export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes, style: SectionStyle): void {
+export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes, style: SectionStyle, extras: SectionExtras = {}): void {
   const { layout } = shapes;
   const { width, height, plate, axisY } = layout;
   ctx.clearRect(0, 0, width, height);
@@ -71,6 +88,9 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
   ctx.lineTo(width, axisY);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // The test room the pieces fly about in: floor, ceiling and outer walls.
+  if (extras.room) drawRoom(ctx, extras.room, width);
 
   // The sawn plate, with the diagonal hatching of a section drawing.
   ctx.save();
@@ -141,8 +161,8 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
   ctx.stroke();
 
   // The penetrator (or a jet's tail), nose at the leading edge.
-  const { noseX, tailX, radiusPx } = shapes.penetrator;
-  if (noseX - tailX > 0.5) {
+  const { noseX, tailX, radiusPx, hidden } = shapes.penetrator;
+  if (!hidden && noseX - tailX > 0.5) {
     const color = PENETRATOR_COLOR[style.penetratorMaterial];
     if (style.jet) {
       ctx.save();
@@ -166,6 +186,76 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
       ctx.stroke();
     }
   }
+
+  if (extras.fragments) for (const f of extras.fragments) drawFragment(ctx, f);
+  if (extras.dimension) drawDimension(ctx, extras.dimension);
+}
+
+function drawRoom(ctx: CanvasRenderingContext2D, room: RoomShapes, width: number): void {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, room.floorY);
+  ctx.lineTo(width, room.floorY);
+  ctx.stroke();
+  // The floor, hatched below the line, and the two outer walls.
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(0, room.floorY, width, 6);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(room.leftX, room.ceilingY);
+  ctx.lineTo(room.leftX, room.floorY);
+  ctx.moveTo(room.rightX, room.ceilingY);
+  ctx.lineTo(room.rightX, room.floorY);
+  ctx.moveTo(0, room.ceilingY);
+  ctx.lineTo(width, room.ceilingY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFragment(ctx: CanvasRenderingContext2D, f: DrawnFragment): void {
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.angle);
+  if (f.hot) {
+    ctx.shadowColor = '#ff9a40';
+    ctx.shadowBlur = 10;
+  }
+  ctx.fillStyle = f.hot ? heatColor(0.7) : FRAGMENT_COLOR[f.kind];
+  ctx.fillRect(-f.lengthPx / 2, -f.widthPx / 2, f.lengthPx, f.widthPx);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(-f.lengthPx / 2, -f.widthPx / 2, f.lengthPx, f.widthPx);
+  ctx.restore();
+}
+
+/** The line-of-sight dimension along the top of the plate: arrowheads at both faces and a label above. */
+function drawDimension(ctx: CanvasRenderingContext2D, d: DimensionLine): void {
+  ctx.save();
+  ctx.strokeStyle = '#e6e9ee';
+  ctx.fillStyle = '#e6e9ee';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(d.x0, d.y);
+  ctx.lineTo(d.x1, d.y);
+  for (const [x, dir] of [[d.x0, 1], [d.x1, -1]] as const) {
+    ctx.moveTo(x, d.y);
+    ctx.lineTo(x + dir * 7, d.y - 3.5);
+    ctx.moveTo(x, d.y);
+    ctx.lineTo(x + dir * 7, d.y + 3.5);
+    ctx.moveTo(x, d.y - 7);
+    ctx.lineTo(x, d.y + 7);
+  }
+  ctx.stroke();
+  ctx.font = '11px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 4;
+  ctx.fillText(d.label, (d.x0 + d.x1) / 2, d.y - 9);
+  ctx.restore();
 }
 
 /** Darkens a `#rrggbb` colour by a factor (1 keeps it). */

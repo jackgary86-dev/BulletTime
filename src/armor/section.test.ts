@@ -3,7 +3,7 @@ import { frameAt } from './model';
 import { getPlateMaterial } from './materials';
 import { impactState } from './munitions';
 import { heatColor, shade } from './sectionDraw';
-import { penetratorDiameter, sectionLayout, sectionShapes } from './section';
+import { MIN_FRAGMENT_PX, dimensionLine, fragmentShapes, penetratorDiameter, roomShapes, sectionLayout, sectionShapes } from './section';
 import { simulateArmor } from './simulate';
 
 const rod = (thicknessMm: number, obliquityDeg = 0) =>
@@ -96,5 +96,90 @@ describe('cross-section colours (#167)', () => {
   it('darkens a hex colour and clamps it', () => {
     expect(shade('#808080', 0.5)).toBe('rgb(64, 64, 64)');
     expect(shade('#ffffff', 2)).toBe('rgb(255, 255, 255)');
+  });
+});
+
+describe('thrown pieces on the section (#165)', () => {
+  const jet = () => simulateArmor({ impact: impactState('heat', 100), material: getPlateMaterial('rha'), thicknessM: 0.1, obliquityDeg: 0 });
+  const glance = () => simulateArmor({ impact: impactState('apfsds', 120), material: getPlateMaterial('rha'), thicknessM: 0.1, obliquityDeg: 85 });
+
+  it('fits the fragment room into the canvas, with the plate centred', () => {
+    const tl = jet();
+    for (const [w, h] of [[900, 500], [900, 300], [500, 700]]) {
+      const l = sectionLayout(tl, w, h);
+      const room = roomShapes(tl, l)!;
+      expect(room.floorY).toBeLessThanOrEqual(h + 1e-6);
+      expect(room.ceilingY).toBeGreaterThanOrEqual(-1e-6);
+      expect(room.leftX).toBeGreaterThanOrEqual(-1e-6);
+      expect(room.rightX).toBeLessThanOrEqual(w + 1e-6);
+      expect(l.frontX).toBeCloseTo(w - l.rearX, 6);
+    }
+  });
+
+  it('has no room when nothing is thrown', () => {
+    const tl = simulateArmor({ impact: impactState('apfsds', 40), material: getPlateMaterial('rha'), thicknessM: 0.3, obliquityDeg: 0 });
+    expect(roomShapes(tl, sectionLayout(tl, 900, 500))).toBeNull();
+    expect(fragmentShapes(tl, 1, sectionLayout(tl, 900, 500))).toEqual([]);
+  });
+
+  it('shows a piece only once it has been thrown, and behind the plate for a jet', () => {
+    const tl = jet();
+    const l = sectionLayout(tl, 900, 500);
+    const t0 = tl.fragments!.tracks[0].t0;
+    expect(fragmentShapes(tl, t0 * 0.5, l)).toHaveLength(0);
+    const after = fragmentShapes(tl, t0 + 1e-5, l);
+    expect(after.length).toBe(tl.fragments!.tracks.length);
+    for (const f of after) expect(f.x).toBeGreaterThanOrEqual(l.rearX - 1);
+  });
+
+  it('sends a ricochet out of the front face', () => {
+    const tl = glance();
+    const l = sectionLayout(tl, 900, 500);
+    const f = fragmentShapes(tl, tl.fragments!.tracks[0].t0 + 1e-5, l);
+    expect(f).toHaveLength(1);
+    expect(f[0].x).toBeLessThanOrEqual(l.frontX + 1);
+  });
+
+  it('keeps every piece inside the room, and at rest on the floor at the end', () => {
+    const tl = jet();
+    const l = sectionLayout(tl, 900, 500);
+    const room = roomShapes(tl, l)!;
+    const end = fragmentShapes(tl, tl.fragments!.restS + 1, l);
+    for (const f of end) {
+      expect(f.resting).toBe(true);
+      expect(f.y).toBeLessThanOrEqual(room.floorY + 1e-6);
+      expect(f.y).toBeGreaterThan(room.floorY - 40);
+    }
+  });
+
+  it('never draws a piece smaller than a few pixels', () => {
+    const tl = jet();
+    const l = sectionLayout(tl, 900, 500);
+    for (const f of fragmentShapes(tl, tl.fragments!.tracks[0].t0, l)) expect(f.lengthPx).toBeGreaterThanOrEqual(MIN_FRAGMENT_PX);
+  });
+
+  it('hands the penetrator to its track after the handoff time', () => {
+    const tl = simulateArmor({ impact: impactState('apfsds', 120), material: getPlateMaterial('rha'), thicknessM: 0.05, obliquityDeg: 0 });
+    const l = sectionLayout(tl, 900, 500);
+    const f = frameAt(tl, tl.duration);
+    expect(sectionShapes(tl, f, l, tl.fragments!.handoffS! - 1e-9).penetrator.hidden).toBe(false);
+    expect(sectionShapes(tl, f, l, tl.fragments!.handoffS!).penetrator.hidden).toBe(true);
+    expect(sectionShapes(tl, f, l).penetrator.hidden).toBe(tl.duration >= tl.fragments!.handoffS!);
+  });
+});
+
+describe('line-of-sight dimension (#165)', () => {
+  it('labels the plate square-on with its thickness', () => {
+    const tl = rod(120);
+    const d = dimensionLine(tl, sectionLayout(tl, 900, 500));
+    expect(d.label).toBe('plate 120 mm');
+    expect(d.x0).toBeLessThan(d.x1);
+  });
+
+  it('labels a sloped plate with its line-of-sight thickness, thickness and angle', () => {
+    const tl = simulateArmor({ impact: impactState('ap-shot', 88), material: getPlateMaterial('rha'), thicknessM: 0.05, obliquityDeg: 60 });
+    const d = dimensionLine(tl, sectionLayout(tl, 900, 500));
+    expect(d.label).toContain('line of sight 100 mm');
+    expect(d.label).toContain('plate 50 mm at 60');
   });
 });

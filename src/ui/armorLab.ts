@@ -2,7 +2,8 @@ import { frameAt, type ArmorShot, type ArmorTimeline } from '../armor/model';
 import { PLATE_MATERIALS, getPlateMaterial, DEFAULT_PLATE_MATERIAL_ID, type PlateMaterialId } from '../armor/materials';
 import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactState, type MunitionFamilyId } from '../armor/munitions';
 import { OVERLAYS, drawSection, type OverlayId } from '../armor/sectionDraw';
-import { sectionLayout, sectionShapes } from '../armor/section';
+import { dimensionLine, fragmentShapes, roomShapes, sectionLayout, sectionShapes } from '../armor/section';
+import { playbackAt } from '../armor/playback';
 import { simulateArmor } from '../armor/simulate';
 import { familyDiagram } from './armorDiagrams';
 
@@ -16,9 +17,11 @@ import { familyDiagram } from './armorDiagrams';
 
 const PLATE_MIN_MM = 10;
 const PLATE_MAX_MM = 300;
-const OBLIQUITY_MAX_DEG = 75;
+const OBLIQUITY_MAX_DEG = 85;
 /** How long a whole timeline takes to play at 1x, in real seconds. */
 const PLAY_SECONDS = 8;
+/** A timeline with an aftermath (thrown pieces coming to rest) plays this much longer. */
+const AFTERMATH_PLAY_FACTOR = 1.6;
 const SPEEDS = [
   { label: '1×', factor: 1 },
   { label: '¼×', factor: 0.25 },
@@ -47,6 +50,7 @@ const mm = (m: number) => `${(m * 1000).toFixed(m < 0.01 ? 1 : 0)} mm`;
 const joules = (j: number) => (j >= 1e6 ? `${(j / 1e6).toFixed(2)} MJ` : j >= 1e3 ? `${(j / 1e3).toFixed(1)} kJ` : `${Math.round(j)} J`);
 const kg = (m: number) => (m < 0.1 ? `${(m * 1000).toFixed(1)} g` : `${m.toFixed(2)} kg`);
 const us = (s: number) => `${(s * 1e6).toFixed(s < 1e-4 ? 1 : 0)} µs`;
+const clock = (s: number) => (s < 1e-3 ? us(s) : s < 1 ? `${(s * 1e3).toFixed(s < 1e-2 ? 2 : 1)} ms` : `${s.toFixed(2)} s`);
 
 export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const screen = document.createElement('div');
@@ -132,7 +136,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const syncOverlays = () => overlayBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.overlay === overlay));
 
   let timeline: ArmorTimeline | null = null;
-  let t = 0;
+  /** Playhead, 0 to 1 (see `playbackAt`). */
+  let u = 0;
   let playing = true;
   let last = performance.now();
   let raf = 0;
@@ -166,7 +171,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       notice.hidden = false;
       notice.textContent = `${e instanceof Error ? e.message : String(e)}. Pick another munition for now.`;
     }
-    t = 0;
+    u = 0;
     playing = true;
     renderResults();
     redraw();
@@ -186,23 +191,25 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const rect = canvas.getBoundingClientRect();
     const w = rect.width || canvas.width;
     const h = rect.height || canvas.height;
-    playBtn.textContent = playing ? 'Pause' : t >= (timeline?.duration ?? 0) ? 'Replay' : 'Play';
+    playBtn.textContent = playing ? 'Pause' : u >= 1 ? 'Replay' : 'Play';
     if (!timeline) {
       ctx.clearRect(0, 0, w, h);
       return;
     }
-    const frame = frameAt(timeline, t);
+    const pb = playbackAt(timeline, u);
+    const frame = frameAt(timeline, pb.t);
     const layout = sectionLayout(timeline, w, h);
-    const shapes = sectionShapes(timeline, frame, layout);
+    const shapes = sectionShapes(timeline, frame, layout, pb.fragmentT);
     const impact = timeline.shot.impact;
-    drawSection(ctx, shapes, { plateColor: timeline.shot.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat' });
-    q('.armor-hud-time').textContent = `t = ${us(t)}`;
+    drawSection(ctx, shapes, { plateColor: timeline.shot.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat' },
+      { dimension: dimensionLine(timeline, layout), room: roomShapes(timeline, layout), fragments: fragmentShapes(timeline, pb.fragmentT, layout) });
+    q('.armor-hud-time').textContent = `t = ${clock(pb.fragmentT)}`;
     q('.armor-hud-depth').textContent = `depth ${mm(frame.depth)} of ${mm(timeline.result.losThicknessM)}`;
     q('.armor-hud-speed').textContent = `${Math.round(frame.speed)} m/s`;
-    scrub.value = String(Math.round((t / timeline.duration) * 1000));
-    const reached = timeline.events.filter((e) => e.t <= t);
+    scrub.value = String(Math.round(u * 1000));
+    const reached = timeline.events.filter((e) => e.t <= pb.fragmentT);
     caption.textContent = reached.length ? reached[reached.length - 1].label : '';
-    resultsBox.querySelectorAll<HTMLElement>('[data-event]').forEach((li) => li.classList.toggle('reached', Number(li.dataset.event) <= t));
+    resultsBox.querySelectorAll<HTMLElement>('[data-event]').forEach((li) => li.classList.toggle('reached', Number(li.dataset.event) <= pb.fragmentT));
   };
 
   const renderResults = () => {
@@ -213,17 +220,18 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const r = timeline.result;
     const rows: [string, string][] = [
       ['Mechanism', r.mechanism],
-      ['Outcome', r.perforated ? 'Perforated' : 'Stopped'],
+      ['Outcome', r.perforated ? 'Perforated' : r.ricochet ? 'Glanced off' : 'Stopped'],
       ['Penetration', `${mm(r.penetrationM)} of ${mm(r.losThicknessM)} line-of-sight`],
       ['Residual velocity', r.perforated ? `${Math.round(r.residualVelocity)} m/s` : '—'],
       ['Residual mass', r.perforated ? kg(r.residualMassKg) : '—'],
       ['Impact energy', joules(r.impactEnergyJ)],
       ['Absorbed by the plate', joules(r.energy.plateWorkJ)],
       ['In ejected metal', joules(r.energy.ejectaJ)],
-      ['Carried through', joules(r.residualEnergyJ)],
+      [r.ricochet ? 'Carried away by the ricochet' : 'Carried through', joules(r.residualEnergyJ)],
     ];
     if (r.shattered) rows.push(['Penetrator', `Shattered into ${r.fragments} pieces`]);
     if (r.plug) rows.push(['Plug', `${kg(r.plug.massKg)} at ${Math.round(r.plug.velocity)} m/s`]);
+    if (r.ricochet) rows.push(['Ricochet', `leaves at ${r.ricochet.exitAngleDeg.toFixed(0)}° to the face, ${Math.round(r.ricochet.exitSpeed)} m/s; critical slope ${r.ricochet.criticalDeg.toFixed(0)}°`]);
     const debris = (r as unknown as { debris?: { halfAngleDeg: number } }).debris;
     if (debris) rows.push(['Debris behind the plate', `a cone of ${debris.halfAngleDeg.toFixed(0)}° half-angle`]);
     if ((r as unknown as { failedToFuze?: boolean }).failedToFuze) rows.push(['Fuzing', 'Too oblique: skidded off']);
@@ -240,9 +248,9 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     last = now;
     if (!playing || !timeline) return;
     const factor = SPEEDS[Number(speedSel.value)].factor;
-    t += (dt * factor * timeline.duration) / PLAY_SECONDS;
-    if (t >= timeline.duration) {
-      t = timeline.duration;
+    u += (dt * factor) / (PLAY_SECONDS * (timeline.fragments ? AFTERMATH_PLAY_FACTOR : 1));
+    if (u >= 1) {
+      u = 1;
       playing = false;
     }
     redraw();
@@ -259,14 +267,14 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   q('.armor-fire').addEventListener('click', fire);
   playBtn.addEventListener('click', () => {
     if (!timeline) return;
-    if (t >= timeline.duration) t = 0;
+    if (u >= 1) u = 0;
     playing = !playing;
     redraw();
   });
   scrub.addEventListener('input', () => {
     if (!timeline) return;
     playing = false;
-    t = (Number(scrub.value) / 1000) * timeline.duration;
+    u = Number(scrub.value) / 1000;
     redraw();
   });
   q('.armor-back').addEventListener('click', () => location.assign(location.pathname));

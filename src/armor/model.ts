@@ -108,7 +108,7 @@ export interface ArmorFrame {
 }
 
 /** Event kinds. Later models extend this union with their own. */
-export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop' | 'skid' | 'reflect' | 'spall';
+export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop' | 'skid' | 'reflect' | 'spall' | 'ricochet';
 
 export interface ArmorEvent {
   /** Time since impact, s. */
@@ -123,7 +123,7 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration' | 'Spalling' | 'Surface damage';
+export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration' | 'Spalling' | 'Surface damage' | 'Ricochet';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
@@ -156,6 +156,80 @@ export interface ArmorEnergy {
   ejectaJ: number;
 }
 
+/** How a round left the plate after a ricochet. */
+export interface ArmorRicochet {
+  /** The slope above which this round glances off this plate, degrees from the normal. */
+  criticalDeg: number;
+  /** The angle it leaves at, degrees from the plate face (0 = along it). */
+  exitAngleDeg: number;
+  /** Its speed as it leaves, m/s. */
+  exitSpeed: number;
+  /** Depth of the gouge it cut in the face, m. */
+  gougeDepthM: number;
+}
+
+/** What a piece thrown from the plate is, for drawing it. */
+export type FragmentKind = 'plug' | 'scab' | 'penetrator' | 'shard' | 'jet' | 'spall';
+
+/**
+ * One piece thrown clear of the plate, with its whole flight worked out in
+ * advance (see `fragments.ts`): straight and curved legs between bounces off
+ * the floor and walls of the test room, then sliding to rest. The flight is a
+ * pure function of time, so playback can scrub it.
+ *
+ * Coordinates: x along the shot line from the plate's front face, y up from
+ * the shot line, in metres.
+ */
+export interface FragmentTrack {
+  kind: FragmentKind;
+  /** Time since impact it leaves the plate, s; nothing is drawn before. */
+  t0: number;
+  /** Its size: along the flight direction at launch, and across it, m. */
+  lengthM: number;
+  widthM: number;
+  massKg: number;
+  /** Hot enough to glow when it leaves (jet particles, chips from the crater). */
+  hot: boolean;
+  segments: FragmentSegment[];
+}
+
+/** One leg of a flight: constant acceleration from `t0` until the next segment starts. */
+export interface FragmentSegment {
+  t0: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  ax: number;
+  ay: number;
+  angle: number;
+  omega: number;
+  alpha: number;
+}
+
+/** The test room the pieces fly about in: a box either side of the plate. */
+export interface FragmentRoom {
+  /** Left wall, the plate's front face (x = 0), the plate's rear face (x = losThicknessM) and the right wall. */
+  leftX: number;
+  frontX: number;
+  rearX: number;
+  rightX: number;
+  floorY: number;
+  ceilingY: number;
+}
+
+export interface FragmentField {
+  room: FragmentRoom;
+  tracks: FragmentTrack[];
+  /**
+   * When set, the penetrator the frames draw is replaced by a track from this
+   * time on (the frame's own penetrator is hidden), s.
+   */
+  handoffS: number | null;
+  /** When the last piece has come to rest, s after impact. */
+  restS: number;
+}
+
 export interface ArmorResult {
   /** How the plate was defeated (or not). Whether the penetrator shattered is reported separately, in `shattered`. */
   mechanism: ArmorMechanism;
@@ -176,6 +250,8 @@ export interface ArmorResult {
   scab?: ArmorEjecta;
   /** A shaped-charge round that hit too steeply to fuze and skidded off. */
   failedToFuze?: boolean;
+  /** A kinetic round that glanced off the plate (#165): the slope it needed, and how it left. */
+  ricochet?: ArmorRicochet;
   /** Whether the penetrator broke up on the plate. */
   shattered: boolean;
   /** How many pieces it broke into (0 when intact). */
@@ -198,6 +274,8 @@ export interface ArmorTimeline {
   result: ArmorResult;
   /** Playback length, s. */
   duration: number;
+  /** Everything thrown clear of the plate and where it goes, when anything is (#165). */
+  fragments?: FragmentField;
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -210,6 +288,16 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 export function losThickness(thicknessM: number, obliquityDeg: number): number {
   const theta = (clamp(obliquityDeg, MIN_OBLIQUITY_DEG, MAX_OBLIQUITY_DEG) * Math.PI) / 180;
   return thicknessM / Math.cos(theta);
+}
+
+/** Fraction of the view kept clear to the left and right of the plate, in plate thicknesses. */
+export const VIEW_MARGIN = 0.7;
+/** Smallest view width in metres, so a thin plate is not drawn as a sliver. */
+export const MIN_VIEW_M = 0.12;
+
+/** Air either side of the plate in the cross-section view, m: also the depth of the test room the fragments fly about in. */
+export function viewMargin(losThicknessM: number): number {
+  return Math.max(VIEW_MARGIN * losThicknessM, (MIN_VIEW_M - losThicknessM) / 2, 0.03);
 }
 
 /**

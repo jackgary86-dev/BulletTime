@@ -16,7 +16,9 @@ const rhaShot = (overrides: Partial<ArmorShot> = {}): ArmorShot => ({
 describe('simulateArmor', () => {
   it('runs the full-bore model for AP shot', () => {
     const tl = simulateArmor(rhaShot());
-    expect(tl).toEqual(fullBoreShot(rhaShot()));
+    const { fragments, ...rest } = tl;
+    expect(rest).toEqual(fullBoreShot(rhaShot()));
+    expect(fragments?.tracks.length).toBeGreaterThan(0);
     expect(tl.result.perforated).toBe(true);
     expect(tl.events[0].type).toBe('impact');
     expect(tl.frames.length).toBeGreaterThanOrEqual(120);
@@ -38,7 +40,14 @@ describe('simulateArmor', () => {
   });
 
   it('applies the model’s own obliquity limit', () => {
-    expect(simulateArmor(rhaShot({ obliquityDeg: 85 })).shot.obliquityDeg).toBe(75);
+    const hesh = rhaShot({ impact: impactState('hesh', 120), thicknessM: 0.05, obliquityDeg: 85 });
+    expect(simulateArmor(hesh).shot.obliquityDeg).toBe(70);
+  });
+
+  it('glances a kinetic round off above its critical slope instead of clamping it', () => {
+    const tl = simulateArmor(rhaShot({ obliquityDeg: 85 }));
+    expect(tl.result.mechanism).toBe('Ricochet');
+    expect(tl.shot.obliquityDeg).toBe(85);
   });
 
   it('throws for the families later tickets will model', () => {
