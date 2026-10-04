@@ -1026,9 +1026,17 @@ export const MEDIA: MediumSpec[] = [
 /** The large steel plates (#232), listed in Artillery and Missile. The 1 x 1 m `rha` stays as the small test coupon. */
 export const LARGE_PLATE_IDS = ['rha-plate', 'mild-plate', 'ar500-plate', 'cast-iron-plate'] as const;
 
-/** Whether a mode's material picker lists this medium: heavy targets never appear in the Bullet lab. */
+/** Missile targets are at least this big across the smaller side of the face, in metres (#245). */
+export const MISSILE_MIN_FACE_M = 2;
+
+/**
+ * Whether a mode's material picker lists this medium (#245): heavy targets never appear in the Bullet lab,
+ * and Missile lists only targets a missile could sensibly be fired at, never the bullet-scale blocks.
+ */
 export function mediumListedIn(medium: MediumSpec, mode: string): boolean {
-  return !medium.dummyOnly && (!medium.heavy || mode !== 'bullet');
+  if (medium.dummyOnly) return false;
+  if (mode === 'missile') return Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
+  return !medium.heavy || mode !== 'bullet';
 }
 
 export const DEFAULT_MEDIUM_ID = 'gel10';

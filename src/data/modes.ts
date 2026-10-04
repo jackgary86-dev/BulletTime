@@ -1,6 +1,7 @@
 import { ARTILLERY } from './artillery';
 import { BULLETS, getBullet, type BulletSpec, type SimulatorId } from './bullets';
 import { EXPLOSIVES } from './explosives';
+import { MEDIA, mediumListedIn, type MediumSpec } from './media';
 import { DEFAULT_AIRFRAME_ID, DEFAULT_WARHEAD_ID, missileId } from './missiles';
 
 /** What each simulator is called in the UI, and what it calls the thing being tested. */
@@ -11,14 +12,24 @@ export interface ModeInfo {
   pickerLabel: string;
   /** Round the mode starts on. */
   defaultId: string;
+  /** Material the mode starts on, when it is not the default gel (#245). */
+  defaultTargetId?: string;
+  /** Thickness of that material to start with, in metres. */
+  defaultTargetThicknessM?: number;
 }
 
 export const MODES: Record<SimulatorId, ModeInfo> = {
   bullet: { id: 'bullet', title: 'Bullet', pickerLabel: 'Round', defaultId: '9mm-jhp' },
   artillery: { id: 'artillery', title: 'Artillery', pickerLabel: 'Shell', defaultId: '155mm-he' },
-  missile: { id: 'missile', title: 'Missile', pickerLabel: 'Missile', defaultId: missileId(DEFAULT_AIRFRAME_ID, DEFAULT_WARHEAD_ID) },
+  // Missiles start on the 150 mm large RHA plate, at proving-ground size (#245).
+  missile: { id: 'missile', title: 'Missile', pickerLabel: 'Missile', defaultId: missileId(DEFAULT_AIRFRAME_ID, DEFAULT_WARHEAD_ID), defaultTargetId: 'rha-plate', defaultTargetThicknessM: 0.15 },
   explosion: { id: 'explosion', title: 'Explosion', pickerLabel: 'Charge', defaultId: 'charge-block' },
 };
+
+/** The materials a mode's target pickers list (#245). Missile has no entry under 2 m across; Bullet has no heavy plates. */
+export function targetsForMode(mode: SimulatorId): MediumSpec[] {
+  return MEDIA.filter((m) => mediumListedIn(m, mode));
+}
 
 /** The rounds the picker lists for a mode (missiles are built from an airframe and a head instead). */
 export function roundsForMode(mode: SimulatorId): BulletSpec[] {
