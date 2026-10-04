@@ -569,8 +569,15 @@ function integrate(ctx: Context, body: Body): void {
     if (step % sampleEvery === 0) record();
 
     // --- End conditions ---
-    if (medium && body.speed < P.restSpeed) {
+    const delay = body.bullet?.blast?.delayM;
+    if (delay !== undefined && body.kind !== 'fragment' && body.impacted && body.state !== 'detonated' && body.pathSinceImpact >= delay) {
+      // The delay fuze fires after its path through the target, wherever the round has got to by then.
+      detonate(ctx, body, Math.max(0, layerIndex >= 0 ? layerIndex : body.layer));
+      persists = false;
+      alive = false;
+    } else if (medium && body.speed < P.restSpeed) {
       body.speed = 0;
+      if (delay !== undefined && body.kind !== 'fragment' && body.state !== 'detonated') detonate(ctx, body, layerIndex);
       if (medium.hardness >= P.splashHardness && body.kind !== 'fragment' && body.state !== 'ricocheted') {
         // Lead and copper meeting steel or concrete they can't defeat splash outward.
         const hardSplash = medium.behaviour === 'steel' && !body.bullet?.hardCore;
@@ -623,7 +630,7 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
   const faceNormal = scale(n, cosInc > 0 ? -1 : 1);
 
   // The HEI shell's nose fuze fires on any contact, even a glancing one.
-  if (body.bullet?.behaviour === 'explosive') {
+  if (body.bullet?.behaviour === 'explosive' && !body.bullet.blast?.delayM) {
     if (first) body.impactSpeed = body.speed;
     body.impacted = true;
     event(ctx, body, first ? 'impact' : 'enter', { normal: faceNormal, layer: index });
@@ -828,12 +835,36 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
   }
 }
 
+/** Thickest steel or concrete a HESH charge can spall, per cube root of its yield, in metres. */
+const HESH_SPALL_M_PER_KG13 = 0.1;
+
+/** HESH: scabs of the far face fly off the back of a layer thin enough for the shock to cross, forward and slowly. */
+function throwSpall(ctx: Context, body: Body, index: number, spec: NonNullable<BulletSpec['blast']>): void {
+  const layer = ctx.setup.layers[index];
+  const behaviour = layer?.medium.behaviour;
+  if (!layer || (behaviour !== 'steel' && behaviour !== 'concrete')) return;
+  if (layer.thickness > HESH_SPALL_M_PER_KG13 * Math.cbrt(Math.max(1e-6, spec.yieldKg))) return;
+  const { count, speedMs } = spec.spall!;
+  const back = add(ctx.setup.impactPoint, scale(ctx.normal, layer.offset + layer.thickness + 0.002));
+  // Scabs come off in the face area around the burst, as pieces of the plate itself.
+  const mass = Math.min(0.04, 0.4 * layer.thickness * Math.min(layer.medium.heightM, layer.medium.widthM) ** 2 * layer.medium.density / count);
+  for (let i = 0; i < count; i++) {
+    const m = mass * (0.5 + ctx.rand());
+    const r = 0.04 + 0.1 * Math.sqrt(ctx.rand());
+    const a = ctx.rand() * Math.PI * 2;
+    const start = v3(back.x, body.pos.y + r * Math.sin(a), body.pos.z + r * Math.cos(a));
+    const dir = perturb(ctx.normal, 0.7 * Math.sqrt(ctx.rand()), ctx.rand);
+    ctx.queue.push(makeBody(ctx, 'fragment', start, dir, speedMs * (0.5 + 0.7 * ctx.rand()), m, fragmentDiameter(m), body.t));
+  }
+}
+
 /** A round that detonates on contact (shells, warheads): fragments into a forward cone, plus any jets. */
 function detonate(ctx: Context, body: Body, index: number): void {
   body.state = 'detonated';
   const spec = body.bullet?.blast;
   if (spec) {
     throwFragments(ctx, body, body.pos, body.dir, spec, spec.jet ? 0.5 : 1.1, body.t);
+    if (spec.spall) throwSpall(ctx, body, index, spec);
     event(ctx, body, 'detonate', { layer: index, yieldKg: spec.yieldKg, fireball: spec.fireball ?? 'standard' });
     return;
   }

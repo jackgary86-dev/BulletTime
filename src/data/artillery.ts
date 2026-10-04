@@ -11,7 +11,7 @@ import type { BlastSpec, BulletSpec } from './bullets';
 const GRAINS_PER_KG = 15432.36;
 const gr = (kg: number): number => Math.round(kg * GRAINS_PER_KG);
 
-type Kind = 'ap' | 'he' | 'heat' | 'hesh' | 'dart';
+type Kind = 'ap' | 'aphe' | 'he' | 'he-delay' | 'heat' | 'hesh' | 'dart';
 
 interface ShellRow {
   id: string;
@@ -27,26 +27,33 @@ interface ShellRow {
   fillKg?: number;
 }
 
-const KIND_LABEL: Record<Kind, string> = { ap: 'AP', he: 'HE', heat: 'HEAT', hesh: 'HESH', dart: 'APFSDS' };
+const KIND_LABEL: Record<Kind, string> = { ap: 'AP', aphe: 'APHE', he: 'HE', 'he-delay': 'HE (delay fuze)', heat: 'HEAT', hesh: 'HESH', dart: 'APFSDS' };
 
 const KIND_TEXT: Record<Kind, string> = {
   ap: 'Solid armour-piercing shot: a dense steel core that defeats plate and walls without exploding.',
+  aphe: 'Armour-piercing with a small explosive filler and a base fuze: it punches through the plate, then bursts behind it.',
   he: 'High-explosive shell with a nose fuze. It bursts on the face and throws fragments.',
+  'he-delay': 'High-explosive shell with a delay fuze: it buries itself in earth, concrete or masonry before it bursts.',
   heat: 'A shaped-charge shell. On contact the charge fires a narrow, very fast jet that bores through armour.',
-  hesh: 'A squash-head shell: a plastic charge that spreads on the face, then fires and spalls the far side.',
+  hesh: 'A squash-head shell: a plastic charge that spreads on the face, then fires, scabbing the far side of plate and concrete thinner than its limit.',
   dart: 'A long dense dart fired inside a discarding sabot. All its energy is on a few centimetres of frontage.',
 };
 
 function blastOf(row: ShellRow): BlastSpec | undefined {
   const fill = row.fillKg ?? 0;
   switch (row.kind) {
+    case 'aphe':
+      // A hard core with a small filler: it goes through, then bursts inside.
+      return { yieldKg: fill, fragmentCount: 26, fragmentSpeedMs: 1000, delayM: Math.max(0.08, row.calibreMm / 400), fireball: 'standard' };
+    case 'he-delay':
+      return { yieldKg: fill, fragmentCount: Math.min(64, 30 + Math.round(row.calibreMm / 5)), fragmentSpeedMs: 1300, delayM: Math.max(0.5, row.calibreMm / 200), fireball: 'standard' };
     case 'he':
       return { yieldKg: fill, fragmentCount: Math.min(64, 30 + Math.round(row.calibreMm / 5)), fragmentSpeedMs: 1300 + Math.min(200, row.calibreMm), fireball: 'standard' };
     case 'heat':
       return { yieldKg: fill, fragmentCount: 12, fragmentSpeedMs: 1100, jet: { count: 6, speedMs: 7500, massFraction: Math.min(0.12, 0.04 + row.calibreMm / 1500) }, fireball: 'standard' };
     case 'hesh':
       // The far-face spall is thrown as a wide fan of fast fragments.
-      return { yieldKg: fill, fragmentCount: 40, fragmentSpeedMs: 900, fragmentMassFraction: 0.3, fireball: 'standard' };
+      return { yieldKg: fill, fragmentCount: 12, fragmentSpeedMs: 900, fragmentMassFraction: 0.2, spall: { count: 36, speedMs: 350 }, fireball: 'standard' };
     default:
       return undefined;
   }
@@ -54,7 +61,7 @@ function blastOf(row: ShellRow): BlastSpec | undefined {
 
 function shell(row: ShellRow): BulletSpec {
   const blast = blastOf(row);
-  const kinetic = row.kind === 'ap' || row.kind === 'dart';
+  const kinetic = row.kind === 'ap' || row.kind === 'dart' || row.kind === 'aphe';
   return {
     id: row.id,
     mode: 'artillery',
@@ -67,7 +74,7 @@ function shell(row: ShellRow): BulletSpec {
     lengthMm: row.lengthMm,
     massGrains: gr(row.massKg),
     muzzleVelocityMs: row.speedMs,
-    behaviour: kinetic ? 'intact' : 'explosive',
+    behaviour: row.kind === 'ap' || row.kind === 'dart' ? 'intact' : 'explosive',
     shape: row.kind === 'dart' ? 'dart' : 'cannonShell',
     noseDragFactor: kinetic ? 0.35 : 0.5,
     // Armour-piercing shot is a hard core: it keeps its frontage and does not tumble in armour.
@@ -94,6 +101,9 @@ const ROWS: ShellRow[] = [
   // Naval guns
   { id: '102mm-naval-he', group: 'Naval guns', calibreMm: 102, name: 'naval gun', kind: 'he', lengthMm: 440, massKg: 14, speedMs: 800, fillKg: 1.4 },
   { id: '127mm-naval-he', group: 'Naval guns', calibreMm: 127, name: 'naval gun', kind: 'he', lengthMm: 600, massKg: 25, speedMs: 810, fillKg: 3.5 },
+  // Armour-piercing with a filler, and delay-fuzed high explosive
+  { id: '76mm-aphe', group: 'Anti-tank and field guns', calibreMm: 76, name: 'anti-tank gun', kind: 'aphe', lengthMm: 330, massKg: 6.9, speedMs: 800, fillKg: 0.09 },
+  { id: '88mm-aphe', group: 'Anti-tank and field guns', calibreMm: 88, name: 'dual-purpose gun', kind: 'aphe', lengthMm: 420, massKg: 10.2, speedMs: 800, fillKg: 0.15 },
   // Mortars
   { id: '60mm-mortar', group: 'Mortars', calibreMm: 60, name: 'mortar', kind: 'he', lengthMm: 240, massKg: 1.4, speedMs: 200, fillKg: 0.2 },
   { id: '82mm-mortar', group: 'Mortars', calibreMm: 82, name: 'mortar', kind: 'he', lengthMm: 330, massKg: 3.1, speedMs: 250, fillKg: 0.5 },
@@ -112,6 +122,8 @@ const ROWS: ShellRow[] = [
   { id: '155mm-he', group: 'Howitzers', calibreMm: 155, name: 'howitzer', kind: 'he', lengthMm: 650, massKg: 43, speedMs: 800, fillKg: 8 },
   { id: '203mm-he', group: 'Howitzers', calibreMm: 203, name: 'heavy howitzer', kind: 'he', lengthMm: 850, massKg: 90, speedMs: 600, fillKg: 18 },
   { id: '240mm-he', group: 'Howitzers', calibreMm: 240, name: 'siege howitzer', kind: 'he', lengthMm: 1000, massKg: 160, speedMs: 650, fillKg: 30 },
+  { id: '155mm-he-delay', group: 'Howitzers', calibreMm: 155, name: 'howitzer', kind: 'he-delay', lengthMm: 650, massKg: 43, speedMs: 800, fillKg: 8 },
+  { id: '203mm-he-delay', group: 'Howitzers', calibreMm: 203, name: 'heavy howitzer', kind: 'he-delay', lengthMm: 850, massKg: 90, speedMs: 600, fillKg: 18 },
   // Tank guns
   { id: '105mm-heat', group: 'Tank guns', calibreMm: 105, name: 'tank gun', kind: 'heat', lengthMm: 600, massKg: 10.5, speedMs: 1100, fillKg: 1.6 },
   { id: '120mm-apfsds', group: 'Tank guns', calibreMm: 120, name: 'tank gun', kind: 'dart', lengthMm: 700, massKg: 4.0, speedMs: 1500 },

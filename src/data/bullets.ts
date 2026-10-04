@@ -51,6 +51,10 @@ export interface BlastSpec {
   jet?: { count: number; speedMs: number; massFraction: number; /** A second, delayed jet group (tandem warhead). */ tandem?: boolean };
   /** Fireball look. */
   fireball?: 'standard' | 'thermobaric' | 'incendiary' | 'none';
+  /** Delay fuze: the round goes on through the target and detonates after this much path, in metres, instead of on contact (APHE, bunker-busting HE). */
+  delayM?: number;
+  /** HESH: a charge that spreads on the face and spalls the far side of steel and concrete thinner than a limit set by the yield. */
+  spall?: { count: number; speedMs: number }; 
 }
 
 export interface BulletSpec {
