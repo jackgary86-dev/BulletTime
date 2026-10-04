@@ -111,7 +111,7 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration';
+export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
