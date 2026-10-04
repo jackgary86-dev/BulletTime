@@ -187,7 +187,7 @@ async function bootstrap(): Promise<void> {
     director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
     clearShot();
   };
-  const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, mode, onChange: rebuildTarget });
   await loader.progress(0.25, 'Building the lab');
   laneA = new Lane(renderer, camera, target, spec);
   rebuildTarget(target);

@@ -19,6 +19,8 @@ export interface StackPreset {
   id: string;
   name: string;
   layers: { medium: string; thickness?: number; gapM?: number; look?: MediumLook }[];
+  /** Proving-ground preset: not offered in the Bullet lab. */
+  heavy?: boolean;
 }
 
 /** Classic barrier tests: something in front of a gel block. */
@@ -53,6 +55,20 @@ export const STACK_PRESETS: StackPreset[] = [
     id: 'concrete-gel',
     name: 'Cinder block + gel',
     layers: [{ medium: 'cinder-block' }, { medium: 'gel10', gapM: 0.1, thickness: 0.4 }],
+  },
+  // Proving-ground presets (#232), for Artillery and Missile.
+  { id: 'plate-large', name: 'Large RHA plate', layers: [{ medium: 'rha-plate' }], heavy: true },
+  {
+    id: 'plate-spaced',
+    name: 'Spaced plates (300 mm gap)',
+    layers: [{ medium: 'ar500-plate', thickness: 0.025 }, { medium: 'rha-plate', thickness: 0.1, gapM: 0.3 }],
+    heavy: true,
+  },
+  {
+    id: 'plate-concrete',
+    name: 'Plate in front of concrete',
+    layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
+    heavy: true,
   },
 ];
 
