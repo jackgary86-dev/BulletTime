@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BULLETS } from '../data/bullets';
+import { getMedium } from '../data/media';
 import { ULTRA_RESOLUTION } from '../data/physics';
-import { stepIntoSkippedLayer } from './engine';
+import { stepIntoSkippedLayer, updateYawAndBreakup } from './engine';
 import { fire } from './testUtil';
 
 describe('stepIntoSkippedLayer (#265)', () => {
@@ -66,6 +67,56 @@ describe('thin layers are never skipped (#265)', () => {
     for (const bullet of ['556-m193', '308-sp', '50bmg-fmj']) {
       const tl = fire({ bullet, medium: 'glass', thickness: 0.0007, resolution: ULTRA_RESOLUTION });
       expect(tl.events.some((e) => e.layer === 0 && (e.type === 'impact' || e.type === 'enter'))).toBe(true);
+    }
+  });
+});
+
+/** A shortened step must advance everything by the time it really took, not a full step (#265). */
+describe('thin layer behind a thick one (#265)', () => {
+  const thick = { medium: getMedium('gel10'), thickness: 0.2, gapM: 0 };
+  const thin = (gapM: number) => ({ medium: getMedium('glass'), thickness: 0.0007, gapM });
+
+  it('advances a tumbling round by the time the step really took, not a full step', () => {
+    const medium = getMedium('gel10');
+    const make = () =>
+      ({
+        bullet: { yawNeckM: 0.001, behaviour: 'intact' },
+        state: 'intact',
+        speed: 900,
+        layerDist: 0.05,
+        layer: 0,
+        yaw: 0,
+        yawing: false,
+        fragmented: false,
+        impactSpeed: 900,
+        id: 0,
+        t: 0,
+        pos: { x: 0, y: 0, z: 0 },
+      }) as never as Parameters<typeof updateYawAndBreakup>[1];
+    const ctx = { res: { stepS: 1e-6 }, events: [] } as never as Parameters<typeof updateYawAndBreakup>[0];
+    const full = make();
+    updateYawAndBreakup(ctx, full, medium, 1e-6);
+    const short = make();
+    updateYawAndBreakup(ctx, short, medium, 1e-10);
+    const yaw = (b: unknown) => (b as { yaw: number }).yaw;
+    expect(yaw(full)).toBeGreaterThan(0);
+    // A step 10,000 times shorter turns it 10,000 times less.
+    expect(yaw(short)).toBeCloseTo(yaw(full) / 1e4, 9);
+  });
+
+  it('meets the thin layer behind the thick one exactly once, in and out, however big the gap', () => {
+    for (const gapM of [0, 0.0003, 0.05]) {
+      const tl = fire({ bullet: '556-m193', stack: [{ ...thick, thickness: 0.002, medium: getMedium('plywood') }, thin(gapM)] });
+      const mine = tl.events.filter((e) => e.trackId === tl.shots[0].primaryId && e.layer === 1);
+      expect(mine.filter((e) => e.type === 'enter' || e.type === 'impact').length, `gap ${gapM}`).toBe(1);
+      expect(mine.filter((e) => e.type === 'exit').length, `gap ${gapM}`).toBe(1);
+    }
+  });
+
+  it('records a thin layer at an angle too', () => {
+    for (const angleDeg of [30, 60]) {
+      const tl = fire({ bullet: '556-m193', medium: 'glass', thickness: 0.0007, angleDeg });
+      expect(tl.events.some((e) => e.layer === 0 && (e.type === 'impact' || e.type === 'enter')), `${angleDeg} deg`).toBe(true);
     }
   });
 });

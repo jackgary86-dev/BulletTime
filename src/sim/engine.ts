@@ -626,7 +626,7 @@ function integrate(ctx: Context, body: Body): void {
       body.maxDepth = Math.max(body.maxDepth, depthOf(ctx, body.pos));
       if (body.id === 0 && step % ctx.res.sampleEvery === 0) ctx.vd.push({ depth: body.pathSinceImpact, speed: body.speed });
       updateExpansion(body, medium);
-      updateYawAndBreakup(ctx, body, medium);
+      updateYawAndBreakup(ctx, body, medium, stepS);
     }
 
     step++;
@@ -788,7 +788,8 @@ function updateExpansion(body: Body, medium: MediumSpec): void {
   if (progress >= 1) body.expanding = false;
 }
 
-function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void {
+/** `stepS` is the step just taken, which a thin layer ahead can shorten (#265). */
+export function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec, stepS: number): void {
   const b = body.bullet;
   if (!b) return;
 
@@ -801,7 +802,7 @@ function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void
         event(ctx, body, 'yaw', { layer: body.layer });
       }
       const flip = P.yawFlipDistanceM * Math.max(0.15, medium.yawNeckScale);
-      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * ctx.res.stepS);
+      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * stepS);
     }
   }
 
