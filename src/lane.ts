@@ -173,7 +173,7 @@ export class Lane {
     });
     const timeline = this.session!;
     this.lastFireStart = fireStart;
-    this.shot.load(timeline);
+    this.shot.load(timeline, this.setup.layers[0]?.medium.hardness);
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
     if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
     addVapourTrails(timeline, this.effects.particles);
