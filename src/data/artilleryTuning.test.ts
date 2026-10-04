@@ -84,3 +84,13 @@ describe('delay fuzes and HESH (#190, #191)', () => {
     expect(behindFace(0.4)).toBe(0);
   });
 });
+
+describe('framing for big rounds (#192)', () => {
+  it('reaches back for the length of the shell and caps it for the longest missiles', async () => {
+    const { framingReach } = await import('./modes');
+    expect(framingReach(getBullet('9mm-fmj'))).toBe(0.5);
+    expect(framingReach(getBullet('240mm-he'))).toBeCloseTo(1.2, 5);
+    expect(framingReach(getBullet('missile:cruise:shaped'))).toBe(2.5);
+    expect(framingReach(getBullet('charge-satchel'))).toBe(2);
+  });
+});

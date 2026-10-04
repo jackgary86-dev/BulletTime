@@ -156,7 +156,7 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
           ? s.blastKPa !== undefined
             ? 'Blast in the test bed: see the overpressure and fragment readout.'
             : s.penetrationM > 0
-              ? 'Warhead detonated: the jet and fragments did the work.'
+              ? 'Detonated: the burst and its fragments marked the target.'
               : 'Detonated on contact: no penetration.'
           : s.passedThrough
             ? 'Straight through: too thin to chart.'

@@ -7,7 +7,7 @@ import { Playback } from './sim/playback';
 import { samplePrimary } from './sim/sample';
 import { CameraDirector } from './scene/cameraDirector';
 import { getBullet, type BulletSpec } from './data/bullets';
-import { MODES } from './data/modes';
+import { MODES, framingReach } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
@@ -74,7 +74,7 @@ async function bootstrap(): Promise<void> {
   };
 
   let spec = getBullet(modeInfo.defaultId);
-  director.setReach(spec.standoffM ?? 0.5);
+  director.setReach(framingReach(spec));
   // Lane A is the main setup; lane B only exists while comparing (#14).
   let laneA: Lane | null = null;
   let laneB: Lane | null = null;
@@ -87,7 +87,7 @@ async function bootstrap(): Promise<void> {
     onChange: (next: BulletSpec) => {
       spec = next;
       if (laneA) laneA.spec = next;
-      director.setReach(next.standoffM ?? 0.5);
+      director.setReach(framingReach(next));
     },
   });
 

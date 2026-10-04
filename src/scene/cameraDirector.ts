@@ -166,7 +166,7 @@ export class CameraDirector {
     const depth = Math.min(this.targetDepth, 0.8);
     // Widen to take in a charge standing off from the face, and big targets (the usual 0.5 m reach and 0.3 m face need no change).
     const stand = Math.max(0, this.reach - 0.5);
-    const scale = Math.max(((this.reach + depth) / (0.5 + depth)) * (stand > 0 ? 1.35 : 1), 1 + Math.max(0, this.span - 0.3) * 1.4);
+    const scale = Math.max(((this.reach + depth) / (0.5 + depth)) * (stand > 0 ? 1.35 : 1), 1 + Math.max(0, this.span - 0.3) * 2.2);
     const centreX = this.impactPoint.x + depth / 2 - stand * 0.9;
     pose.look.set(centreX, this.impactPoint.y + Math.max(0, this.span - 0.3) * 0.25, 0);
     pose.position.set(centreX + 0.15, this.impactPoint.y + 0.17 * scale, (1.15 + depth * 0.3) * scale);
