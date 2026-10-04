@@ -2,6 +2,7 @@ import { blastResponse, overpressureKPa } from './blastResponse';
 import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
+import { jetStandoffFactor } from '../data/missiles';
 import { PHYSICS as P, STANDARD_RESOLUTION, type SimResolution } from '../data/physics';
 import { crushFromSpeed } from './crush';
 import { seededRandom } from './random';
@@ -860,7 +861,7 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
     const groups = jet.tandem ? 2 : 1;
     for (let g = 0; g < groups; g++) {
       for (let i = 0; i < jet.count; i++) {
-        const m = (body.mass * jet.massFraction) / jet.count;
+        const m = (body.mass * jet.massFraction * jetStandoffFactor(jet.standoffCal)) / jet.count;
         const dir = perturb(axis, 0.012 * Math.sqrt(ctx.rand()), ctx.rand);
         const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
         const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);

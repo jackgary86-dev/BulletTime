@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_MUNITIONS, BULLETS, getBullet } from '../data/bullets';
 import { ARTILLERY } from '../data/artillery';
 import { EXPLOSIVES } from '../data/explosives';
-import { AIRFRAMES, MISSILES, WARHEADS, findMissile, missileId } from '../data/missiles';
+import { AIRFRAMES, MISSILES, OPTIMUM_STANDOFF_CAL, WARHEADS, findMissile, jetStandoffFactor, missileId } from '../data/missiles';
 import { MODES, roundsForMode } from '../data/modes';
 import { getMedium } from '../data/media';
 import { blastOverpressureKPa, layersFor, simulate } from './engine';
@@ -35,10 +35,10 @@ describe('simulator catalogues', () => {
     expect(Math.max(...calibres)).toBe(240);
   });
 
-  it('builds five airframes with five warheads each', () => {
+  it('builds five airframes with nine warheads each', () => {
     expect(AIRFRAMES).toHaveLength(5);
-    expect(WARHEADS).toHaveLength(5);
-    expect(MISSILES).toHaveLength(25);
+    expect(WARHEADS).toHaveLength(9);
+    expect(MISSILES).toHaveLength(45);
     expect(findMissile(missileId('cruise', 'thermobaric'))?.mode).toBe('missile');
     expect(findMissile('missile:nope:shaped')).toBeUndefined();
   });
@@ -138,6 +138,38 @@ describe('shaped-charge depth (#195, #193)', () => {
 
   it('bores deeper with a tandem warhead, whose second jets follow the first hole', () => {
     for (const a of ['light-rocket', 'guided-at']) expect(calibres(missileId(a, 'tandem'))).toBeGreaterThan(calibres(missileId(a, 'shaped')) * 1.1);
+  });
+});
+
+describe('more shaped-charge heads (#260)', () => {
+  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
+
+  it('a large-calibre head bores deeper than the standard shaped charge', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-large'))).toBeGreaterThan(depth(missileId(a, 'shaped')) * 1.1);
+    // Light rocket: 70 mm calibre, over 5.5 calibres into the plate.
+    expect(depth(missileId('light-rocket', 'shaped-large')) / 0.07).toBeGreaterThan(5.5);
+  });
+
+  it('an explosively formed penetrator is a single slug that bores less than a jet', () => {
+    expect(getBullet(missileId('guided-at', 'efp')).blast?.jet?.count).toBe(1);
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'efp'))).toBeLessThan(depth(missileId(a, 'shaped')));
+  });
+});
+
+describe('jet stand-off (#260)', () => {
+  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
+
+  it('the factor is 1 at the optimum, lower either side, and never below 0.4', () => {
+    expect(jetStandoffFactor(undefined)).toBe(1);
+    expect(jetStandoffFactor(OPTIMUM_STANDOFF_CAL)).toBe(1);
+    expect(jetStandoffFactor(1)).toBeLessThan(1);
+    expect(jetStandoffFactor(10)).toBeLessThan(1);
+    expect(jetStandoffFactor(0)).toBeGreaterThanOrEqual(0.4);
+    expect(jetStandoffFactor(100)).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('a probe bores deeper than a charge fuzed at the nose', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-probe'))).toBeGreaterThan(depth(missileId(a, 'shaped-short')) * 1.15);
   });
 });
 
