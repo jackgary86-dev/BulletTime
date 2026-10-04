@@ -28,12 +28,15 @@ export interface ControlsPanel {
 
 export interface ControlsOptions {
   initialRate: number;
+  /** Whether the clock slows by itself at first contact (#238). */
+  initialSlowMo: boolean;
   initialCamera: CameraMode;
   initialQuality: QualityLevel;
   onFire(): void;
   onReplay(): void;
   onReset(): void;
   onRateChange(rate: number): void;
+  onSlowMoChange(enabled: boolean): void;
   onCameraChange(mode: CameraMode): void;
   onLightingChange(mode: LightingMode): void;
   onQualityChange(level: QualityLevel): void;
@@ -72,6 +75,7 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     <label class="field-label" for="rate-slider">Slow motion <output class="rate-value"></output></label>
     <div class="presets" role="group" aria-label="Slow-motion presets"></div>
     <input id="rate-slider" type="range" min="${MIN_EXPONENT}" max="${MAX_EXPONENT}" step="0.01" />
+    <label class="check-row" title="Slows playback to a tenth around first contact, then eases back to the chosen speed. Scrubbing and replay links are not affected."><input id="impact-slowmo" type="checkbox" /> Slow down at impact</label>
     <dl class="readout">
       <div><dt>Sim time</dt><dd class="readout-time">0 µs</dd></div>
       <div><dt>Velocity</dt><dd class="readout-speed">0 m/s</dd></div>
@@ -134,6 +138,10 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     }
     options.onRateChange(rate);
   }
+
+  const impactSlowMo = panel.querySelector<HTMLInputElement>('#impact-slowmo')!;
+  impactSlowMo.checked = options.initialSlowMo;
+  impactSlowMo.addEventListener('change', () => options.onSlowMoChange(impactSlowMo.checked));
 
   slider.addEventListener('input', () => setRate(10 ** Number(slider.value)));
   fire.addEventListener('click', () => options.onFire());

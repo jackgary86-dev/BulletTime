@@ -6,7 +6,7 @@ import { dimensionLine, fragmentShapes, roomShapes } from '../armor/section';
 import { MAX_LAYERS, STACK_PRESETS, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
 import { activeStage, extendedFrame, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
 import { mountView3d, type View3d } from '../armor/view3d';
-import { playbackAt } from '../armor/playback';
+import { impactBeats, playbackAt, playheadSpeed } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
 import { familyDiagram } from './armorDiagrams';
@@ -103,6 +103,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
         <button type="button" class="armor-play" aria-label="Play or pause">Pause</button>
         <input class="armor-scrub" type="range" min="0" max="1000" value="0" aria-label="Time" />
         <select class="armor-speed" aria-label="Playback speed"></select>
+        <label class="check-row armor-slowmo" title="Slow down at impact: playback slows to a tenth as the round reaches each plate, then eases back."><input type="checkbox" class="armor-slowmo-toggle" checked /> Slow-mo</label>
       </div>
     </section>
     <aside class="armor-side">
@@ -130,6 +131,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const scrub = q<HTMLInputElement>('.armor-scrub');
   const playBtn = q<HTMLButtonElement>('.armor-play');
   const speedSel = q<HTMLSelectElement>('.armor-speed');
+  const slowMoToggle = q<HTMLInputElement>('.armor-slowmo-toggle');
   const overlayBox = q('.armor-overlays');
   const resultsBox = q('.armor-results');
   const explainerBox = q('.armor-explainer');
@@ -445,7 +447,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     last = now;
     if (!playing || !stack) return;
     const factor = SPEEDS[Number(speedSel.value)].factor;
-    u += (dt * factor) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
+    const beat = slowMoToggle.checked ? playheadSpeed(stack, impactBeats(stack.stages), u) : 1;
+    u += (dt * factor * beat) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
     if (u >= 1) {
       u = 1;
       playing = false;

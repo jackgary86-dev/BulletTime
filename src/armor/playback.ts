@@ -11,6 +11,7 @@
  * same thing.
  */
 
+import { warpShape } from '../sim/timeWarp';
 import type { ArmorTimeline } from './model';
 
 /** Share of the scrubber given to the impact phase when there is an aftermath. */
@@ -54,4 +55,41 @@ export function playbackAt(timeline: PlaybackSource, u: number): PlaybackTime {
 export function playheadForImpactTime(timeline: PlaybackSource, t: number): number {
   const x = Math.min(1, Math.max(0, t / timeline.duration));
   return timeline.fragments ? x * IMPACT_SHARE : x;
+}
+
+/** Share of a plate's own penetration time the slow-motion beat eases down over before contact (#238). */
+export const BEAT_LEAD_SHARE = 0.02;
+/** Share of a plate's penetration time the beat holds at its slowest after contact. */
+export const BEAT_HOLD_SHARE = 0.03;
+/** Share of a plate's penetration time the beat takes to ease back to full speed. */
+export const BEAT_RAMP_SHARE = 0.12;
+
+/** One plate's contact on the stack's clock, with the plate's penetration time that sizes its beat. */
+export interface ImpactBeat {
+  t0: number;
+  scaleS: number;
+}
+
+/** The beats of a stack: one per engaged plate, at the moment the round reaches it. */
+export function impactBeats(stages: readonly { offsetT: number; timeline: { duration: number } }[]): ImpactBeat[] {
+  return stages.map((stage) => ({ t0: stage.offsetT, scaleS: stage.timeline.duration }));
+}
+
+/**
+ * How fast the playhead runs at `u` relative to its chosen speed (#238): the
+ * same beat as the simulators, at each plate's impact, sized to that plate's own
+ * penetration time because this clock plays a whole impact in seconds whatever
+ * its real length. Only the impact phase is warped; the aftermath is on its own
+ * log scale. Scrubbing is unaffected: this scales how fast `u` advances, not
+ * what time a given `u` shows.
+ */
+export function playheadSpeed(timeline: PlaybackSource, beats: readonly ImpactBeat[], u: number): number {
+  const pb = playbackAt(timeline, u);
+  if (pb.aftermath) return 1;
+  let factor = 1;
+  for (const { t0, scaleS } of beats) {
+    if (!(scaleS > 0)) continue;
+    factor = Math.min(factor, warpShape((pb.t - t0) / scaleS, BEAT_LEAD_SHARE, BEAT_HOLD_SHARE, BEAT_RAMP_SHARE));
+  }
+  return factor;
 }

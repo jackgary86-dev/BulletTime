@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getPlateMaterial } from './materials';
 import { impactState, type MunitionFamilyId } from './munitions';
-import { IMPACT_SHARE, aftermathEnd, playbackAt, playheadForImpactTime } from './playback';
+import { SLOW_FACTOR } from '../sim/timeWarp';
+import { IMPACT_SHARE, aftermathEnd, impactBeats, playbackAt, playheadForImpactTime, playheadSpeed } from './playback';
 import { simulateArmor } from './simulate';
+import { simulateStack } from './stack';
 
 const run = (family: MunitionFamilyId, thicknessM: number, obliquityDeg = 0, calibreMm = 120) =>
   simulateArmor({ impact: impactState(family, calibreMm), material: getPlateMaterial('rha'), thicknessM, obliquityDeg });
@@ -65,5 +67,56 @@ describe('playback clock (#165)', () => {
     const tl = run('heat', 0.1);
     expect(playheadForImpactTime(tl, tl.duration)).toBeCloseTo(IMPACT_SHARE, 12);
     expect(playbackAt(tl, playheadForImpactTime(tl, tl.duration / 3)).t).toBeCloseTo(tl.duration / 3, 12);
+  });
+});
+
+describe('impact slow-motion on the Armor lab clock (#238)', () => {
+  const stack = () =>
+    simulateStack({
+      impact: impactState('ap-shot', 88),
+      layers: [
+        { material: getPlateMaterial('rha'), thicknessM: 0.02, gapBeforeM: 0 },
+        { material: getPlateMaterial('rha'), thicknessM: 0.02, gapBeforeM: 0.2 },
+      ],
+      obliquityDeg: 0,
+    });
+
+  it('runs at a tenth of the chosen speed at the contact with each plate and full speed in between and in the aftermath', () => {
+    const st = stack();
+    expect(st.stages.length).toBe(2);
+    const beats = impactBeats(st.stages);
+    for (const stage of st.stages) {
+      const u = playheadForImpactTime(st, stage.offsetT + 0.01 * stage.timeline.duration);
+      expect(playheadSpeed(st, beats, u)).toBeCloseTo(SLOW_FACTOR, 9);
+    }
+    if (st.fragments) expect(playheadSpeed(st, beats, 0.99)).toBe(1);
+    // Well after the first plate's beat and before the second's contact the clock is back at full speed.
+    const first = st.stages[0];
+    const tBetween = (first.offsetT + first.timeline.duration + st.stages[1].offsetT) / 2;
+    expect(playheadSpeed(st, beats, playheadForImpactTime(st, tBetween))).toBe(1);
+  });
+
+  it('never stops, never exceeds full speed and is continuous', () => {
+    const st = stack();
+    const beats = impactBeats(st.stages);
+    let previous = playheadSpeed(st, beats, 0);
+    for (let i = 1; i <= 20_000; i++) {
+      const w = playheadSpeed(st, beats, i / 20_000);
+      expect(w).toBeGreaterThanOrEqual(SLOW_FACTOR - 1e-9);
+      expect(w).toBeLessThanOrEqual(1);
+      expect(Math.abs(w - previous)).toBeLessThan(0.05);
+      previous = w;
+    }
+  });
+
+  it('adds a bounded share to the play time of the whole clip', () => {
+    const st = stack();
+    const beats = impactBeats(st.stages);
+    const n = 20_000;
+    let real = 0;
+    for (let i = 0; i < n; i++) real += 1 / n / playheadSpeed(st, beats, (i + 0.5) / n);
+    // Linear play is 1; two beats lengthen it, but by far less than playing everything at a tenth.
+    expect(real).toBeGreaterThan(1.05);
+    expect(real).toBeLessThan(2.5);
   });
 });

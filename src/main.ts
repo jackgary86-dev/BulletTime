@@ -114,9 +114,11 @@ async function bootstrap(): Promise<void> {
 
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
+    initialSlowMo: playback.slowMo,
     initialCamera: 'side',
     initialQuality: quality,
     onRateChange: (rate) => (playback.rate = rate),
+    onSlowMoChange: (enabled) => (playback.slowMo = enabled),
     onCameraChange: (mode) => director.setMode(mode),
     onLightingChange: (mode) => {
       lighting = mode;

@@ -197,6 +197,25 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* A single labelled checkbox under a slider (slow down at impact). */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.armor-slowmo {
+  white-space: nowrap;
+  flex: none;
+}
+
+.check-row input {
+  accent-color: var(--accent, currentColor);
+}
+
 .camera-modes {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -2261,6 +2280,7 @@ body {
 
 .armor-scrub {
   flex: 1;
+  min-width: 0;
 }
 
 .armor-speed {

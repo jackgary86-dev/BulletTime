@@ -1,4 +1,5 @@
 import { deadAir } from './session';
+import { advanceWarped, warpAt } from './timeWarp';
 import type { Timeline } from './types';
 
 /** One display frame at 60 fps, the unit for frame-by-frame stepping. */
@@ -14,6 +15,13 @@ const MIN_STEP_S = 1e-6;
  */
 export class Playback {
   rate = 1 / 1000;
+  /** Whether the clock slows on its own around each round's first contact (#238). */
+  slowMo = true;
+
+  /** The rate playing runs at right now: `rate`, slowed inside an impact beat when `slowMo` is on. */
+  get effectiveRate(): number {
+    return this.slowMo ? this.rate * warpAt(this.simTime, this.impacts) : this.rate;
+  }
 
   /**
    * Sim time one displayed frame's exposure covers (#74), as if filmed with a
@@ -21,12 +29,12 @@ export class Playback {
    * deep slow motion freezes them.
    */
   get shutterS(): number {
-    return DISPLAY_FRAME_S * this.rate * 0.5;
+    return DISPLAY_FRAME_S * this.effectiveRate * 0.5;
   }
 
   /** The frame rate this slow-motion rate implies: one displayed frame per this much sim time (#75). */
   get fps(): number {
-    return 1 / (DISPLAY_FRAME_S * this.rate);
+    return 1 / (DISPLAY_FRAME_S * this.effectiveRate);
   }
 
   timeline: Timeline | null = null;
@@ -34,11 +42,14 @@ export class Playback {
   private playing = false;
   /** Dead air between rounds that playing (not scrubbing) jumps over (#153). */
   private gaps: [number, number][] = [];
+  /** Each round's first-contact time, where the slow-motion beat is centred (#238). */
+  private impacts: number[] = [];
 
   /** Plays `timeline` from `from` seconds (a later shot on a multi-shot timeline starts part-way in). */
   start(timeline: Timeline, from = 0): void {
     this.timeline = timeline;
     this.gaps = deadAir(timeline);
+    this.impacts = timeline.shots.map((shot) => shot.impactTime);
     this.simTime = from;
     this.playing = true;
   }
@@ -47,6 +58,7 @@ export class Playback {
   stop(): void {
     this.timeline = null;
     this.gaps = [];
+    this.impacts = [];
     this.playing = false;
   }
 
@@ -99,7 +111,7 @@ export class Playback {
   update(realDeltaS: number): number | null {
     if (!this.timeline) return null;
     if (this.playing) {
-      this.simTime += realDeltaS * this.rate;
+      this.simTime = this.slowMo ? advanceWarped(this.simTime, realDeltaS, this.rate, this.impacts) : this.simTime + realDeltaS * this.rate;
       // Jump over dead air between rounds; scrubbing and stepping can still go anywhere.
       for (const [from, to] of this.gaps) if (this.simTime > from && this.simTime < to) this.simTime = to;
       if (this.simTime >= this.timeline.duration) {
