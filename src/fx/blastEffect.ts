@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { getBullet, type BulletSpec } from '../data/bullets';
+import { bodyDebris } from './bodyDebris';
 import { TARGET_FRONT_X, layerGroupName } from '../models/targets';
 import { blastResponse, debrisScale, type LayerBlast } from '../sim/blastResponse';
 import type { TargetLayer } from '../sim/engine';
@@ -24,6 +26,13 @@ export function fireballRadius(yieldKg: number, kind: string | undefined): numbe
   return kind === 'thermobaric' ? base * 2.2 : kind === 'incendiary' ? Math.max(0.2, base * 3) : base;
 }
 
+/** The round that burst at `e`, if it is a missile or a shell (a body that crumples). */
+function bodyOf(timeline: Timeline, e: ShotEvent): BulletSpec | undefined {
+  const shot = timeline.shots.find((s) => e.trackId >= s.firstTrack && e.trackId < s.firstTrack + s.trackCount);
+  const spec = shot ? getBullet(shot.bulletId) : undefined;
+  return spec && (spec.shape === 'missile' || spec.mode === 'artillery') && e.trackId === shot!.primaryId ? spec : undefined;
+}
+
 export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], particles: ParticleSystem): void {
   let seed = 9000;
   for (const e of timeline.events) {
@@ -37,6 +46,9 @@ export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], parti
     const axis = charge ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(-1, 0, 0);
     const spread = charge ? Math.PI : 1.5;
     fireball(particles, e, origin, axis, spread, yieldKg, kind, seed++);
+    // A missile or shell is torn apart by the face, not just lit up by its own blast (#248).
+    const spec = bodyOf(timeline, e);
+    if (spec && !charge) bodyDebris(particles, e, spec, e.layer !== undefined ? layers[e.layer]?.medium.hardness ?? 0.8 : 0.8, seed++);
     if (charge) {
       groundRing(particles, e, origin, yieldKg, kind, seed++);
       for (const response of responses(e, layers)) debris(particles, e, response, origin, layers, seed++);
