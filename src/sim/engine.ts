@@ -683,6 +683,10 @@ function exitLayer(ctx: Context, body: Body, index: number): void {
   if (medium.exitDeflectionDeg) {
     body.dir = perturb(body.dir, (medium.exitDeflectionDeg * Math.PI) / 180, ctx.rand);
   }
+  if (medium.behaviour === 'steel' && body.kind !== 'fragment' && body.mass > 0) {
+    // Punching through a plate tears the bullet (and plate spall) into a wide cone of fragments.
+    shed(ctx, body, body.kind === 'pellet' ? 0.3 : 0.45, body.kind === 'pellet' ? 4 : 14, 0.5);
+  }
 }
 
 /** Soft bullets flatten against hard media. */

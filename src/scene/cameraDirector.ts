@@ -44,7 +44,7 @@ interface Pose {
  * view at any time hands control to orbit.
  */
 export class CameraDirector {
-  mode: CameraMode = 'auto';
+  mode: CameraMode = 'side';
   private impactPoint = new THREE.Vector3();
   private targetDepth = 0.4;
   private readonly look = new THREE.Vector3();
@@ -88,7 +88,7 @@ export class CameraDirector {
 
   /** Back to the default framing, snapping rather than easing. */
   reset(): void {
-    this.setMode('auto');
+    this.setMode('side');
     this.sidePose(this.pose);
     this.camera.position.copy(this.pose.position);
     this.look.copy(this.pose.look);

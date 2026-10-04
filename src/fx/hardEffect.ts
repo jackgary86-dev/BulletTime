@@ -217,8 +217,8 @@ function steelEvent(
       seed,
     });
     // Spall: hot steel flakes thrown off the back face.
-    particles.add(sparks(e.t, origin, normal, normal, 80 * w * (0.4 + k)));
-    particles.add(bits('shard', e.t, origin, normal, 0.6, 25 * w * k, [40, 120 + e.speed * 0.2], [0.001, 0.003], STEEL.bright));
+    particles.add(sparks(e.t, origin, normal, normal, 160 * w * (0.4 + k)));
+    particles.add(bits('shard', e.t, origin, normal, 0.9, 60 * w * k, [40, 120 + e.speed * 0.2], [0.001, 0.003], STEEL.bright));
   }
 }
 

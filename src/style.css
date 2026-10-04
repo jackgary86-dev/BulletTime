@@ -1899,3 +1899,94 @@ body {
     display: none;
   }
 }
+
+/* Simulator launcher (#186): above the loading screen, after the content warning. */
+.launcher {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow: auto;
+  background: radial-gradient(ellipse at 50% 40%, #1a1d22 0%, #07080a 75%);
+  color: var(--fg);
+}
+
+.launcher-inner {
+  width: min(880px, 100%);
+  text-align: center;
+}
+
+.launcher h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 44px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.launcher-sub {
+  margin: 4px 0 24px;
+  color: var(--muted);
+}
+
+.launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.launcher-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 170px;
+  padding: 18px 16px;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  background: #15171b;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.launcher-card:not([disabled]):hover,
+.launcher-card:not([disabled]):focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgba(224, 162, 74, 0.25);
+}
+
+.launcher-card[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.launcher-name {
+  font-family: var(--display);
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.launcher-range {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.launcher-blurb {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.launcher-soon {
+  margin-top: auto;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
