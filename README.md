@@ -103,7 +103,7 @@ On itch.io (needs your account):
 
 ```
 src/
-  data/      catalogue and tuning: bullets.ts, media.ts, physics.ts, stacks.ts, organic.ts, dummy.ts
+  data/      catalogue and tuning: bullets.ts, artillery.ts, missiles.ts, explosives.ts, modes.ts, media.ts, physics.ts, stacks.ts, organic.ts, dummy.ts
   sim/       engine.ts (the physics), session.ts (multi-shot), playback.ts, *.test.ts
   models/    procedural 3D: bullet.ts, targets.ts, dummy.ts, textures.ts
   fx/        impact effects, all pure functions of sim time so they scrub
@@ -176,6 +176,86 @@ Add an entry to `MEDIA` in `src/data/media.ts`:
 - Gel-like media also take `cavityPressurePa`, which sets the cavity size. Hollow targets take `shellM`.
 
 Tune `resistancePa` and `dragCoefficient` until a reference round behaves as published. Then run `npm test` and add the medium to the barrier table in `baseline.test.ts` if you want it pinned.
+
+## Adding an artillery shell
+
+Shells are rows in `ROWS` in `src/data/artillery.ts`. Each row is turned into a full round by `shell()`, so you give the real-world numbers and the `kind` and the file works out the behaviour, the model and the blast.
+
+```ts
+{
+  id: '100mm-he',                // unique, used in URLs and tests
+  group: 'Howitzers',            // heading in the picker; reuse an existing one
+  calibreMm: 100,
+  name: 'howitzer',              // a public class name, never a specific weapon
+  kind: 'he',                    // ap | aphe | he | he-delay | heat | hesh | dart
+  lengthMm: 480,
+  massKg: 14,
+  speedMs: 450,
+  fillKg: 2,                     // TNT-equivalent explosive; leave out for solid shot
+}
+```
+
+`kind` decides everything else:
+
+| `kind` | Behaviour | What `blastOf()` gives it |
+| --- | --- | --- |
+| `ap` | Solid shot, a hard core: punches through, never explodes | no blast |
+| `dart` | APFSDS long rod, drawn 32 mm wide whatever the gun | no blast |
+| `aphe` | Goes through plate, then bursts behind it | `delayM` and 26 fragments |
+| `he` | Bursts on the face | fragments scaled to the calibre, up to 64 |
+| `he-delay` | Buries itself in earth or masonry, then bursts | as `he`, plus `delayM` |
+| `heat` | Fires a shaped-charge jet on contact | `jet` and 12 fragments |
+| `hesh` | Spreads on the face, then scabs the far side | `spall` fan and 12 fragments |
+
+The shared lists in the file (`KIND_LABEL`, `KIND_TEXT`) give the type label and the sentence under the data card, so a new row needs no text of its own. A new *kind* of shell means a new case in `blastOf()` and in `KIND_LABEL`/`KIND_TEXT`.
+
+Then run `npm test`. `src/sim/modesBaseline.test.ts` has a coverage test that fails until the shell has a baseline row (depth into 1 m of armour plate, final state, exit speed from 0.4 m of reinforced concrete, fragments), so fire it into `rha` and `reinforced-concrete`, check the numbers look right against published data, and add the row.
+
+## Adding a missile airframe or warhead
+
+A missile is built from one airframe and one warhead, so the catalogue is every pair (5 × 5 today) and one new entry multiplies out. Both lists are in `src/data/missiles.ts`.
+
+- **An airframe** goes in `AIRFRAMES`: `id`, `name`, `description`, body `caliberMm` and `lengthMm`, whole-missile `massKg`, the warhead section's `warheadKg`, and `speedMs` at impact. The warhead section sets the yield and, for jets, the jet mass, so a heavier `warheadKg` means a deeper bore.
+- **A warhead** goes in `WARHEADS` (`id`, `name`, `description`), and `blastFor()` needs a case for it that returns that warhead's `BlastSpec` for a given airframe. A warhead with no case gets a yield of zero. The `penetrator` head is special: `missileSpec()` makes it a narrow dense core with no blast.
+
+`missileId(airframe, head)` gives `missile:<airframe>:<head>`, and `findMissile()` resolves one. Each new pair needs a row in `MISSILE_BASELINE` in `src/sim/modesBaseline.test.ts`. The shaped-charge depth is tuned to about four to five calibres of armour plate and a tandem to five to six (`JET_MASS_SCALE`), and `modes.test.ts` pins that, so a new airframe should land inside it.
+
+## Adding a charge
+
+Charges are in `EXPLOSIVES` in `src/data/explosives.ts`, built with the `charge()` helper. It fills in `behaviour: 'charge'`, the charge model and a zero muzzle velocity, so you supply the rest:
+
+```ts
+charge({
+  id: 'charge-demo',
+  name: 'Demolition charge',
+  type: '3 kg',                  // short label in the picker
+  description: 'One or two sentences under the data card.',
+  caliberMm: 80,                 // size of the 3D model
+  lengthMm: 150,
+  massGrains: gr(3),             // gr() converts kilograms
+  standoffM: 1.5,                // distance from the charge to the material face
+  blast: { yieldKg: 4, fireball: 'standard' },
+}),
+```
+
+Charges are lab test articles, so give no construction detail in the description. `modes.test.ts` checks every charge has a stand-off and the `charge` behaviour, and `modesBaseline.test.ts` needs a row in `CHARGE_BASELINE` (overpressure at the stand-off, final state, fragments, on a 0.19 m concrete block).
+
+## The BlastSpec fields
+
+`BlastSpec` in `src/data/bullets.ts` is what a shell, warhead or charge does when it detonates. Only `yieldKg` is required, and every shell, missile and charge gets its `blast` through the three files above.
+
+| Field | Meaning |
+| --- | --- |
+| `yieldKg` | TNT-equivalent explosive in kg. Sets the fireball, the overpressure and the shockwave, and what the blast does to weak and strong materials. |
+| `fragmentCount` | Fragments thrown. A representative sample, not the real count, to keep the scene fast. |
+| `fragmentSpeedMs` | How fast the fragments fly, in m/s. |
+| `fragmentMassFraction` | Share of the round's mass that becomes fragments (default 0.7). |
+| `jet` | A shaped-charge jet: `count` separate jets at `speedMs`, with `massFraction` of the round in the jet group, and `tandem: true` for a second, delayed group that follows the first hole. |
+| `fireball` | The look: `standard`, `thermobaric` (huge and slow), `incendiary` (flame and sparks, almost no pressure) or `none`. |
+| `delayM` | A delay fuze. The round goes on through the target and detonates after this much path, in metres, instead of on contact (APHE, bunker-busting HE). |
+| `spall` | HESH. `count` fragments at `speedMs` are thrown off the far side of steel and concrete thinner than a limit set by the yield. |
+
+The numbers are plausible game values, not engineering data. If you change one, re-record the affected rows in `modesBaseline.test.ts` and say why in the commit.
 
 ## Choices made where the brief was open
 
