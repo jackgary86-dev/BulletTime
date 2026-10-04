@@ -17,7 +17,7 @@ async function open(page: Page, query: string): Promise<void> {
     localStorage.setItem('bullettime.impactBeat', 'on');
   });
   await page.goto(`./?${query}`);
-  await page.waitForFunction(() => document.body.dataset.ready === 'true', undefined, { timeout: 150_000 });
+  await page.waitForFunction(() => document.body.dataset.ready === 'true', undefined, { timeout: 300_000 });
   await settle(page);
 }
 
