@@ -13,6 +13,7 @@ import { mountOverlay } from './ui/overlay';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
+import { applyReplayLink, parseReplayLink } from './ui/replayLink';
 import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel, type FirePlan } from './ui/shotsPanel';
@@ -326,6 +327,17 @@ async function bootstrap(): Promise<void> {
   });
   await loader.progress(1, 'Ready');
   loader.finish();
+
+  // A replay link (#230): fire the chosen setup and park the replay a set time after first contact.
+  const link = parseReplayLink(location.search);
+  if (link && !laneB) {
+    applyReplayLink(overlay, link);
+    const timeline = fireShot(shotsPanel.plan());
+    if (timeline) {
+      playback.seek((timeline.shots[0]?.impactTime ?? 0) + link.atS);
+      scrubber.sync();
+    }
+  }
 }
 
 /**
