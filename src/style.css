@@ -1201,6 +1201,20 @@ body {
   display: none;
 }
 
+/* While a shot plays the results wait, and the shot panel's own time and speed give way to the readout (#239). */
+.shot-results {
+  transition: opacity 0.25s ease;
+}
+
+.shot-playing .shot-results {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shot-playing .controls .readout {
+  visibility: hidden;
+}
+
 /* Clean frame (#239): every panel and the readout hidden, for screenshots. */
 #overlay.clean-frame > * {
   visibility: hidden !important;
@@ -1211,6 +1225,12 @@ body {
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
+}
+
+/* `.controls button` sets `font: inherit`, so the button's own size needs the panel in the selector. */
+.controls .clean-frame-btn {
+  padding: 7px 10px;
+  font-size: 13px;
 }
 
 .clean-frame-btn kbd {

@@ -300,6 +300,8 @@ async function bootstrap(): Promise<void> {
     const delta = Math.max(0, Math.min(timer.getDelta(), 0.1));
     // Read before update: the frame that reaches the end of the shot stops playback but still plays its sounds.
     const advancing = playback.isPlaying;
+    // While a shot plays only the two readouts sit over the scene; the results come in when it stops (#239).
+    overlay.classList.toggle('shot-playing', advancing);
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
