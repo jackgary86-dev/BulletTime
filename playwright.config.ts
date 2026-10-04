@@ -16,9 +16,10 @@ export default defineConfig({
   testDir: 'tests/visual',
   outputDir: 'test-results/visual',
   // Software rendering of a whole lab is slow; each shot loads the page afresh.
-  timeout: 180_000,
+  timeout: 360_000,
   expect: {
-    timeout: 60_000,
+    // One software-rendered frame of a large blast can take over a minute.
+    timeout: 180_000,
     // A changed effect moves thousands of pixels; SwiftShader noise on a different CPU moves a handful.
     toHaveScreenshot: { maxDiffPixelRatio: 0.01, threshold: 0.2, animations: 'disabled' },
   },
