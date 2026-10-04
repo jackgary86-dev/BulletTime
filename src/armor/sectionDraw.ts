@@ -8,17 +8,19 @@
  */
 
 import type { PenetratorMaterial } from './munitions';
+import type { EnergyBalance } from './fields';
+import { TEACHING_NOTE, legendTicks, palette, paletteColor, type FieldOverlay } from './fieldOverlay';
 import type { DimensionLine, DrawnFragment, Point, RoomShapes, SectionShapes } from './section';
 
-/** The field shown over the plate. Only 'energy' is drawn so far; the rest wait for the field models (#166). */
+/** The field shown over the plate: 'energy' is the heat glow, the others are the field models (#166), painted from `FieldOverlay`. */
 export type OverlayId = 'none' | 'energy' | 'temperature' | 'stress' | 'pressure';
 
 export const OVERLAYS: { id: OverlayId; label: string; ready: boolean; hint: string }[] = [
   { id: 'none', label: 'Plain section', ready: true, hint: 'The sawn plate only.' },
   { id: 'energy', label: 'Energy', ready: true, hint: 'Heat from the energy deposited so far: brighter and wider as the impact does more work.' },
-  { id: 'temperature', label: 'Temperature', ready: false, hint: 'Needs the field models (#166).' },
-  { id: 'stress', label: 'Stress', ready: false, hint: 'Needs the field models (#166).' },
-  { id: 'pressure', label: 'Pressure wave', ready: false, hint: 'Needs the field models (#166).' },
+  { id: 'temperature', label: 'Temperature', ready: true, hint: 'Heat in the metal in °C: hot at the crater wall, a shear band round a plug, melting in a jet or rod interface.' },
+  { id: 'stress', label: 'Stress', ready: true, hint: 'Von Mises stress over yield: highest at the penetrator nose, 1 or more is plastic flow.' },
+  { id: 'pressure', label: 'Pressure wave', ready: true, hint: 'The compression front spreading at the speed of sound (red) and reflecting off the rear face as tension (blue).' },
 ];
 
 /** Colour of the penetrator, by its material. */
@@ -57,6 +59,12 @@ export interface SectionExtras {
   dimension?: DimensionLine;
   room?: RoomShapes | null;
   fragments?: DrawnFragment[];
+  /** A field (#166) painted over the sawn plate, with its legend. */
+  field?: FieldOverlay | null;
+  /** The energy account, drawn as a bar. */
+  energy?: EnergyBalance | null;
+  /** A scale bar: its length in pixels and its label. */
+  scaleBar?: { px: number; label: string } | null;
 }
 
 /** Colour of each kind of thrown piece. */
@@ -112,8 +120,11 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
     ctx.stroke();
   }
 
+  // A field painted on the cut face: the coarse grid upscaled over the plate.
+  if (extras.field) drawField(ctx, extras.field, plate);
+
   // The heat glow centred on the digging end of the crater, wider and brighter with energy deposited.
-  if (style.overlay === 'energy' && shapes.heat > 0) {
+  if (style.overlay === 'energy' && !extras.field && shapes.heat > 0) {
     const cx = shapes.penetrator.noseX < plate.x ? plate.x : Math.min(shapes.penetrator.noseX, plate.x + plate.width);
     const radius = Math.max(40, plate.width * 0.9 * (0.35 + 0.65 * shapes.heat) + 30);
     const glow = ctx.createRadialGradient(cx, axisY, 0, cx, axisY, radius);
@@ -189,7 +200,149 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
 
   if (extras.fragments) for (const f of extras.fragments) drawFragment(ctx, f);
   if (extras.dimension) drawDimension(ctx, extras.dimension);
+  if (extras.field) drawLegend(ctx, extras.field, width, height);
+  if (extras.energy) drawEnergyBar(ctx, extras.energy);
+  if (extras.scaleBar) drawScaleBar(ctx, extras.scaleBar, height);
 }
+
+let overlayCanvas: HTMLCanvasElement | null = null;
+
+/** Paints a field's RGBA grid over the plate, smoothed, clipped to the plate. */
+function drawField(ctx: CanvasRenderingContext2D, field: FieldOverlay, plate: { x: number; y: number; width: number; height: number }): void {
+  overlayCanvas ??= document.createElement('canvas');
+  overlayCanvas.width = field.cols;
+  overlayCanvas.height = field.rows;
+  const octx = overlayCanvas.getContext('2d');
+  if (!octx) return;
+  octx.putImageData(new ImageData(new Uint8ClampedArray(field.rgba), field.cols, field.rows), 0, 0);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plate.x, plate.y, plate.width, plate.height);
+  ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(overlayCanvas, plate.x, plate.y, plate.width, plate.height);
+  ctx.restore();
+}
+
+/** A colour bar down the right edge with ticks in real units, and the teaching-approximation note under it. */
+function drawLegend(ctx: CanvasRenderingContext2D, field: FieldOverlay, width: number, height: number): void {
+  const barW = 12;
+  const barH = Math.min(150, height * 0.4);
+  const x = width - barW - 70;
+  const y = Math.max(96, height / 2 - barH / 2);
+  ctx.save();
+  const grad = ctx.createLinearGradient(0, y + barH, 0, y);
+  const stops = palette(field.kind);
+  const n = 16;
+  for (let i = 0; i <= n; i++) {
+    const [r, g, b] = field.scale.diverging ? divergingStop(i / n) : paletteColor(stops, i / n);
+    grad.addColorStop(i / n, `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`);
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, barW, barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 0.5, y - 0.5, barW + 1, barH + 1);
+  ctx.font = '11px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#e6e9ee';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 4;
+  for (const tick of legendTicks(field.scale)) {
+    const ty = y + barH * (1 - tick.position);
+    ctx.fillRect(x + barW, ty - 0.5, 4, 1);
+    ctx.fillText(tick.label, x + barW + 7, ty);
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'right';
+  ctx.fillText(field.scale.label, x + 70, y - 10);
+  ctx.textAlign = 'left';
+  ctx.font = '9px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(230,233,238,0.75)';
+  ctx.fillText(TEACHING_NOTE, x - 70, y + barH + 16, 150);
+  ctx.restore();
+}
+
+/** The legend bar's colours for a diverging scale: tension blue, dark centre, compression red. */
+function divergingStop(v: number): [number, number, number] {
+  const m = Math.abs(2 * v - 1);
+  const base: [number, number, number] = v < 0.5 ? [66, 135, 245] : [245, 80, 60];
+  const k = 0.35 + 0.65 * m;
+  const c = 1 - m;
+  return [base[0] * k * m + 24 * c, base[1] * k * m + 26 * c, base[2] * k * m + 32 * c];
+}
+
+/** Colours of the energy bar's segments, in order along it. */
+export const ENERGY_SEGMENTS: { key: 'kineticJ' | 'heatJ' | 'plasticJ' | 'ejectaJ' | 'residualJ'; label: string; color: string }[] = [
+  { key: 'kineticJ', label: 'kinetic', color: '#7fb4ff' },
+  { key: 'heatJ', label: 'heat', color: '#ff8a3d' },
+  { key: 'plasticJ', label: 'plastic', color: '#d4577a' },
+  { key: 'ejectaJ', label: 'thrown metal', color: '#9aa3ad' },
+  { key: 'residualJ', label: 'carried on', color: '#7ee0a0' },
+];
+
+/** The impact energy as a stacked bar: where it is right now. */
+function drawEnergyBar(ctx: CanvasRenderingContext2D, e: EnergyBalance): void {
+  if (!(e.impactJ > 0)) return;
+  const x = 12;
+  const y = 36;
+  const w = 220;
+  const h = 8;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(x, y, w, h);
+  let cursor = x;
+  for (const seg of ENERGY_SEGMENTS) {
+    const share = e[seg.key] / e.impactJ;
+    if (share <= 0) continue;
+    ctx.fillStyle = seg.color;
+    ctx.fillRect(cursor, y, share * w, h);
+    cursor += share * w;
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+  ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 3;
+  let lx = x;
+  for (const seg of ENERGY_SEGMENTS) {
+    ctx.fillStyle = seg.color;
+    ctx.fillRect(lx, y + h + 5, 7, 7);
+    ctx.fillStyle = 'rgba(230,233,238,0.85)';
+    ctx.fillText(seg.label, lx + 10, y + h + 4);
+    lx += 10 + ctx.measureText(seg.label).width + 9;
+  }
+  ctx.restore();
+}
+
+/** A scale bar bottom left: a bar with end ticks and its length. */
+function drawScaleBar(ctx: CanvasRenderingContext2D, bar: { px: number; label: string }, height: number): void {
+  const x = 14;
+  const y = height - 58;
+  ctx.save();
+  ctx.strokeStyle = '#e6e9ee';
+  ctx.fillStyle = '#e6e9ee';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + bar.px, y);
+  ctx.moveTo(x, y - 4);
+  ctx.lineTo(x, y + 4);
+  ctx.moveTo(x + bar.px, y - 4);
+  ctx.lineTo(x + bar.px, y + 4);
+  ctx.stroke();
+  ctx.font = '11px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'left';
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 4;
+  ctx.fillText(bar.label, x, y - 9);
+  ctx.restore();
+}
+
 
 function drawRoom(ctx: CanvasRenderingContext2D, room: RoomShapes, width: number): void {
   ctx.save();

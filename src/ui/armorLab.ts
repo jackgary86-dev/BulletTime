@@ -4,6 +4,8 @@ import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactSta
 import { OVERLAYS, drawSection, type OverlayId } from '../armor/sectionDraw';
 import { dimensionLine, fragmentShapes, roomShapes, sectionLayout, sectionShapes } from '../armor/section';
 import { playbackAt } from '../armor/playback';
+import { energyBalance } from '../armor/fields';
+import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
 import { simulateArmor } from '../armor/simulate';
 import { familyDiagram } from './armorDiagrams';
 
@@ -187,6 +189,11 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     redraw();
   };
 
+  const scaleBar = (pxPerM: number) => {
+    const length = niceScaleLength(pxPerM, 140);
+    return { px: length * pxPerM, label: scaleLabel(length) };
+  };
+
   const redraw = () => {
     const rect = canvas.getBoundingClientRect();
     const w = rect.width || canvas.width;
@@ -202,7 +209,14 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const shapes = sectionShapes(timeline, frame, layout, pb.fragmentT);
     const impact = timeline.shot.impact;
     drawSection(ctx, shapes, { plateColor: timeline.shot.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat' },
-      { dimension: dimensionLine(timeline, layout), room: roomShapes(timeline, layout), fragments: fragmentShapes(timeline, pb.fragmentT, layout) });
+      {
+        dimension: dimensionLine(timeline, layout),
+        room: roomShapes(timeline, layout),
+        fragments: fragmentShapes(timeline, pb.fragmentT, layout),
+        field: overlay === 'temperature' || overlay === 'stress' || overlay === 'pressure' ? buildOverlay(timeline, pb.fragmentT, overlay, layout) : null,
+        energy: energyBalance(timeline, pb.fragmentT),
+        scaleBar: scaleBar(layout.pxPerM),
+      });
     q('.armor-hud-time').textContent = `t = ${clock(pb.fragmentT)}`;
     q('.armor-hud-depth').textContent = `depth ${mm(frame.depth)} of ${mm(timeline.result.losThicknessM)}`;
     q('.armor-hud-speed').textContent = `${Math.round(frame.speed)} m/s`;
