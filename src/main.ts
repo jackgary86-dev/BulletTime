@@ -10,6 +10,7 @@ import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
+import { mountCleanFrame } from './ui/cleanFrame';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
@@ -114,12 +115,14 @@ async function bootstrap(): Promise<void> {
     panel.setHasShot(false);
   };
 
+  const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'));
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
     initialImpactBeat: playback.impactBeat,
     initialCamera: 'side',
     initialQuality: quality,
     onRateChange: (rate) => (playback.rate = rate),
+    onCleanFrame: () => cleanFrame.toggle(),
     onImpactBeatChange: (on) => {
       playback.impactBeat = on;
       saveImpactBeat(on);
@@ -166,7 +169,7 @@ async function bootstrap(): Promise<void> {
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
     }
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ), laneA.depth, laneA.faceSpan);
+    director.setAim(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
     unlockAudio();
     playback.start(clock, laneA.lastFireStart);
     cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
@@ -301,7 +304,7 @@ async function bootstrap(): Promise<void> {
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
       panel.setReadout(t, primary?.speed ?? 0);
-      hud.set(t, playback.fps, playback.shutterS);
+      hud.set(t, primary?.speed ?? 0);
       scrubber.sync();
       results.update(t);
       if (laneB) resultsB.update(t);

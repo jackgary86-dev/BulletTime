@@ -1,11 +1,11 @@
 /**
- * Burned-in readout of a high-speed camera (#75), as on Phantom footage: a
- * recording dot, the timecode since the trigger, the frame rate the current
- * slow-motion rate implies, the shutter, and the frame number.
+ * Burned-in readout of a high-speed camera (#75, #239): the timecode since the
+ * trigger and the round's current speed, and nothing else. Depth, energy and
+ * the rest are in the results panel.
  */
 export interface CameraHud {
-  /** Shows the readout at sim time `t`, filmed at `fps` with a `shutterS` exposure. */
-  set(t: number, fps: number, shutterS: number): void;
+  /** Shows the readout at sim time `t` with the round moving at `speed` m/s. */
+  set(t: number, speed: number): void;
   hide(): void;
 }
 
@@ -15,25 +15,18 @@ export function mountCameraHud(root: HTMLElement): CameraHud {
   hud.setAttribute('aria-hidden', 'true');
   hud.hidden = true;
   hud.innerHTML = `
-    <span class="hud-rec">REC</span>
     <span class="hud-time"></span>
-    <span class="hud-fps"></span>
-    <span class="hud-shutter"></span>
-    <span class="hud-frame"></span>
+    <span class="hud-speed"></span>
   `;
   root.append(hud);
   const time = hud.querySelector<HTMLSpanElement>('.hud-time')!;
-  const fpsText = hud.querySelector<HTMLSpanElement>('.hud-fps')!;
-  const shutter = hud.querySelector<HTMLSpanElement>('.hud-shutter')!;
-  const frame = hud.querySelector<HTMLSpanElement>('.hud-frame')!;
+  const speedText = hud.querySelector<HTMLSpanElement>('.hud-speed')!;
 
   return {
-    set(t, fps, shutterS) {
+    set(t, speed) {
       hud.hidden = false;
       time.textContent = formatTimecode(t);
-      fpsText.textContent = `${formatCount(fps)} fps`;
-      shutter.textContent = formatShutter(shutterS);
-      frame.textContent = `F ${String(Math.floor(t * fps + 1e-6)).padStart(6, '0')}`;
+      speedText.textContent = formatSpeed(speed);
     },
     hide() {
       hud.hidden = true;
@@ -54,7 +47,7 @@ export function formatCount(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
-/** An exposure as a shutter speed, e.g. 1/120 000 s. */
-export function formatShutter(seconds: number): string {
-  return seconds > 0 ? `1/${formatCount(1 / seconds)} s` : '';
+/** A speed in metres per second, e.g. 1 240 m/s. */
+export function formatSpeed(metresPerSecond: number): string {
+  return `${formatCount(Math.max(0, metresPerSecond))} m/s`;
 }

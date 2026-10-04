@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { springTo } from './cameraDirector';
 import { flashExposure } from './gradePass';
-import { formatShutter, formatTimecode } from '../ui/cameraHud';
+import { formatSpeed, formatTimecode } from '../ui/cameraHud';
 
 describe('camera spring (#75)', () => {
   const settle = (dt: number, seconds: number) => {
@@ -39,9 +39,9 @@ describe('muzzle flash exposure (#75)', () => {
 });
 
 describe('camera readout (#75)', () => {
-  it('formats the timecode and shutter', () => {
+  it('formats the timecode and speed', () => {
     expect(formatTimecode(0.0003)).toBe('T+0.000 300 s');
     expect(formatTimecode(1.25)).toBe('T+1.250 000 s');
-    expect(formatShutter(1 / 120000)).toBe('1/120 000 s');
+    expect(formatSpeed(1240.4)).toBe('1 240 m/s');
   });
 });

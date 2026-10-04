@@ -1201,28 +1201,36 @@ body {
   display: none;
 }
 
-.hud-rec {
+/* Clean frame (#239): every panel and the readout hidden, for screenshots. */
+#overlay.clean-frame > * {
+  visibility: hidden !important;
+}
+
+.clean-frame-btn {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  color: #ff5a4e;
+  font-size: 12px;
 }
 
-.hud-rec::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ff3b30;
-  box-shadow: 0 0 6px rgba(255, 59, 48, 0.8);
+.clean-frame-btn kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
-/* Narrow screens: keep the timecode and frame rate only. */
-@media (max-width: 900px) {
-  .camera-hud .hud-shutter,
-  .camera-hud .hud-frame {
-    display: none;
-  }
+.clean-frame-hint {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(10, 11, 14, 0.85);
+  color: rgba(236, 240, 244, 0.9);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 50;
 }
 
 /* Comparing: the compare bar grows, so drop the readout below it. */
@@ -1554,13 +1562,6 @@ body {
   }
 }
 
-/* Portrait tablets: timecode only, so it fits in the gap between the side columns. */
-@media (min-width: 761px) and (max-width: 900px) and (min-height: 821px) {
-  .camera-hud .hud-fps {
-    display: none;
-  }
-}
-
 /* Narrow portrait windows have no gap between the columns: the readout joins the left
    column, under the round card and above Compare. */
 @media (min-width: 601px) and (max-width: 760px) and (min-height: 821px) {
@@ -1568,10 +1569,6 @@ body {
     top: 290px;
     left: 20px;
     transform: none;
-  }
-
-  .camera-hud .hud-fps {
-    display: none;
   }
 }
 
