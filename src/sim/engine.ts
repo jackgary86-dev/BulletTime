@@ -293,6 +293,9 @@ interface Body {
   /** After leaving a panel the bullet keeps losing speed to its broken back scab (#225): deceleration in m/s² until this time. */
   tailDecel?: number;
   tailUntil?: number;
+  /** A short, harder first phase of the tail (#225), until `burstUntil`. */
+  burstDecel?: number;
+  burstUntil?: number;
   state: FinalState;
   expanding: boolean;
   expansionStartDist: number;
@@ -562,7 +565,8 @@ function integrate(ctx: Context, body: Body): void {
     }
 
     const tailing = !medium && body.tailUntil !== undefined && body.t < body.tailUntil;
-    const dv = (force / body.mass) * dt + (tailing ? (body.tailDecel ?? 0) * dt : 0);
+    const bursting = !medium && body.burstUntil !== undefined && body.t < body.burstUntil;
+    const dv = (force / body.mass) * dt + (tailing ? (body.tailDecel ?? 0) * dt : 0) + (bursting ? (body.burstDecel ?? 0) * dt : 0);
     let newSpeed = Math.max(0, body.speed - dv);
     // The motor keeps pushing in the air until the missile is up to speed.
     if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * dt);
@@ -728,6 +732,8 @@ function exitLayer(ctx: Context, body: Body, index: number): void {
   if (medium.exitTail && body.kind !== 'fragment') {
     body.tailDecel = medium.exitTail.decelMs2;
     body.tailUntil = body.t + medium.exitTail.durationS;
+    body.burstDecel = medium.exitTail.burst?.decelMs2;
+    body.burstUntil = medium.exitTail.burst ? body.t + medium.exitTail.burst.durationS : undefined;
   }
   if (medium.behaviour === 'steel' && body.kind !== 'fragment' && body.mass > 0) {
     // Punching through a plate tears the bullet (and plate spall) into a wide cone of fragments.

@@ -13,7 +13,7 @@ const AT_HALF_MS: Array<[string, number]> = [
 // The trace values are read off plots (about +/-5 m/s). C110's 153 m/s shot sits right at its 152.5 m/s ballistic
 // limit, where the measured residuals scatter (27, 15 and 43 m/s at 155, 165 and 153.6 m/s); the model stops
 // the bullet harder there, so C110 is only pinned to "no faster than the trace".
-const BAND_MS: Record<string, number> = { c35: 8, c75: 8 };
+const BAND_MS: Record<string, number> = { c35: 4, c75: 8 };
 
 function speedProfile(grade: string, v: number) {
   const timeline = simulate({
@@ -39,6 +39,11 @@ describe('concrete velocity loss (#225)', () => {
   it.each(AT_HALF_MS)('%s: most of the speed is gone by 0.5 ms', (grade) => {
     const at = speedProfile(grade, 155);
     expect(at(0.5)).toBeLessThan(0.5 * at(0));
+  });
+
+  it('c35: the slug is down to the measured 55 m/s by 2.7 ms', () => {
+    const at = speedProfile('c35', 155);
+    expect(Math.abs(at(2.7) - 55)).toBeLessThanOrEqual(4);
   });
 
   it.each(AT_HALF_MS)('%s: the tail after 1 ms slows under 15 m/s per ms', (grade) => {
