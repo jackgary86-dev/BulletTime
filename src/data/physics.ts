@@ -54,6 +54,11 @@ export const PHYSICS = {
   cavitySampleM: 0.005,
   /** Permanent wound channel radius as a multiple of the bullet's current radius. */
   channelRadiusFactor: 1.4,
+  /**
+   * Temporary cavity venting at the entry face (#228): the cavity reaches 63% of its open-gel size one
+   * VENT_RATIO × that size into the block. Shapes the cavity so it is pinched at the entry and widest deeper in.
+   */
+  cavityVentRatio: 0.5,
 } as const;
 
 /** How finely a shot is integrated and recorded. */
