@@ -2,6 +2,7 @@ import { energyIntoLayer, objectOutcome } from '../data/objects';
 import type { StackLayer } from '../data/stacks';
 import type { OrganicResult } from '../fx/bloodPackEffect';
 import type { TargetLayer } from '../sim/engine';
+import { concreteDebrisAccounting, energyAccounting } from '../sim/accounting';
 import { sampleTrack } from '../sim/sample';
 import type { ShotSummary, Timeline, Track, Vec3 } from '../sim/types';
 
@@ -102,7 +103,7 @@ export function mountShotResults(root: HTMLElement, className = ''): ShotResults
       q('.results-title').textContent = label ?? title;
       q('.results-title').title = label ?? '';
       const hasCavity = layers.some((l) => l.medium.behaviour === 'gel' || l.medium.behaviour === 'water');
-      q('.results-readout').innerHTML = readout(s, hasCavity)
+      q('.results-readout').innerHTML = [...readout(s, hasCavity), ...concreteRows(s, layers)]
         .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
         .join('');
       q('.results-line').textContent = `${Math.round(s.impactSpeed)} m/s · ${formatEnergy(s.impactEnergyJ)} · ${outcomeLine(s)}`;
@@ -270,6 +271,26 @@ function readout(s: ShotSummary, hasCavity: boolean): [string, string][] {
   ];
   // The temporary cavity only means something in gel and water.
   if (hasCavity) rows.push(['Max temp. cavity', s.maxCavityDiameter > 0 ? formatDepth(s.maxCavityDiameter) : '—']);
+  return rows;
+}
+
+/** A measured concrete panel (#227): what the bullet kept, what the panel took, and the scab and spall it threw. */
+function concreteRows(s: ShotSummary, layers: TargetLayer[]): [string, string][] {
+  const layer = layers.find((l) => l.medium.concreteDamage);
+  if (!layer || s.blastKPa !== undefined || s.impactSpeed <= 0) return [];
+  const acc = energyAccounting(s);
+  const percent = (x: number) => `${Math.round(x * 100)}%`;
+  const rows: [string, string][] = [
+    ['Energy left', `${formatEnergy(acc.residualJ)}<small>${percent(acc.retained)} of impact</small>`],
+    ['Absorbed by panel', percent(acc.absorbed)],
+  ];
+  const debris = concreteDebrisAccounting(layer.medium, layer.thickness, acc);
+  if (debris) {
+    const grams = (kg: number) => `${Math.round(kg * 1000).toLocaleString('en-US')} g`;
+    rows.push(['Spall (front)', `${grams(debris.spallKg)}<small>~${Math.round(debris.spallSpeedMs)} m/s</small>`]);
+    if (debris.scabKg > 0) rows.push(['Scab (back)', `${grams(debris.scabKg)}<small>~${Math.round(debris.scabSpeedMs)} m/s</small>`]);
+    if (!debris.consistent) rows.push(['Momentum check', 'Debris and bullet do not balance']);
+  }
   return rows;
 }
 
