@@ -29,6 +29,7 @@ const tmpPos = new THREE.Vector3();
 export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
+  private targetHardness = CRUMPLE_HARDNESS;
   private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][]; trail?: MissileTrail; crumples: boolean }[] = [];
   /**
    * Wakes and streaks from earlier shots, kept for the next one: freeing their
@@ -63,9 +64,11 @@ export class ShotRenderer {
   }
 
   /** Prepares models for every shot on the timeline (each shot may be a different round). */
-  load(timeline: Timeline): void {
+  /** `targetHardness` (0-1, the struck front layer) sets how fast a missile or shell body folds against it (#248). */
+  load(timeline: Timeline, targetHardness = CRUMPLE_HARDNESS): void {
     this.clear();
     this.timeline = timeline;
+    this.targetHardness = targetHardness;
     for (const shot of timeline.shots) {
       const spec = getBullet(shot.bulletId);
       if (spec.behaviour === 'shot') {
@@ -135,7 +138,7 @@ export class ShotRenderer {
       if (!frame && crumples) {
         const last = track.keyframes[track.keyframes.length - 1];
         const since = t - last.t;
-        const duration = crumpleDuration(model.length, last.speed, CRUMPLE_HARDNESS);
+        const duration = crumpleDuration(model.length, last.speed, this.targetHardness);
         if (since >= 0 && bodyVisible(since, duration)) {
           frame = { ...last, speed: 0 };
           crush = crumpleProgress(since, duration);
@@ -207,7 +210,7 @@ export class ShotRenderer {
   }
 }
 
-/** Target hardness the crumple assumes until the renderer is told the struck material. */
+/** Target hardness the crumple assumes when the struck material is not given. */
 const CRUMPLE_HARDNESS = 0.8;
 
 /** Points a model (nose along local +x, origin at the nose) along the keyframe's direction, then yaws it. */
