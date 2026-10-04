@@ -953,10 +953,15 @@ function addCavitySample(ctx: Context, body: Body, medium: MediumSpec, layer: nu
   const { heightM, widthM } = medium;
   // The block bulges, but the cavity can't grow far past its walls.
   const maxRadius = 0.55 * Math.min(heightM, widthM);
-  const radius = Math.min(maxRadius, Math.sqrt(energyPerMetre / (Math.PI * pressure)));
+  const open = Math.sqrt(energyPerMetre / (Math.PI * pressure));
   const layerOffset = ctx.setup.layers[layer].offset;
+  const depth = depthOf(ctx, body.pos) - layerOffset;
+  // Near the entry face the gel vents back out of the hole instead of being pushed sideways (#228), so the
+  // cavity is pinched at the entry and swells deeper in: the classic pear shape, widest well into the track.
+  const vent = 1 - Math.exp(-Math.max(0, depth) / (P.cavityVentRatio * Math.max(open, 1e-4)));
+  const radius = Math.min(maxRadius, open * vent);
   ctx.cavity.push({
-    depth: depthOf(ctx, body.pos) - layerOffset,
+    depth,
     pos: { ...body.pos },
     t: body.t,
     radius,

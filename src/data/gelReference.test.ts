@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { layersFor, simulate } from '../sim/engine';
 import { GEL_REFERENCE } from './gelReference';
 import { getMedium } from './media';
+import { BULLETS } from './bullets';
 
 /** Gelatin penetration, cavity and retained weight against the single-shot reference tracks (#228). Tolerance 20%. */
 const GR = 6.479891e-5;
@@ -47,6 +48,25 @@ describe('gel reference tracks (#228)', () => {
       expect(widest).toBeGreaterThan(5 * (bullet.caliberMm / 1000));
       const channel = Math.max(...timeline.cavity.map((c) => c.channelRadius * 2));
       expect(channel).toBeLessThan(widest / 4);
+    }
+  });
+
+  it.each(GEL_REFERENCE)('$id temporary cavity is pinched at the entry and widest well into the track', ({ bullet }) => {
+    const timeline = shoot(bullet);
+    const cavity = timeline.cavity.filter((c) => c.layer === 0);
+    const widest = cavity.reduce((a, c) => (c.radius > a.radius ? c : a));
+    const track = timeline.summary.penetrationM;
+    expect(widest.depth).toBeGreaterThan(0.1 * track);
+    expect(widest.depth).toBeGreaterThan(0.04);
+    const entry = Math.max(...cavity.filter((c) => c.depth <= 0.05 * track).map((c) => c.radius));
+    expect(entry).toBeLessThan(0.75 * widest.radius);
+  });
+
+  it('no round in the selector has its widest cavity at the entry face', () => {
+    for (const bullet of BULLETS.filter((b) => b.behaviour !== 'explosive' && b.behaviour !== 'shot')) {
+      const cavity = shoot(bullet).cavity.filter((c) => c.layer === 0);
+      const widest = cavity.reduce((a, c) => (c.radius > a.radius ? c : a));
+      expect(widest.depth, bullet.id).toBeGreaterThan(0.025);
     }
   });
 
