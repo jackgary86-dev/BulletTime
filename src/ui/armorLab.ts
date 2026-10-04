@@ -4,7 +4,8 @@ import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactSta
 import { OVERLAYS, drawSection, type OverlayId } from '../armor/sectionDraw';
 import { dimensionLine, fragmentShapes, roomShapes } from '../armor/section';
 import { MAX_LAYERS, STACK_PRESETS, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
-import { activeStage, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
+import { activeStage, extendedFrame, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
+import { mountView3d, type View3d } from '../armor/view3d';
 import { playbackAt } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
@@ -90,6 +91,11 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     <section class="armor-stage">
       <div class="armor-hud"><span class="armor-hud-time"></span><span class="armor-hud-depth"></span><span class="armor-hud-speed"></span></div>
       <canvas class="armor-canvas" aria-label="Cut-away cross-section of the plate"></canvas>
+      <canvas class="armor-canvas-3d" aria-label="Sectioned plate on the test bench" hidden></canvas>
+      <div class="armor-view" role="group" aria-label="View">
+        <button type="button" data-view="2d" class="active">2D section</button>
+        <button type="button" data-view="3d">3D view</button>
+      </div>
       <p class="armor-caption" aria-live="polite"></p>
       <p class="armor-notice" hidden></p>
       <div class="armor-overlays" role="group" aria-label="Field overlay"></div>
@@ -117,6 +123,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const addPlate = q<HTMLButtonElement>('.armor-add-plate');
   const obliquity = q<HTMLInputElement>('#armor-obliquity');
   const canvas = q<HTMLCanvasElement>('.armor-canvas');
+  const canvas3d = q<HTMLCanvasElement>('.armor-canvas-3d');
+  const viewBox = q('.armor-view');
   const caption = q('.armor-caption');
   const notice = q('.armor-notice');
   const scrub = q<HTMLInputElement>('.armor-scrub');
@@ -151,6 +159,37 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const syncOverlays = () => overlayBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.overlay === overlay));
 
   let stack: StackTimeline | null = null;
+  /** The 2D section or the 3D bench (#172); both play the same clock. The 3D view is built the first time it is shown. */
+  let view: '2d' | '3d' = '2d';
+  let view3d: View3d | null = null;
+  const syncView = () => {
+    viewBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+    canvas.hidden = view === '3d';
+    canvas3d.hidden = view === '2d';
+    if (view === '3d') {
+      if (!view3d) {
+        try {
+          view3d = mountView3d(canvas3d);
+          view3d.setStack(stack);
+        } catch (e) {
+          // No WebGL: stay on the section.
+          view = '2d';
+          notice.hidden = false;
+          notice.textContent = `The 3D view needs WebGL (${e instanceof Error ? e.message : String(e)}).`;
+          syncView();
+          return;
+        }
+      }
+      view3d.resize();
+    }
+    redraw();
+  };
+  viewBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) =>
+    b.addEventListener('click', () => {
+      view = b.dataset.view as '2d' | '3d';
+      syncView();
+    }),
+  );
   /** Plates 2 to 4: the rows under the front plate's controls. */
   interface LayerRow {
     materialId: PlateMaterialId;
@@ -265,6 +304,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     }
     u = 0;
     playing = true;
+    view3d?.setStack(stack);
     renderResults();
     redraw();
     return stack ? stack.stages[0].timeline : null;
@@ -276,6 +316,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     canvas.width = Math.max(10, Math.round(rect.width * dpr));
     canvas.height = Math.max(10, Math.round(rect.height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    view3d?.resize();
     redraw();
   };
 
@@ -294,6 +335,11 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       return;
     }
     const pb = playbackAt(stack, u);
+    if (view === '3d' && view3d) {
+      view3d.render(pb.t, pb.fragmentT, overlay);
+      syncHud(pb);
+      return;
+    }
     const layout = stackLayout(stack, w, h);
     const parts = stackShapes(stack, pb.t, pb.fragmentT, layout);
     const multi = stack.stages.length > 1;
@@ -323,12 +369,19 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
         },
       );
     });
+    syncHud(pb);
+  };
+
+  /** The time, depth and speed readouts, the caption and the event list, for either view. */
+  const syncHud = (pb: ReturnType<typeof playbackAt>) => {
+    if (!stack) return;
     const active = activeStage(stack, pb.t);
-    const here = parts[active];
-    const platePrefix = multi ? `plate ${active + 1}: ` : '';
+    const stage = stack.stages[active];
+    const frame = extendedFrame(stage, pb.t - stage.offsetT);
+    const platePrefix = stack.stages.length > 1 ? `plate ${active + 1}: ` : '';
     q('.armor-hud-time').textContent = `t = ${clock(pb.fragmentT)}`;
-    q('.armor-hud-depth').textContent = `${platePrefix}depth ${mm(here.frame.depth)} of ${mm(stack.stages[active].timeline.result.losThicknessM)}`;
-    q('.armor-hud-speed').textContent = `${Math.round(here.frame.speed)} m/s`;
+    q('.armor-hud-depth').textContent = `${platePrefix}depth ${mm(frame.depth)} of ${mm(stage.timeline.result.losThicknessM)}`;
+    q('.armor-hud-speed').textContent = `${Math.round(frame.speed)} m/s`;
     scrub.value = String(Math.round(u * 1000));
     const reached = stack.events.filter((e) => e.t <= pb.fragmentT);
     caption.textContent = reached.length ? reached[reached.length - 1].label : '';
@@ -474,6 +527,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     },
     dispose() {
       cancelAnimationFrame(raf);
+      view3d?.dispose();
       window.removeEventListener('resize', resize);
       screen.remove();
     },
