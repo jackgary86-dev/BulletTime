@@ -82,4 +82,6 @@ export const BULLET_MATERIALS = {
   paleBody: new THREE.MeshStandardMaterial({ color: 0xbfc3c4, metalness: 0.3, roughness: 0.5 }),
   /** The dark glassy dome of a guided missile's seeker. */
   seeker: new THREE.MeshPhysicalMaterial({ color: 0x1b2430, metalness: 0.2, roughness: 0.15, clearcoat: 1 }),
+  /** Light, matt painted fins and wings, so they read clearly against the body. */
+  finPaint: new THREE.MeshStandardMaterial({ color: 0xd8d4c8, metalness: 0.05, roughness: 0.55, side: THREE.DoubleSide }),
 } as const;

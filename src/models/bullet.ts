@@ -110,7 +110,7 @@ function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[]
         [r * 0.8, L * 0.05],
         [r * 0.7, L * 0.052],
       ];
-      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(4, 0, (a) => fin(M.aluminium, r, a, L * 0.03, L * 0.1, L * 0.04, r * 0.7, L * 0.04, r * 0.05))];
+      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(4, 0, (a) => fin(M.finPaint, r, a, L * 0.02, L * 0.14, L * 0.05, r * 1.1, L * 0.06, r * 0.07))];
     }
 
     case 'shoulder-rocket': {
@@ -136,7 +136,7 @@ function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[]
         [tubeR * 1.1, 0],
         [tubeR * 0.6, L * 0.05],
       ];
-      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(6, 0, (a) => fin(M.aluminium, tubeR, a, L * 0.02, L * 0.12, L * 0.05, r * 0.55, L * 0.03, r * 0.04))];
+      return [lathe(body, M.paintedSteel), lathe(nozzle, M.nozzle), ...fins(6, 0, (a) => fin(M.finPaint, tubeR, a, L * 0.02, L * 0.16, L * 0.06, r * 0.95, L * 0.05, r * 0.06))];
     }
 
     case 'guided-at': {
@@ -154,8 +154,8 @@ function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[]
       return [
         lathe(body, M.paintedSteel),
         lathe(dome, M.seeker),
-        ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, r, a, L * 0.7, L * 0.07, L * 0.04, r * 0.6, L * 0.02, r * 0.05)),
-        ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, r, a, 0, L * 0.14, L * 0.06, r * 1.1, L * 0.05, r * 0.06)),
+        ...fins(4, Math.PI / 4, (a) => fin(M.finPaint, r, a, L * 0.7, L * 0.09, L * 0.05, r * 0.9, L * 0.03, r * 0.06)),
+        ...fins(4, Math.PI / 4, (a) => fin(M.finPaint, r, a, 0, L * 0.16, L * 0.06, r * 1.6, L * 0.06, r * 0.07)),
       ];
     }
 
@@ -171,7 +171,7 @@ function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[]
         [0, coneStart],
       ];
       const cone: Profile = [[slim, coneStart], ...nose(slim, coneStart, L, slim * 0.04, false, 14), [0, L]];
-      return [lathe(body, M.paintedSteel), lathe(cone, M.paleCone), ...fins(4, Math.PI / 4, (a) => fin(M.aluminium, slim, a, L * 0.3, L * 0.2, L * 0.05, r * 1.4, L * 0.15, r * 0.05))];
+      return [lathe(body, M.paintedSteel), lathe(cone, M.paleCone), ...fins(4, Math.PI / 4, (a) => fin(M.finPaint, slim, a, L * 0.3, L * 0.2, L * 0.05, r * 1.9, L * 0.15, r * 0.06))];
     }
 
     default: {
@@ -199,8 +199,8 @@ function missileMeshes(airframe: string, r: number, L: number): THREE.Object3D[]
         lifting,
         intake,
         // Wings out along ±x, tail fin up along +z.
-        ...fins(2, 0, (a) => fin(M.paleBody, r, a, L * 0.1, L * 0.2, L * 0.05, r * 3.4, L * 0.14, r * 0.07)),
-        fin(M.paleBody, r * 0.85, -Math.PI / 2, 0, L * 0.12, L * 0.05, r * 1.5, L * 0.07, r * 0.07),
+        ...fins(2, 0, (a) => fin(M.finPaint, r, a, L * 0.1, L * 0.2, L * 0.05, r * 3.4, L * 0.14, r * 0.07)),
+        fin(M.finPaint, r * 0.85, -Math.PI / 2, 0, L * 0.12, L * 0.05, r * 1.5, L * 0.07, r * 0.07),
       ];
     }
   }
