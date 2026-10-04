@@ -10,6 +10,8 @@ import { playbackAt } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
 import { familyDiagram } from './armorDiagrams';
+import { armorBeat, beatFactor } from '../sim/impactBeat';
+import { loadImpactBeat } from './beatSetting';
 
 /**
  * The Armor lab screen (#168, #157): pick a munition family and calibre, a
@@ -202,6 +204,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   /** Playhead, 0 to 1 (see `playbackAt`). */
   let u = 0;
   let playing = true;
+  const impactBeat = loadImpactBeat();
   let last = performance.now();
   let raf = 0;
 
@@ -445,7 +448,10 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     last = now;
     if (!playing || !stack) return;
     const factor = SPEEDS[Number(speedSel.value)].factor;
-    u += (dt * factor) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
+    // The impact beat (#238): ease into a tenth speed as the round meets each plate, then ramp back.
+    const pb = playbackAt(stack, u);
+    const beat = impactBeat && !pb.aftermath ? beatFactor(pb.t, stack.stages.map((s) => s.offsetT), armorBeat(stack.duration)) : 1;
+    u += (dt * factor * beat) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
     if (u >= 1) {
       u = 1;
       playing = false;

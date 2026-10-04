@@ -41,24 +41,32 @@ interface NoiseBurst {
   attack?: number;
 }
 
+/**
+ * How much the sound being built is slowed and pitched down (#238): 1 is as
+ * written, 0.5 plays everything half as fast an octave lower, like a film's
+ * slow-motion sound. Set by `playSound` round each `play` call.
+ */
+let stretch = 1;
+
 function noise(ctx: AudioContext, out: AudioNode, t: number, b: NoiseBurst): void {
-  const start = t + (b.at ?? 0);
-  const end = start + b.duration;
+  const start = t + (b.at ?? 0) / stretch;
+  const end = start + b.duration / stretch;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer(ctx);
   src.loop = true;
+  src.playbackRate.value = stretch;
   // Start somewhere random in the buffer so repeated bursts don't sound identical.
   const offset = Math.random() * 0.9;
 
   const filter = ctx.createBiquadFilter();
   filter.type = b.filter;
   filter.Q.value = b.q ?? 0.7;
-  filter.frequency.setValueAtTime(b.hz, start);
-  if (b.toHz) filter.frequency.exponentialRampToValueAtTime(b.toHz, end);
+  filter.frequency.setValueAtTime(b.hz * stretch, start);
+  if (b.toHz) filter.frequency.exponentialRampToValueAtTime(b.toHz * stretch, end);
 
   const env = ctx.createGain();
   env.gain.setValueAtTime(0.0001, start);
-  env.gain.exponentialRampToValueAtTime(b.gain, start + (b.attack ?? 0.002));
+  env.gain.exponentialRampToValueAtTime(b.gain, start + (b.attack ?? 0.002) / stretch);
   env.gain.exponentialRampToValueAtTime(0.0001, end);
 
   src.connect(filter).connect(env).connect(out);
@@ -77,16 +85,16 @@ interface Tone {
 }
 
 function tone(ctx: AudioContext, out: AudioNode, t: number, o: Tone): void {
-  const start = t + (o.at ?? 0);
-  const end = start + o.duration;
+  const start = t + (o.at ?? 0) / stretch;
+  const end = start + o.duration / stretch;
   const osc = ctx.createOscillator();
   osc.type = o.type;
-  osc.frequency.setValueAtTime(o.hz, start);
-  if (o.toHz) osc.frequency.exponentialRampToValueAtTime(o.toHz, end);
+  osc.frequency.setValueAtTime(o.hz * stretch, start);
+  if (o.toHz) osc.frequency.exponentialRampToValueAtTime(o.toHz * stretch, end);
 
   const env = ctx.createGain();
   env.gain.setValueAtTime(0.0001, start);
-  env.gain.exponentialRampToValueAtTime(o.gain, start + (o.attack ?? 0.003));
+  env.gain.exponentialRampToValueAtTime(o.gain, start + (o.attack ?? 0.003) / stretch);
   env.gain.exponentialRampToValueAtTime(0.0001, end);
 
   osc.connect(env).connect(out);
@@ -389,11 +397,20 @@ export function unlockAudio(): AudioContext {
   return context;
 }
 
-/** Plays a sound now; the Sounds window and the shot playback (#120) both use this. */
-export function playSound(id: string): void {
+/**
+ * Plays a sound now; the Sounds window and the shot playback (#120) both use
+ * this. `rate` below 1 plays it that much slower and lower (#238), never
+ * below a tenth.
+ */
+export function playSound(id: string, rate = 1): void {
   const sound = getSound(id);
   const ctx = unlockAudio();
   // Nothing to hear; skip building the nodes.
   if (muted || volume === 0) return;
-  sound.play(ctx, master!, ctx.currentTime + 0.01);
+  stretch = Math.min(1, Math.max(0.1, rate));
+  try {
+    sound.play(ctx, master!, ctx.currentTime + 0.01);
+  } finally {
+    stretch = 1;
+  }
 }

@@ -1,3 +1,4 @@
+import { SLOWEST_RATE, beatFactor, beatSpans } from './impactBeat';
 import { deadAir } from './session';
 import type { Timeline } from './types';
 
@@ -14,6 +15,30 @@ const MIN_STEP_S = 1e-6;
  */
 export class Playback {
   rate = 1 / 1000;
+  /** Slow down on its own round each impact (#238). */
+  impactBeat = true;
+  /** When the shots on the timeline first touch something (impacts and detonations), s. */
+  private impacts: number[] = [];
+
+  /**
+   * The beat's multiplier on the chosen rate right now: 1 away from an impact,
+   * down to a tenth through one. It never takes the rate below the slowest
+   * preset, so a shot already at 1/100,000 plays as chosen.
+   */
+  get beat(): number {
+    if (!this.impactBeat || !this.timeline) return 1;
+    return Math.max(beatFactor(this.simTime, this.impacts), Math.min(1, SLOWEST_RATE / this.rate));
+  }
+
+  /** The rate playback advances at now, sim seconds per real second: the chosen rate, slowed by the beat. */
+  get effectiveRate(): number {
+    return this.rate * this.beat;
+  }
+
+  /** The stretches of sim time the beat slows, for the scrubber to show (none when it is off). */
+  get beatSpans(): [number, number][] {
+    return this.impactBeat && this.timeline && SLOWEST_RATE / this.rate < 1 ? beatSpans(this.impacts) : [];
+  }
 
   /**
    * Sim time one displayed frame's exposure covers (#74), as if filmed with a
@@ -21,12 +46,12 @@ export class Playback {
    * deep slow motion freezes them.
    */
   get shutterS(): number {
-    return DISPLAY_FRAME_S * this.rate * 0.5;
+    return DISPLAY_FRAME_S * this.effectiveRate * 0.5;
   }
 
-  /** The frame rate this slow-motion rate implies: one displayed frame per this much sim time (#75). */
+  /** The frame rate the slow motion implies right now: one displayed frame per this much sim time (#75). It climbs through a beat, like a camera ramping. */
   get fps(): number {
-    return 1 / (DISPLAY_FRAME_S * this.rate);
+    return 1 / (DISPLAY_FRAME_S * this.effectiveRate);
   }
 
   timeline: Timeline | null = null;
@@ -39,6 +64,7 @@ export class Playback {
   start(timeline: Timeline, from = 0): void {
     this.timeline = timeline;
     this.gaps = deadAir(timeline);
+    this.impacts = timeline.events.filter((e) => e.type === 'impact' || e.type === 'detonate').map((e) => e.t);
     this.simTime = from;
     this.playing = true;
   }
@@ -47,6 +73,7 @@ export class Playback {
   stop(): void {
     this.timeline = null;
     this.gaps = [];
+    this.impacts = [];
     this.playing = false;
   }
 
@@ -99,7 +126,7 @@ export class Playback {
   update(realDeltaS: number): number | null {
     if (!this.timeline) return null;
     if (this.playing) {
-      this.simTime += realDeltaS * this.rate;
+      this.simTime += realDeltaS * this.effectiveRate;
       // Jump over dead air between rounds; scrubbing and stepping can still go anywhere.
       for (const [from, to] of this.gaps) if (this.simTime > from && this.simTime < to) this.simTime = to;
       if (this.simTime >= this.timeline.duration) {

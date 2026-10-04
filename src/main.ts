@@ -30,7 +30,8 @@ import { attachLoader } from './ui/loader';
 import { contentGate } from './ui/contentWarning';
 import { chooseSimulator } from './ui/launcher';
 import { mountArmorLab } from './ui/armorLab';
-import { buildCues, CueTrack } from './audio/cues';
+import { loadImpactBeat, saveImpactBeat } from './ui/beatSetting';
+import { buildCues, CueTrack, cueStretch } from './audio/cues';
 import { playSound, unlockAudio } from './audio/sounds';
 
 /** Vertical field of view in comparison mode: each half is narrow, so pull the view wider. */
@@ -62,6 +63,7 @@ async function bootstrap(): Promise<void> {
   const baseFov = camera.fov;
 
   const playback = new Playback();
+  playback.impactBeat = loadImpactBeat();
   // Shot and impact sounds (#120), from lane A only: two lanes at once would just be noise.
   const cueTrack = new CueTrack();
   mountOverlay(overlay, modeInfo.title);
@@ -114,9 +116,15 @@ async function bootstrap(): Promise<void> {
 
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
+    initialImpactBeat: playback.impactBeat,
     initialCamera: 'side',
     initialQuality: quality,
     onRateChange: (rate) => (playback.rate = rate),
+    onImpactBeatChange: (on) => {
+      playback.impactBeat = on;
+      saveImpactBeat(on);
+      if (playback.timeline) scrubber.load(playback.timeline);
+    },
     onCameraChange: (mode) => director.setMode(mode),
     onLightingChange: (mode) => {
       lighting = mode;
@@ -297,7 +305,7 @@ async function bootstrap(): Promise<void> {
       scrubber.sync();
       results.update(t);
       if (laneB) resultsB.update(t);
-      for (const sound of cueTrack.update(t, advancing)) playSound(sound);
+      for (const sound of cueTrack.update(t, advancing)) playSound(sound, cueStretch(sound, playback.beat));
     } else hud.hide();
     director.update(delta, t, playback.timeline);
 
