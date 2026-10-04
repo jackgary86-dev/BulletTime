@@ -5,6 +5,7 @@
  */
 
 import { fullBoreShot } from './fullBore';
+import { heshShot } from './hesh';
 import { jetShot } from './jet';
 import { longRodShot } from './longRod';
 import type { ArmorShot, ArmorTimeline } from './model';
@@ -19,6 +20,8 @@ export function simulateArmor(shot: ArmorShot): ArmorTimeline {
       return longRodShot(shot);
     case 'heat':
       return jetShot(shot);
+    case 'hesh':
+      return heshShot(shot);
     default:
       throw new Error(`The armor lab does not model '${family}' against plate yet`);
   }

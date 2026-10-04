@@ -32,12 +32,17 @@ describe('simulateArmor', () => {
     expect(tl.result.mechanism).toBe('Jet penetration');
   });
 
+  it('runs the stress-wave model for HESH', () => {
+    const tl = simulateArmor(rhaShot({ impact: impactState('hesh', 120), thicknessM: 0.05 }));
+    expect(tl.result.mechanism).toBe('Spalling');
+  });
+
   it('applies the model’s own obliquity limit', () => {
     expect(simulateArmor(rhaShot({ obliquityDeg: 85 })).shot.obliquityDeg).toBe(75);
   });
 
   it('throws for the families later tickets will model', () => {
-    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds' && f.id !== 'heat')) {
+    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds' && f.id !== 'heat' && f.id !== 'hesh')) {
       expect(() => simulateArmor(rhaShot({ impact: impactState(family.id, 120) }))).toThrow(/not model/);
     }
   });

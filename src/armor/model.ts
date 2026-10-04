@@ -93,10 +93,22 @@ export interface ArmorFrame {
    * `energy.plateWorkJ`.
    */
   energyDepositedJ: number;
+  /**
+   * Stress-wave models (HESH): how far the compressive front has travelled
+   * along the shot line from the plate face, m (it stops at the line-of-sight
+   * thickness when it reaches the rear face).
+   */
+  waveFrontM?: number;
+  /** The reflected (tension) front's distance from the plate face, m: the line-of-sight thickness until the pulse reflects, then falling toward 0. */
+  reflectedFrontM?: number;
+  /** The largest tension in the plate at this instant, Pa (0 before the pulse reflects). */
+  peakTensionPa?: number;
+  /** Where that tension is, measured from the rear face, m. */
+  tensionDepthM?: number;
 }
 
 /** Event kinds. Later models extend this union with their own. */
-export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop' | 'skid';
+export type ArmorEventType = 'impact' | 'shatter' | 'plug' | 'perforate' | 'stop' | 'skid' | 'reflect' | 'spall';
 
 export interface ArmorEvent {
   /** Time since impact, s. */
@@ -111,7 +123,7 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration';
+export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration' | 'Spalling' | 'Surface damage';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
@@ -160,6 +172,8 @@ export interface ArmorResult {
   plug?: ArmorEjecta;
   /** The debris cone behind a perforated plate, for a jet. */
   debris?: ArmorDebris;
+  /** The scab torn off the rear face by a stress wave (HESH), when there is one. */
+  scab?: ArmorEjecta;
   /** A shaped-charge round that hit too steeply to fuze and skidded off. */
   failedToFuze?: boolean;
   /** Whether the penetrator broke up on the plate. */
