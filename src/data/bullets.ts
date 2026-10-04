@@ -100,6 +100,8 @@ export interface BulletSpec {
   expansionThresholdMs?: number;
   /** Minimum impact speed (m/s) for fragmentation ('fragment' only). */
   fragmentThresholdMs?: number;
+  /** Share of the mass that breaks off when it fragments (default 0.4) ('fragment' only). */
+  fragmentShedFraction?: number;
   /** Distance travelled in gel before the bullet starts to yaw, in metres (pointed FMJ only). */
   yawNeckM?: number;
 }

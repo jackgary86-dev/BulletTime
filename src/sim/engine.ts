@@ -772,7 +772,7 @@ function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void
 
   // 5.56 M193: snaps at the cannelure as it turns sideways, if it struck above the threshold.
   if (b.behaviour === 'fragment' && !body.fragmented && body.yaw > 1.0 && body.impactSpeed >= (b.fragmentThresholdMs ?? Infinity)) {
-    shed(ctx, body, 0.4, 8, 0.35);
+    shed(ctx, body, b.fragmentShedFraction ?? 0.4, 8, 0.35);
     body.state = 'fragmented';
   }
 
