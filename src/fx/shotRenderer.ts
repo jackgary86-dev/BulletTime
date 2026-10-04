@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { getBullet } from '../data/bullets';
 import { createBulletModel, disposeBulletModel, type BulletModel } from '../models/bullet';
 import { BULLET_MATERIALS } from '../models/materials';
+import { bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
-import { createMissileTrail, type MissileTrail } from './missileTrail';
+import { createMissileTrail, motorLight, type MissileTrail } from './missileTrail';
 import { wallClockS } from '../scene/still';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
@@ -29,7 +30,8 @@ const tmpPos = new THREE.Vector3();
 export class ShotRenderer {
   readonly group = new THREE.Group();
   private timeline: Timeline | null = null;
-  private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][]; trail?: MissileTrail }[] = [];
+  private targetHardness = CRUMPLE_HARDNESS;
+  private bullets: { model: BulletModel; trackId: number; wake: Wake; streak: MotionStreak; air: [number, number][]; trail?: MissileTrail; crumples: boolean }[] = [];
   /**
    * Wakes and streaks from earlier shots, kept for the next one: freeing their
    * materials would make three.js drop the shaders and compile them again on
@@ -39,6 +41,13 @@ export class ShotRenderer {
   /** Missile trails from earlier shots, kept for the next one for the same reason. */
   private spareTrails: MissileTrail[] = [];
   private pellets: THREE.Mesh[] = [];
+  /**
+   * One light for the nearest burning motor (#247). It is always in the scene, at zero intensity
+   * when nothing burns, so a missile shot never changes the light count and recompiles shaders.
+   */
+  private readonly motor = new THREE.PointLight(0xff9a4a, 0, 10, 2);
+  private plumeLayers: 1 | 2 | 3 = 3;
+  private motorLightOn = true;
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
   private readonly jacketCurls: THREE.InstancedMesh;
@@ -46,6 +55,8 @@ export class ShotRenderer {
 
   constructor() {
     this.group.name = 'shot';
+    this.motor.name = 'motor-light';
+    this.group.add(this.motor);
     const instanced = (geometry: THREE.BufferGeometry, material: THREE.Material) => {
       const mesh = new THREE.InstancedMesh(geometry, material, MAX_FRAGMENTS);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -63,9 +74,11 @@ export class ShotRenderer {
   }
 
   /** Prepares models for every shot on the timeline (each shot may be a different round). */
-  load(timeline: Timeline): void {
+  /** `targetHardness` (0-1, the struck front layer) sets how fast a missile or shell body folds against it (#248). */
+  load(timeline: Timeline, targetHardness = CRUMPLE_HARDNESS): void {
     this.clear();
     this.timeline = timeline;
+    this.targetHardness = targetHardness;
     for (const shot of timeline.shots) {
       const spec = getBullet(shot.bulletId);
       if (spec.behaviour === 'shot') {
@@ -87,7 +100,7 @@ export class ShotRenderer {
         // Powered missiles carry a rocket plume and a smoke trail; a kinetic penetrator coasts.
         const trail = spec.shape === 'missile' ? this.spareTrails.pop() ?? createMissileTrail() : undefined;
         if (trail) this.group.add(trail.group);
-        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, trail, air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
+        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, trail, crumples: !!spec.blast || spec.shape === 'missile', air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
       }
     }
   }
@@ -103,6 +116,7 @@ export class ShotRenderer {
       this.spareAir.push({ wake, streak });
     }
     this.bullets = [];
+    this.motor.intensity = 0;
     for (const pellet of this.pellets) this.group.remove(pellet);
     this.pellets = [];
     this.fragments.count = 0;
@@ -122,17 +136,36 @@ export class ShotRenderer {
     this.spareTrails = [];
   }
 
+  /** Plume layers and the motor light for a quality level (#247). */
+  setQuality(quality: { plumeLayers: 1 | 2 | 3; motorLight: boolean }): void {
+    this.plumeLayers = quality.plumeLayers;
+    this.motorLightOn = quality.motorLight;
+  }
+
   /** Places every projectile at sim time `t`; `shutterS` is one frame's exposure, for motion blur (#74). */
   update(t: number, shutterS = 0): void {
     const timeline = this.timeline;
     if (!timeline) return;
 
-    for (const { model, trackId, wake, streak, air, trail } of this.bullets) {
-      const frame = sampleTrack(timeline.tracks[trackId], t);
+    let lit = false;
+    for (const { model, trackId, wake, streak, air, trail, crumples } of this.bullets) {
+      const track = timeline.tracks[trackId];
+      let frame = sampleTrack(track, t);
+      // A missile or shell is not gone the instant it bursts (#248): the body stays at the face and folds up.
+      let crush: number | undefined;
+      if (!frame && crumples) {
+        const last = track.keyframes[track.keyframes.length - 1];
+        const since = t - last.t;
+        const duration = crumpleDuration(model.length, last.speed, this.targetHardness);
+        if (since >= 0 && bodyVisible(since, duration)) {
+          frame = { ...last, speed: 0 };
+          crush = crumpleProgress(since, duration);
+        }
+      }
       model.group.visible = !!frame;
       if (frame) {
         place(model.group, frame);
-        model.setDiameter(frame.diameter, frame.crush);
+        model.setDiameter(frame.diameter, crush ?? frame.crush);
         // The wake follows the flight path, not the bullet's yaw.
         wake.group.position.copy(model.group.position);
         wake.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
@@ -146,9 +179,21 @@ export class ShotRenderer {
           trail.group.position.copy(model.group.position);
           trail.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
         }
-        trail.update(inAir, model.length, frame?.diameter ?? 0, wallClockS());
+        // Wall-clock flicker, frozen in still mode (#243).
+        const now = wallClockS();
+        trail.layers = this.plumeLayers;
+        trail.update(inAir, model.length, frame?.diameter ?? 0, now);
+        if (inAir && frame && this.motorLightOn && !lit) {
+          lit = true;
+          const light = motorLight(model.length, frame.diameter, now);
+          this.motor.position.set(-light.offset, 0, 0).applyQuaternion(trail.group.quaternion).add(trail.group.position);
+          this.motor.intensity = light.intensity;
+          this.motor.distance = light.distance;
+        }
       }
     }
+
+    if (!lit) this.motor.intensity = 0;
 
     for (const pellet of this.pellets) {
       const frame = sampleTrack(timeline.tracks[pellet.userData.trackId as number], t);
@@ -194,6 +239,9 @@ export class ShotRenderer {
     this.jacketCurls.instanceMatrix.needsUpdate = true;
   }
 }
+
+/** Target hardness the crumple assumes when the struck material is not given. */
+const CRUMPLE_HARDNESS = 0.8;
 
 /** Points a model (nose along local +x, origin at the nose) along the keyframe's direction, then yaws it. */
 function place(object: THREE.Object3D, frame: Keyframe): void {

@@ -12,6 +12,15 @@ If a change moves a look on purpose, retake the screenshot (same link, same time
 | Glass | `?mode=bullet&bullet=9mm-fmj&medium=glass&at=0.5ms` | `material-glass.jpg` | Central crater, radial plus concentric cracks, shards flying. |
 | AR500 | `?mode=bullet&bullet=9mm-fmj&medium=steel-ar500&at=0.5ms` | `material-ar500.jpg` | Pistol round splashes: polished dent with lead splash, no perforation, dark blow-back cloud. |
 | Concrete (C35) | `?mode=bullet&bullet=308-sp&medium=concrete-c35&at=3ms` | `material-concrete.jpg` | Pale spall crater in front, much larger scab behind, a heavy dust cloud and angular chips thrown with the scab. |
+| Large RHA plate (Artillery) | `?mode=artillery&bullet=76mm-ap&medium=rha-plate&at=1ms` | _pending_ | Hole, bright chips and flash sized to a 76 mm shot, not a bullet; back face dishes wide. |
+| Large mild plate (Artillery) | `?mode=artillery&bullet=155mm-he&medium=mild-plate&at=1ms` | _pending_ | 20 mm plate holed by the shell, petalled rim, large chips. |
+| Large AR500 plate (Missile) | `?mode=missile&medium=ar500-plate&at=1ms` | _pending_ | Painted face blasted bare in a wide disc, no floating decals. |
+| Large cast iron plate (Artillery) | `?mode=artillery&bullet=76mm-ap&medium=cast-iron-plate&at=1ms` | _pending_ | Brittle failure, heavy spall. |
+| Reinforced concrete wall (Artillery) | `?mode=artillery&bullet=155mm-he&medium=reinforced-concrete&at=3ms` | _pending_ | Crater and spall on the face, scab and dust behind; shell-scale chunks. |
+| Packed earth berm (Artillery) | `?mode=artillery&bullet=155mm-he&medium=packed-earth&at=3ms` | _pending_ | Soil column thrown up, long soft stop, no hole through. |
+
+Figures behind these rows, and whether each is published, an engine constant or illustrative, are in `large-targets.md` (data in `src/data/largeTargetReference.ts`, #262). Baselines for the large targets are _pending_: they need the dev server and a browser capture (#234). Check at close and three-quarter range for clipping.
+
 
 Steel effects that are in the model (#219-#221): a dark blow-back cone and two droplet sheets on entry, a plug chip, an axis debris string, about ten bright side chips and 3 to 8 petals on exit, and the back face bulging about 0.3 bullet diameters before it opens. Concrete (#223-#226): hourglass footprints sized from the measured panels, a scab that lets go 1.8 / 2.2 / 2.8 ms after impact (C35 / C75 / C110), and a bullet that is a crushed stub by about 0.4 ms.
 

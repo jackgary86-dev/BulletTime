@@ -19,6 +19,7 @@ export type MediumBehaviour =
   | 'sand' // grains scatter, strong stopping power
   | 'glass' // radial + concentric cracks, shards, deflection
   | 'ice' // brittle, cracks and chunks
+  | 'plastic' // thin polymer: a clean hole, a few white chips (#240)
   | 'bone'; // bone simulant: hard, brittle, cracks and throws fragments
 
 /** Which procedural look builds the target. */
@@ -39,6 +40,10 @@ export type MediumLook =
   | 'glass'
   | 'ice'
   | 'bone'
+  /** Milky polyethylene, a water jug's wall (#240). */
+  | 'plasticJug'
+  /** A phone's battery pouch: dark laminate (#240). */
+  | 'phoneCell'
   // Showpiece objects (#156)
   | 'bowlingBall'
   | 'steelBall'
@@ -117,8 +122,10 @@ export interface MediumSpec {
   exitDeflectionDeg?: number;
   /** Organic gel targets: which blood-pack layout is suspended inside (see `data/organic.ts`). */
   organicLayout?: string;
-  /** Simulants that only appear inside the test dummy (#25), not in the material list. */
+  /** Parts that only appear inside a preset (the test dummy's simulants #25, a phone's layers #240), not in the material list. */
   dummyOnly?: boolean;
+  /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
+  heavy?: boolean;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
   shape?: ObjectShape;
   /**
@@ -598,6 +605,83 @@ export const MEDIA: MediumSpec[] = [
     ricochetAngleDeg: 68,
     yawNeckScale: 0.05,
     allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'rha-plate',
+    name: 'Large RHA plate',
+    description: 'Rolled homogeneous armour at proving-ground size (3 x 2 m face, up to 300 mm). HE and HESH do little to it; AP and long-rod shot are what it is for.',
+    behaviour: 'steel',
+    look: 'ar500',
+    density: 7850,
+    thickness: { min: 0.05, max: 0.3, default: 0.1 },
+    heightM: 2,
+    widthM: 3,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.0e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 68,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'mild-plate',
+    name: 'Large mild steel plate',
+    description: 'Structural steel plate at proving-ground size. Soft and ductile: thin sections are holed by HE fragments and shells, and it dishes and tears rather than shattering.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 7850,
+    thickness: { min: 0.005, max: 0.1, default: 0.02 },
+    heightM: 2,
+    widthM: 3,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'ar500-plate',
+    name: 'Large AR500 plate',
+    description: 'Through-hardened 500 HB plate at proving-ground size. Shatters soft shot and ricochets glancing hits; thick sections stop most shells.',
+    behaviour: 'steel',
+    look: 'ar500',
+    density: 7850,
+    thickness: { min: 0.01, max: 0.15, default: 0.025 },
+    heightM: 2,
+    widthM: 3,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.2e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'cast-iron-plate',
+    name: 'Large cast iron plate',
+    description: 'Grey cast iron at proving-ground size. Hard but brittle: it cracks and throws heavy spall, and fails sooner than steel of the same thickness.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 7200,
+    thickness: { min: 0.02, max: 0.3, default: 0.1 },
+    heightM: 2,
+    widthM: 3,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.6e9,
+    hardness: 0.9,
+    ricochetAngleDeg: 64,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
   },
   {
     id: 'reinforced-concrete',
@@ -764,6 +848,81 @@ export const MEDIA: MediumSpec[] = [
     allowsExpansion: true,
     dummyOnly: true,
   },
+  {
+    id: 'polyethylene',
+    name: 'Polyethylene sheet (jug wall)',
+    description: 'Thin milky HDPE, like a gallon water jug. A bullet makes a clean hole and barely notices it.',
+    behaviour: 'plastic',
+    look: 'plasticJug',
+    density: 950,
+    thickness: { min: 0.0005, max: 0.006, default: 0.001 },
+    heightM: 0.25,
+    widthM: 0.2,
+    angleAdjustable: true,
+    dragCoefficient: 0.5,
+    resistancePa: 25e6, // HDPE yield strength
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+  },
+  // Smartphone layers (#240): 150 x 75 mm, each only in the Smartphone preset.
+  {
+    id: 'phone-glass',
+    name: 'Phone display glass',
+    description: 'Chemically strengthened cover glass, 0.7 mm.',
+    behaviour: 'glass',
+    look: 'glass',
+    density: 2450,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0007 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 60e6,
+    hardness: 0.6,
+    ricochetAngleDeg: 82,
+    yawNeckScale: 0.2,
+    allowsExpansion: false,
+    exitDeflectionDeg: 3,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-cell',
+    name: 'Phone battery pouch',
+    description: 'Lithium-polymer pouch cell: foil and polymer laminate about 4 mm thick.',
+    behaviour: 'plastic',
+    look: 'phoneCell',
+    density: 2400,
+    thickness: { min: 0.002, max: 0.008, default: 0.004 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.6,
+    resistancePa: 40e6,
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-frame',
+    name: 'Phone aluminium back',
+    description: 'A thin aluminium back plate and frame, 0.8 mm.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 2700,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 1.15e9,
+    hardness: 0.45,
+    ricochetAngleDeg: 62,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    dummyOnly: true,
+  },
   // --- Showpiece objects (#156): everyday things to destroy, with their own models and effects. ---
   {
     id: 'bowling-ball',
@@ -863,6 +1022,22 @@ export const MEDIA: MediumSpec[] = [
     allowsExpansion: true,
   },
 ];
+
+/** The large steel plates (#232), listed in Artillery and Missile. The 1 x 1 m `rha` stays as the small test coupon. */
+export const LARGE_PLATE_IDS = ['rha-plate', 'mild-plate', 'ar500-plate', 'cast-iron-plate'] as const;
+
+/** Missile targets are at least this big across the smaller side of the face, in metres (#245). */
+export const MISSILE_MIN_FACE_M = 2;
+
+/**
+ * Whether a mode's material picker lists this medium (#245): heavy targets never appear in the Bullet lab,
+ * and Missile lists only targets a missile could sensibly be fired at, never the bullet-scale blocks.
+ */
+export function mediumListedIn(medium: MediumSpec, mode: string): boolean {
+  if (medium.dummyOnly) return false;
+  if (mode === 'missile') return Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
+  return !medium.heavy || mode !== 'bullet';
+}
 
 export const DEFAULT_MEDIUM_ID = 'gel10';
 

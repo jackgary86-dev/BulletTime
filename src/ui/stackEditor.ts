@@ -1,6 +1,6 @@
-import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium } from '../data/media';
+import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium, mediumListedIn } from '../data/media';
 import { DUMMY_PRESET_ID, DUMMY_REGIONS, getRegion, regionLayers, type DummyRegionId } from '../data/dummy';
-import { MAX_GAP_M, MAX_STACK_LAYERS, STACK_PRESETS, presetLayers, type StackLayer } from '../data/stacks';
+import { MAX_GAP_M, MAX_STACK_LAYERS, STACK_PRESETS, presetLayers, presetListedIn, type StackLayer } from '../data/stacks';
 
 export interface TargetSetup {
   /** Front to back along the shot line. */
@@ -13,6 +13,10 @@ export interface TargetSetup {
 
 export interface StackEditorOptions {
   initialId: string;
+  /** Thickness of the starting material, in metres (its own default when omitted). */
+  initialThicknessM?: number;
+  /** Simulator mode: heavy targets are listed outside the Bullet lab only. */
+  mode?: string;
   onChange(setup: TargetSetup): void;
 }
 
@@ -57,17 +61,19 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   const gapSlider = q<HTMLInputElement>('#gap-slider');
   const angleSlider = q<HTMLInputElement>('#angle-slider');
 
-  for (const p of STACK_PRESETS) preset.append(new Option(p.name, p.id));
-  preset.append(new Option('Ballistic test dummy', DUMMY_PRESET_ID));
+  const mode = options.mode ?? 'bullet';
+  for (const p of STACK_PRESETS.filter((p) => presetListedIn(p, mode))) preset.append(new Option(p.name, p.id));
+  // The test dummy is a bullet-scale target.
+  if (mode !== 'missile') preset.append(new Option('Ballistic test dummy', DUMMY_PRESET_ID));
   const materials = document.createElement('optgroup');
   materials.label = 'Materials';
   const objects = document.createElement('optgroup');
   objects.label = 'Objects';
-  for (const medium of MEDIA.filter((m) => !m.dummyOnly)) (medium.shape ? objects : materials).append(new Option(medium.name, medium.id));
+  for (const medium of MEDIA.filter((m) => mediumListedIn(m, mode))) (medium.shape ? objects : materials).append(new Option(medium.name, medium.id));
   select.append(materials, objects);
 
   const initial = getMedium(options.initialId);
-  const setup: TargetSetup = { layers: [{ medium: initial, thickness: initial.thickness.default, gapM: 0 }], angleDeg: 0 };
+  const setup: TargetSetup = { layers: [{ medium: initial, thickness: options.initialThicknessM ?? initial.thickness.default, gapM: 0 }], angleDeg: 0 };
   let selected = 0;
 
   const angleAllowed = () => setup.layers.every((l) => l.medium.angleAdjustable);
@@ -113,7 +119,8 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
       add.textContent = '+';
       add.title = 'Add a layer behind the last one';
       add.addEventListener('click', () => {
-        const medium = getMedium('gel10');
+        // A new layer starts as the first material this mode lists (gel in the Bullet lab).
+        const medium = mediumListedIn(getMedium('gel10'), mode) ? getMedium('gel10') : MEDIA.find((m) => mediumListedIn(m, mode))!;
         setup.layers.push({ medium, thickness: medium.thickness.default, gapM: 0.1 });
         selected = setup.layers.length - 1;
         preset.value = '';

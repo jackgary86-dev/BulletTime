@@ -2,6 +2,7 @@ import { blastResponse, overpressureKPa } from './blastResponse';
 import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
+import { jetStandoffFactor } from '../data/missiles';
 import { PHYSICS as P, STANDARD_RESOLUTION, type SimResolution } from '../data/physics';
 import { crushFromSpeed } from './crush';
 import { seededRandom } from './random';
@@ -472,6 +473,30 @@ function depthOf(ctx: Context, p: Vec3): number {
   return dot(sub(p, ctx.setup.impactPoint), ctx.normal);
 }
 
+/** How far inside a layer a shortened step lands, in metres (#265). */
+const LAND_INSIDE_M = 1e-7;
+
+/**
+ * The part of a step (0 to 1) to take so a layer the full step would jump clean
+ * over is entered instead (#265), or null when no layer would be skipped. A
+ * round at rifle speed covers about a millimetre per 1 microsecond step, so a
+ * thinner layer (a phone's glass) can sit between two successive positions and
+ * never be seen. `cos` is the direction's component along the stack normal and
+ * `travelM` the distance the step would cover; `depth` is where the body is now.
+ */
+export function stepIntoSkippedLayer(layers: readonly { offset: number; thickness: number }[], depth: number, cos: number, travelM: number): number | null {
+  const along = Math.abs(cos) * travelM;
+  if (!(along > 0)) return null;
+  let best: number | null = null;
+  for (const layer of layers) {
+    // The face the body meets first, and its distance ahead along the normal.
+    const ahead = cos > 0 ? layer.offset - depth : depth - (layer.offset + layer.thickness);
+    if (ahead < 0 || ahead + layer.thickness >= along) continue;
+    if (best === null || ahead < best) best = ahead;
+  }
+  return best === null ? null : Math.min(1, (best + LAND_INSIDE_M) / along);
+}
+
 function layerAt(ctx: Context, depth: number): number {
   const layers = ctx.setup.layers;
   for (let i = 0; i < layers.length; i++) {
@@ -555,6 +580,10 @@ function integrate(ctx: Context, body: Body): void {
     const nose = body.clogged ? Math.max(body.noseDragFactor, P.cloggedNoseDragFactor) : body.noseDragFactor;
     const noseFactor = nose * (1 - sinY) + P.sidewaysDragFactor * sinY;
 
+    // A step that would jump clean over a thin layer lands just inside it instead (#265).
+    const jump = stepIntoSkippedLayer(ctx.setup.layers, depthOf(ctx, body.pos), dot(body.dir, ctx.normal), body.speed * dt);
+    const stepS = jump === null ? dt : Math.max(dt * jump, 1e-12);
+
     let force: number;
     if (medium) {
       force =
@@ -566,11 +595,11 @@ function integrate(ctx: Context, body: Body): void {
 
     const tailing = !medium && body.tailUntil !== undefined && body.t < body.tailUntil;
     const bursting = !medium && body.burstUntil !== undefined && body.t < body.burstUntil;
-    const dv = (force / body.mass) * dt + (tailing ? (body.tailDecel ?? 0) * dt : 0) + (bursting ? (body.burstDecel ?? 0) * dt : 0);
+    const dv = (force / body.mass) * stepS + (tailing ? (body.tailDecel ?? 0) * stepS : 0) + (bursting ? (body.burstDecel ?? 0) * stepS : 0);
     let newSpeed = Math.max(0, body.speed - dv);
     // The motor keeps pushing in the air until the missile is up to speed.
-    if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * dt);
-    const dx = ((body.speed + newSpeed) / 2) * dt;
+    if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * stepS);
+    const dx = ((body.speed + newSpeed) / 2) * stepS;
     if (medium) {
       const deposited = 0.5 * body.mass * (body.speed ** 2 - newSpeed ** 2);
       ctx.depositedJ += deposited;
@@ -586,7 +615,7 @@ function integrate(ctx: Context, body: Body): void {
     }
     body.speed = newSpeed;
     body.pos = add(body.pos, scale(body.dir, dx));
-    body.t += dt;
+    body.t += stepS;
     body.travelled += dx;
     if (body.impacted) body.pathSinceImpact += dx;
 
@@ -597,7 +626,7 @@ function integrate(ctx: Context, body: Body): void {
       body.maxDepth = Math.max(body.maxDepth, depthOf(ctx, body.pos));
       if (body.id === 0 && step % ctx.res.sampleEvery === 0) ctx.vd.push({ depth: body.pathSinceImpact, speed: body.speed });
       updateExpansion(body, medium);
-      updateYawAndBreakup(ctx, body, medium);
+      updateYawAndBreakup(ctx, body, medium, stepS);
     }
 
     step++;
@@ -759,7 +788,8 @@ function updateExpansion(body: Body, medium: MediumSpec): void {
   if (progress >= 1) body.expanding = false;
 }
 
-function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void {
+/** `stepS` is the step just taken, which a thin layer ahead can shorten (#265). */
+export function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec, stepS: number): void {
   const b = body.bullet;
   if (!b) return;
 
@@ -772,7 +802,7 @@ function updateYawAndBreakup(ctx: Context, body: Body, medium: MediumSpec): void
         event(ctx, body, 'yaw', { layer: body.layer });
       }
       const flip = P.yawFlipDistanceM * Math.max(0.15, medium.yawNeckScale);
-      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * ctx.res.stepS);
+      body.yaw = Math.min(Math.PI, body.yaw + (Math.PI / flip) * body.speed * stepS);
     }
   }
 
@@ -860,7 +890,7 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
     const groups = jet.tandem ? 2 : 1;
     for (let g = 0; g < groups; g++) {
       for (let i = 0; i < jet.count; i++) {
-        const m = (body.mass * jet.massFraction) / jet.count;
+        const m = (body.mass * jet.massFraction * jetStandoffFactor(jet.standoffCal)) / jet.count;
         const dir = perturb(axis, 0.012 * Math.sqrt(ctx.rand()), ctx.rand);
         const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
         const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);

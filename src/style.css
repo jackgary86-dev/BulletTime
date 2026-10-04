@@ -1239,6 +1239,21 @@ body {
   color: var(--muted);
 }
 
+.notice-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(10, 11, 14, 0.9);
+  color: rgba(236, 240, 244, 0.92);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 50;
+}
+
 .clean-frame-hint {
   position: fixed;
   bottom: 24px;

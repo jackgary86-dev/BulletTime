@@ -48,7 +48,9 @@ export interface BlastSpec {
   /** Fraction of the round's mass that becomes fragments (default 0.7). */
   fragmentMassFraction?: number;
   /** Shaped-charge jets: how many separate jets, each pair's speed and the fraction of the round's mass in each jet group. */
-  jet?: { count: number; speedMs: number; massFraction: number; /** A second, delayed jet group (tandem warhead). */ tandem?: boolean };
+  jet?: { count: number; speedMs: number; massFraction: number; /** A second, delayed jet group (tandem warhead). */ tandem?: boolean;
+    /** Stand-off from the cone to the target, in calibres: the jet needs about 4 to stretch out, and breaks up past that (see `jetStandoffFactor`). Omit for the tuned default. */
+    standoffCal?: number };
   /** Fireball look. */
   fireball?: 'standard' | 'thermobaric' | 'incendiary' | 'none';
   /** Delay fuze: the round goes on through the target and detonates after this much path, in metres, instead of on contact (APHE, bunker-busting HE). */

@@ -20,6 +20,7 @@ export const FAILURE_KPA: Record<MediumBehaviour, number> = {
   sand: 2500,
   gel: 1500,
   water: 1500,
+  plastic: 20,
 };
 
 export type BlastOutcome = 'intact' | 'cracked' | 'toppled' | 'destroyed';
@@ -61,7 +62,7 @@ export function overpressureKPa(yieldKg: number, rangeM: number): number {
 /** Outcome of a layer for a pressure ratio `k`, by the kind of material. */
 export function outcomeFor(behaviour: MediumBehaviour, k: number): { outcome: BlastOutcome; tiltRad: number } {
   if (k < 1) return { outcome: 'intact', tiltRad: 0 };
-  if (behaviour === 'glass' || behaviour === 'ice' || behaviour === 'drywall') return { outcome: 'destroyed', tiltRad: 0 };
+  if (behaviour === 'glass' || behaviour === 'ice' || behaviour === 'drywall' || behaviour === 'plastic') return { outcome: 'destroyed', tiltRad: 0 };
   if (behaviour === 'wood') return k >= 2.5 ? { outcome: 'destroyed', tiltRad: 0 } : { outcome: 'toppled', tiltRad: Math.min(1.3, 0.35 * k) };
   // Heavy materials crack first, and only go over when the ratio is very high.
   if (k < 6) return { outcome: 'cracked', tiltRad: 0 };

@@ -310,6 +310,17 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
       return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [painted, painted, scale, scale, scale, scale]), PLATE_BODY_NAME);
     }
 
+    case 'plasticJug':
+      // Milky translucent HDPE with a faint waxy sheen.
+      return new THREE.Mesh(
+        new THREE.BoxGeometry(t, h, w),
+        new THREE.MeshPhysicalMaterial({ color: 0xf1f3ef, roughness: 0.35, transmission: 0.55, thickness: t * 4, ior: 1.5, attenuationColor: new THREE.Color(0xdfe6e2), attenuationDistance: 0.02 }),
+      );
+
+    case 'phoneCell':
+      // Dark laminate pouch.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 0.5, metalness: 0.4 }));
+
     case 'sandbag':
       return createSandbag(t, h, w);
 

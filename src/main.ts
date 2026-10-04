@@ -16,6 +16,7 @@ import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
 import { applyReplayLink, parseReplayLink } from './ui/replayLink';
+import { showNotice } from './ui/notice';
 import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel, type FirePlan } from './ui/shotsPanel';
@@ -189,7 +190,8 @@ async function bootstrap(): Promise<void> {
     director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
     clearShot();
   };
-  const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, onChange: rebuildTarget });
+  const startTargetId = modeInfo.defaultTargetId ?? DEFAULT_MEDIUM_ID;
+  const target = mountStackEditor(overlay, { initialId: startTargetId, initialThicknessM: modeInfo.defaultTargetThicknessM, mode, onChange: rebuildTarget });
   await loader.progress(0.25, 'Building the lab');
   laneA = new Lane(renderer, camera, target, spec);
   rebuildTarget(target);
@@ -219,7 +221,7 @@ async function bootstrap(): Promise<void> {
 
   /** Lane B's emptied scene, reused the next time Compare turns on (see Lane's constructor, #133). */
   let spareScene: THREE.Scene | undefined;
-  const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: DEFAULT_MEDIUM_ID, mode }, {
+  const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: startTargetId, thicknessM: modeInfo.defaultTargetThicknessM, mode }, {
     onToggle: (on) => {
       if (on) {
         laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
@@ -348,7 +350,8 @@ async function bootstrap(): Promise<void> {
   // A replay link (#230): fire the chosen setup and park the replay a set time after first contact.
   const link = parseReplayLink(location.search);
   if (link && !laneB) {
-    applyReplayLink(overlay, link);
+    const ignored = applyReplayLink(overlay, link);
+    if (ignored.length) showNotice(`${modeInfo.title} does not list ${ignored.join(', ')}, so the default setup is used.`);
     const timeline = fireShot(shotsPanel.plan());
     if (timeline) {
       playback.seek((timeline.shots[0]?.impactTime ?? 0) + link.atS);

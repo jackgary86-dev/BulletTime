@@ -63,7 +63,7 @@ export class TargetEffects {
         }
       } else if (medium.behaviour === 'sand') {
         loadSandEffect(timeline, layer, this.particles, this.holes);
-      } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall') {
+      } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall' || medium.behaviour === 'plastic') {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }
     });

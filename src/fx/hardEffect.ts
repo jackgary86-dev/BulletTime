@@ -8,6 +8,7 @@ import type { ParticleSystem } from './particles';
 import type { MediumSpec } from '../data/media';
 import { concreteFootprint } from './concreteDamage';
 import { planDishes } from './plateDishMath';
+import { scaleBurst, shellScale } from './shellScale';
 
 /**
  * Concrete, cinder block and steel plate: craters, cracks, dents, sparks, lead
@@ -173,11 +174,17 @@ function steelEvent(
   perforated: boolean,
   shed: number,
   bulgeM: number,
-  particles: ParticleSystem,
+  system: ParticleSystem,
   holes: HoleMarks,
   seed: number,
 ): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
+  // Particle sizes are tuned for bullets: chips, sparks and the flash grow with the round (#234).
+  const s = shellScale(d);
+  const particles = {
+    add: (spec: BurstSpec) => system.add(scaleBurst(spec, s)),
+    addFlash: (t: number, pos: THREE.Vector3, intensity: number, decay: number) => system.addFlash(t, pos, intensity * s, decay),
+  };
   if (e.type === 'impact' || e.type === 'enter') {
     if (painted) {
       // The hit blasts the paint off in a ragged disc of bare steel, with lead sprayed in rays across it.

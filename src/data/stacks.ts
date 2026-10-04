@@ -19,6 +19,8 @@ export interface StackPreset {
   id: string;
   name: string;
   layers: { medium: string; thickness?: number; gapM?: number; look?: MediumLook }[];
+  /** Proving-ground preset: not offered in the Bullet lab. */
+  heavy?: boolean;
 }
 
 /** Classic barrier tests: something in front of a gel block. */
@@ -50,11 +52,64 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'glass', thickness: 0.006 }, { medium: 'gel10', gapM: 0.3, thickness: 0.4 }],
   },
   {
+    id: 'car-door',
+    name: 'Car door',
+    // Outer skin, the hollow door, inner skin: the same two skins as the door in front of gel. A shot at the
+    // window regulator would meet more steel; the model has no regulator, so this is a shot through clear door.
+    layers: [
+      { medium: 'steel-mild', thickness: 0.0009, look: 'carDoorOuter' },
+      { medium: 'steel-mild', thickness: 0.0009, gapM: 0.1, look: 'carDoorInner' },
+    ],
+  },
+  {
+    id: 'drywall-wall',
+    name: 'Drywall wall',
+    // Two sheets of gypsum board over a 9 cm stud bay.
+    layers: [{ medium: 'drywall' }, { medium: 'drywall', gapM: 0.09 }],
+  },
+  {
+    id: 'water-jug',
+    name: 'Water jug',
+    // A thin polyethylene skin round water: skin, 20 cm of water, skin.
+    layers: [{ medium: 'polyethylene' }, { medium: 'water', thickness: 0.2, gapM: 0 }, { medium: 'polyethylene', gapM: 0 }],
+  },
+  {
+    id: 'smartphone',
+    name: 'Smartphone',
+    // Cover glass, battery pouch, aluminium back.
+    layers: [{ medium: 'phone-glass' }, { medium: 'phone-cell', gapM: 0.001 }, { medium: 'phone-frame', gapM: 0.001 }],
+  },
+  {
+    id: 'phone-book',
+    name: 'Phone book',
+    layers: [{ medium: 'phonebook' }],
+  },
+  {
     id: 'concrete-gel',
     name: 'Cinder block + gel',
     layers: [{ medium: 'cinder-block' }, { medium: 'gel10', gapM: 0.1, thickness: 0.4 }],
   },
+  // Proving-ground presets (#232), for Artillery and Missile.
+  { id: 'plate-large', name: 'Large RHA plate', layers: [{ medium: 'rha-plate' }], heavy: true },
+  {
+    id: 'plate-spaced',
+    name: 'Spaced plates (300 mm gap)',
+    layers: [{ medium: 'ar500-plate', thickness: 0.025 }, { medium: 'rha-plate', thickness: 0.1, gapM: 0.3 }],
+    heavy: true,
+  },
+  {
+    id: 'plate-concrete',
+    name: 'Plate in front of concrete',
+    layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
+    heavy: true,
+  },
 ];
+
+/** Whether a mode's target presets list this one (#245): heavy ones outside the Bullet lab, and only heavy ones for Missile. */
+export function presetListedIn(preset: StackPreset, mode: string): boolean {
+  if (mode === 'missile') return !!preset.heavy;
+  return !preset.heavy || mode !== 'bullet';
+}
 
 export function presetLayers(preset: StackPreset): StackLayer[] {
   return preset.layers.map((l, i) => {
