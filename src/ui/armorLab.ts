@@ -433,6 +433,15 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       [r.ricochet ? 'Carried away by the ricochet' : 'Carried through', joules(r.residualEnergyJ)],
     ];
     if (r.shattered) rows.push(['Penetrator', `Shattered into ${r.fragments} pieces`]);
+    if (r.pits) {
+      const n = (o: string) => r.pits!.filter((p) => p.outcome === o).length;
+      const heaviest = r.pits.reduce((m, p) => Math.max(m, p.massKg), 0);
+      rows.push(
+        ['Fragments', `${r.pits.length}: ${n('pit')} pitted the face, ${n('embed')} embedded, ${n('perforate')} got through`],
+        ['Heaviest fragment', `${(heaviest * 1000).toFixed(1)} g`],
+        ['Blast dish', r.blastDishM ? mm(r.blastDishM) : 'none: the plate only rings'],
+      );
+    }
     if (r.plug) rows.push(['Plug', `${kg(r.plug.massKg)} at ${Math.round(r.plug.velocity)} m/s`]);
     if (r.ricochet) rows.push(['Ricochet', `leaves at ${r.ricochet.exitAngleDeg.toFixed(0)}° to the face, ${Math.round(r.ricochet.exitSpeed)} m/s; critical slope ${r.ricochet.criticalDeg.toFixed(0)}°`]);
     const debris = (r as unknown as { debris?: { halfAngleDeg: number } }).debris;
