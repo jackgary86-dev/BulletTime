@@ -42,6 +42,8 @@ export class GlassCracks {
     angleDeg: number,
     particles: ParticleSystem,
     holes: HoleMarks,
+    /** Height of the target's centre line (the group's y), m. */
+    lineY = SHOT_Y,
   ): void {
     this.clear();
     let seed = 701;
@@ -52,7 +54,7 @@ export class GlassCracks {
       const angle = THREE.MathUtils.degToRad(angleDeg);
       const normalOut = new THREE.Vector3(-Math.cos(angle), 0, Math.sin(angle));
       const side = new THREE.Vector3(0, 1, 0).cross(normalOut).normalize();
-      const front = new THREE.Vector3(TARGET_FRONT_X, SHOT_Y, 0).addScaledVector(normalOut, -(layerOffsets[layer] ?? 0));
+      const front = new THREE.Vector3(TARGET_FRONT_X, lineY, 0).addScaledVector(normalOut, -(layerOffsets[layer] ?? 0));
       const half = { y: medium.heightM / 2, s: medium.widthM / 2 };
 
       for (const e of timeline.events) {

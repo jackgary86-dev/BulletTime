@@ -105,6 +105,8 @@ export interface ArmorFrame {
   peakTensionPa?: number;
   /** Where that tension is, measured from the rear face, m. */
   tensionDepthM?: number;
+  /** Fragment sprays (#170): how deep each of the result's `pits` has got so far, m, in the same order. */
+  pitDepths?: number[];
 }
 
 /** Event kinds. Later models extend this union with their own. */
@@ -123,7 +125,16 @@ export interface ArmorEvent {
 }
 
 /** How the plate was defeated (or not). Later models extend this union with their own. */
-export type ArmorMechanism = 'Plugging' | 'Plastic penetration' | 'Hydrodynamic erosion' | 'Jet penetration' | 'Spalling' | 'Surface damage' | 'Ricochet';
+export type ArmorMechanism =
+  | 'Plugging'
+  | 'Plastic penetration'
+  | 'Hydrodynamic erosion'
+  | 'Jet penetration'
+  | 'Spalling'
+  | 'Surface damage'
+  | 'Ricochet'
+  | 'Fragment pitting'
+  | 'Fragment perforation';
 
 /** A piece of plate thrown out of the rear face (a plug, or later a scab). */
 export interface ArmorEjecta {
@@ -154,6 +165,29 @@ export interface ArmorEnergy {
   plateWorkJ: number;
   /** Kinetic energy of the plate material thrown out behind the plate (plug, scab or debris). */
   ejectaJ: number;
+}
+
+/** One fragment of a spray (#170) and the pit it leaves: where it struck the face, what it was, and what it did. */
+export interface ArmorPit {
+  /** Where it strikes the face, m from the shot line in the section plane. */
+  yM: number;
+  massKg: number;
+  /** Speed at the face, m/s. */
+  velocity: number;
+  diameterM: number;
+  /** Pitted the face and rebounded, buried itself, or got through. */
+  outcome: 'pit' | 'embed' | 'perforate';
+  /** How deep it got along the shot line, m (the line-of-sight thickness when through). */
+  depthM: number;
+  /** Pit radius at the face, m. */
+  radiusM: number;
+  /** Speed behind the plate, m/s (0 unless through). */
+  residualVelocity: number;
+  /** When it reaches the face, s after the first one, and how long it takes to dig in. */
+  t0: number;
+  digS: number;
+  /** Whether it strikes along the cut, so the section draws its pit and its flight (the rest land elsewhere on the face). */
+  inSection: boolean;
 }
 
 /** How a round left the plate after a ricochet. */
@@ -252,6 +286,10 @@ export interface ArmorResult {
   failedToFuze?: boolean;
   /** A kinetic round that glanced off the plate (#165): the slope it needed, and how it left. */
   ricochet?: ArmorRicochet;
+  /** A fragment spray's pits, one per fragment (#170). */
+  pits?: ArmorPit[];
+  /** How deep the blast load dishes the plate, m (0 when it only rings), for a fragment spray. */
+  blastDishM?: number;
   /** Whether the penetrator broke up on the plate. */
   shattered: boolean;
   /** How many pieces it broke into (0 when intact). */

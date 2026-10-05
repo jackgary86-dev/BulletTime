@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReplayLink, parseReplayTime } from './replayLink';
+import { formatApproach, formatWitness, parseReplayLink, parseReplayTime, parseWitness } from './replayLink';
 
 describe('replay deep link (#230)', () => {
   it.each([
@@ -32,3 +32,29 @@ describe('replay deep link (#230)', () => {
     expect(parseReplayLink('?at=1ms')?.bullet).toBeUndefined();
   });
 });
+
+describe('replay link: building preset and witness blocks (#249)', () => {
+  it('carries the preset and the block layout, and round-trips the layout', () => {
+    const link = parseReplayLink('?mode=missile&preset=building-block-house&witness=0.3:0,1.5:-0.6&at=1ms')!;
+    expect(link.preset).toBe('building-block-house');
+    expect(link.witness).toEqual([{ distM: 0.3, lateralM: 0 }, { distM: 1.5, lateralM: -0.6 }]);
+    expect(parseWitness(formatWitness(link.witness!))).toEqual(link.witness);
+  });
+
+  it('drops pairs that do not parse, and leaves the layout out when none do', () => {
+    expect(parseWitness('0.3:0,oops,1:x')).toEqual([{ distM: 0.3, lateralM: 0 }]);
+    expect(parseWitness('nope')).toBeUndefined();
+    expect(parseReplayLink('?at=1ms')!.witness).toBeUndefined();
+  });
+});
+
+describe('replay link: missile approach (#250)', () => {
+  it('carries the dive and bearing, and round-trips them', () => {
+    const link = parseReplayLink('?mode=missile&preset=building-block-house&dive=70&bearing=-15&at=1ms')!;
+    expect(link.approach).toEqual({ diveDeg: 70, bearingDeg: -15 });
+    expect(parseReplayLink(`?${formatApproach(link.approach!)}&at=1ms`)!.approach).toEqual(link.approach);
+    expect(parseReplayLink('?at=1ms')!.approach).toBeUndefined();
+    expect(parseReplayLink('?dive=45&at=1ms')!.approach).toEqual({ diveDeg: 45, bearingDeg: 0 });
+  });
+});
+

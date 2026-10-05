@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import type { MediumLook, MediumSpec } from '../data/media';
+import { buildingForFront } from '../data/buildings';
+import { concreteMaterial, createBuilding } from './buildings';
+import { isLargePlate, plateStandParts } from './plateStandLayout';
+import { createTank } from './tank';
 import { woodTexture } from './textures';
 
 /**
@@ -32,6 +36,7 @@ export const SHARED_STAND_MATERIALS: ReadonlySet<THREE.Material> = new Set([
 /** Builds the holder that suits the medium. */
 export function createSupport(spec: MediumSpec, t: number, shotY: number, look: MediumLook = spec.look): THREE.Group {
   const bottom = shotY - spec.heightM / 2;
+  if (isLargePlate(spec)) return createPlateStand(spec, t, shotY);
   switch (look) {
     case 'carDoorOuter':
     case 'carDoorInner':
@@ -47,13 +52,50 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'drywall':
       return createFrame(spec, t, shotY, standSteel, true);
     case 'concrete':
+    case 'brickWall':
     case 'sandbag':
       return bottom > 0.03 ? createRisers(spec, t, shotY, bottom) : createMat(spec, t, shotY);
     case 'cinderBlock':
       return createMat(spec, t, shotY);
+    case 'tankHull':
+      return createTank(spec, t, shotY);
+    case 'blockHouse':
+    case 'frameInfill':
+    case 'frameColumn':
+    case 'shedSheet': {
+      // A building's struck wall builds the building; its far wall is just a wall.
+      const building = buildingForFront(spec.id);
+      return building ? createBuilding(building, shotY) : new THREE.Group();
+    }
     default:
       return bottom > 0.03 ? createCart(spec, t, shotY, bottom) : createMat(spec, t, shotY);
   }
+}
+
+/** A heavy plate stand (#232, #234): the parts laid out by `plateStandParts`, in cast concrete and steel. */
+function createPlateStand(spec: MediumSpec, t: number, shotY: number): THREE.Group {
+  const stand = new THREE.Group();
+  stand.name = 'stand-plate';
+  const concrete = concreteMaterial();
+  for (const p of plateStandParts(spec, t, shotY)) {
+    if (p.kind === 'box') {
+      stand.add(box(p.size.x, p.size.y, p.size.z, p.material === 'concrete' ? concrete : standSteel, p.center.x, p.center.y, p.center.z));
+    } else if (p.kind === 'brace') {
+      const from = new THREE.Vector3(p.from.x, p.from.y, p.from.z);
+      const along = new THREE.Vector3(p.to.x, p.to.y, p.to.z).sub(from);
+      const brace = box(p.width, along.length(), p.depth, standSteel, 0, 0, 0);
+      brace.position.copy(from).addScaledVector(along, 0.5);
+      brace.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.normalize());
+      stand.add(brace);
+    } else {
+      // A half ring standing on the edge, its arch across the plate's width.
+      const lug = new THREE.Mesh(new THREE.TorusGeometry(p.radius, 0.015, 8, 16, Math.PI), chainSteel);
+      lug.rotation.y = Math.PI / 2;
+      lug.position.set(p.at.x, p.at.y, p.at.z);
+      stand.add(lug);
+    }
+  }
+  return stand;
 }
 
 function box(w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number): THREE.Mesh {

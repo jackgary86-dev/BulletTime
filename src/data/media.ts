@@ -19,6 +19,7 @@ export type MediumBehaviour =
   | 'sand' // grains scatter, strong stopping power
   | 'glass' // radial + concentric cracks, shards, deflection
   | 'ice' // brittle, cracks and chunks
+  | 'plastic' // thin polymer: a clean hole, a few white chips (#240)
   | 'bone'; // bone simulant: hard, brittle, cracks and throws fragments
 
 /** Which procedural look builds the target. */
@@ -30,6 +31,15 @@ export type MediumLook =
   | 'drywall'
   | 'concrete'
   | 'cinderBlock'
+  /** A full-size fired brick wall in running bond, for the proving ground (#231). */
+  | 'brickWall'
+  /** The side armour of a procedural tank, with the vehicle built round it (#231). */
+  | 'tankHull'
+  /** Mock test buildings (#246): the struck wall builds the rest of its building. */
+  | 'blockHouse'
+  | 'frameInfill'
+  | 'frameColumn'
+  | 'shedSheet'
   | 'mildSteel'
   /** Car door skins (#60): mild steel physics, painted outer and primed inner panel. */
   | 'carDoorOuter'
@@ -39,6 +49,10 @@ export type MediumLook =
   | 'glass'
   | 'ice'
   | 'bone'
+  /** Milky polyethylene, a water jug's wall (#240). */
+  | 'plasticJug'
+  /** A phone's battery pouch: dark laminate (#240). */
+  | 'phoneCell'
   // Showpiece objects (#156)
   | 'bowlingBall'
   | 'steelBall'
@@ -117,10 +131,16 @@ export interface MediumSpec {
   exitDeflectionDeg?: number;
   /** Organic gel targets: which blood-pack layout is suspended inside (see `data/organic.ts`). */
   organicLayout?: string;
-  /** Simulants that only appear inside the test dummy (#25), not in the material list. */
+  /** Parts that only appear inside a preset (the test dummy's simulants #25, a phone's layers #240), not in the material list. */
   dummyOnly?: boolean;
   /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
   heavy?: boolean;
+  /** Reactive armour (#260): the share of a shaped-charge jet's mass lost crossing this layer (0-1). Follow-up jets of a tandem warhead are not affected. */
+  jetDisruption?: number;
+  /** Part of a full-size vehicle or building (#231, #246): listed for Missile whatever the struck layer's size, since the structure round it is big. */
+  structure?: boolean;
+  /** On the proving ground, how far above the ground the layer's lower edge stands, m (a tank's hull side rides above its tracks). */
+  groundClearanceM?: number;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
   shape?: ObjectShape;
   /**
@@ -679,6 +699,26 @@ export const MEDIA: MediumSpec[] = [
     heavy: true,
   },
   {
+    id: 'era-tile',
+    name: 'Reactive armour tile',
+    description: 'An explosive-reactive tile: two thin steel plates round a sheet of explosive. It fires when a jet hits and throws plates across it, so a single shaped charge loses much of its jet. A tandem warhead sets it off with its first charge and the second goes through.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 4500,
+    thickness: { min: 0.02, max: 0.06, default: 0.03 },
+    heightM: 0.5,
+    widthM: 0.5,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.7,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    jetDisruption: 0.6,
+  },
+  {
     id: 'reinforced-concrete',
     name: 'Reinforced concrete wall',
     description: 'A thick wall of concrete with steel bars. Craters, spalls and cracks; only large shells go all the way.',
@@ -712,6 +752,326 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.1,
     yawNeckScale: 0.3,
     allowsExpansion: false,
+  },
+  // Full-size walls for the proving ground (#231): they stand on the ground at full height.
+  {
+    id: 'bunker-wall',
+    name: 'Bunker wall (full size)',
+    description: 'A 5 m by 3 m reinforced concrete bunker wall. Shells crater and spall it; only the largest go through.',
+    behaviour: 'concrete',
+    look: 'concrete',
+    density: 2400,
+    thickness: { min: 0.2, max: 2, default: 0.6 },
+    heightM: 3,
+    widthM: 5,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'brick-wall-full',
+    name: 'Brick wall (full size)',
+    description: 'A 5 m by 3 m fired brick wall, one or two bricks thick. Breaches with a spray of brick and mortar.',
+    behaviour: 'concrete',
+    look: 'brickWall',
+    density: 1900,
+    thickness: { min: 0.1, max: 0.45, default: 0.23 },
+    heightM: 3,
+    widthM: 5,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'earth-berm-full',
+    name: 'Earth berm (full size)',
+    description: 'A 6 m wide, 2.5 m high bank of packed earth. Soaks up a shell over a long path and throws up a column of soil.',
+    behaviour: 'sand',
+    look: 'sandbag',
+    density: 1800,
+    thickness: { min: 0.5, max: 4, default: 2 },
+    heightM: 2.5,
+    widthM: 6,
+    angleAdjustable: false,
+    dragCoefficient: 1.1,
+    resistancePa: 25e6,
+    hardness: 0.1,
+    yawNeckScale: 0.3,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'tank-hull',
+    name: 'Tank (hull side)',
+    description: 'A main battle tank parked broadside. The shot strikes the side of the hull above the tracks: rolled armour, thinner than the front.',
+    behaviour: 'steel',
+    look: 'tankHull',
+    density: 7850,
+    thickness: { min: 0.03, max: 0.15, default: 0.07 },
+    heightM: 0.9,
+    widthM: 6.4,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.0e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 68,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    groundClearanceM: 0.95,
+  },
+  // Mock test buildings (#246): each struck wall is listed and builds its building round it; the far walls only appear in the presets.
+  {
+    id: 'block-house-wall',
+    name: 'Block house (front wall)',
+    description: 'A 4 x 4 x 3 m reinforced concrete block house with a slab roof. The shot strikes its 300 mm front wall; what gets through crosses the room to the back wall.',
+    look: 'blockHouse',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.2, max: 0.5, default: 0.3 },
+    heightM: 3,
+    widthM: 4,
+  },
+  {
+    id: 'block-house-back',
+    name: 'Block house (back wall)',
+    description: 'The far wall of the block house.',
+    look: 'blockHouse',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.2, max: 0.5, default: 0.3 },
+    heightM: 3,
+    widthM: 4,
+  },
+  {
+    id: 'frame-infill',
+    name: 'Concrete frame (brick infill panel)',
+    description: 'A two-storey concrete frame, 8 x 6 x 6 m, with brick infill. The shot strikes a ground-floor infill panel between two columns.',
+    look: 'frameInfill',
+    behaviour: 'concrete',
+    density: 1900,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.1, max: 0.35, default: 0.23 },
+    heightM: 2.75,
+    widthM: 3.6,
+  },
+  {
+    id: 'frame-infill-back',
+    name: 'Concrete frame (back infill panel)',
+    description: 'The far infill panel of the concrete frame.',
+    look: 'frameInfill',
+    behaviour: 'concrete',
+    density: 1900,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.1, max: 0.35, default: 0.23 },
+    heightM: 2.75,
+    widthM: 3.6,
+  },
+  {
+    id: 'frame-column',
+    name: 'Concrete frame (column)',
+    description: 'The same two-storey frame, struck on a 400 mm reinforced concrete column instead of an infill panel.',
+    look: 'frameColumn',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.3, max: 0.6, default: 0.4 },
+    heightM: 2.75,
+    widthM: 0.4,
+  },
+  {
+    id: 'frame-column-back',
+    name: 'Concrete frame (far column)',
+    description: 'The column on the far side of the frame, behind the struck one.',
+    look: 'frameColumn',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.3, max: 0.6, default: 0.4 },
+    heightM: 2.75,
+    widthM: 0.4,
+  },
+  {
+    id: 'shed-sheet',
+    name: 'Steel shed (wall sheet)',
+    description: 'A 10 x 6 x 4 m shed of corrugated steel sheet on a light frame. The thin sheet barely slows anything.',
+    look: 'shedSheet',
+    behaviour: 'steel',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 60,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 3,
+    widthM: 10,
+  },
+  {
+    id: 'shed-sheet-back',
+    name: 'Steel shed (back sheet)',
+    description: 'The far wall of the steel shed.',
+    look: 'shedSheet',
+    behaviour: 'steel',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 60,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 3,
+    widthM: 10,
+  },
+  // What a steep dive meets on top of a building or a tank (#250); only reached from above, never listed.
+  {
+    id: 'roof-slab',
+    name: 'Roof slab',
+    description: 'A reinforced concrete roof slab.',
+    look: 'concrete',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.15, max: 0.4, default: 0.25 },
+    heightM: 4,
+    widthM: 8,
+  },
+  {
+    id: 'floor-slab',
+    name: 'Floor slab',
+    description: 'A concrete floor slab.',
+    look: 'concrete',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.1, max: 0.4, default: 0.15 },
+    heightM: 4,
+    widthM: 8,
+  },
+  {
+    id: 'turret-roof',
+    name: 'Turret roof plate',
+    description: 'The thin rolled armour on top of a tank turret.',
+    behaviour: 'steel',
+    look: 'ar500',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.0e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 68,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.02, max: 0.08, default: 0.04 },
+    heightM: 2.4,
+    widthM: 2.6,
+  },
+  {
+    id: 'hull-floor',
+    name: 'Hull floor plate',
+    description: 'The floor plate of a tank hull.',
+    behaviour: 'steel',
+    look: 'ar500',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.0e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 68,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.01, max: 0.05, default: 0.02 },
+    heightM: 3.4,
+    widthM: 6.4,
   },
   {
     id: 'sandbag',
@@ -843,6 +1203,81 @@ export const MEDIA: MediumSpec[] = [
     allowsExpansion: true,
     dummyOnly: true,
   },
+  {
+    id: 'polyethylene',
+    name: 'Polyethylene sheet (jug wall)',
+    description: 'Thin milky HDPE, like a gallon water jug. A bullet makes a clean hole and barely notices it.',
+    behaviour: 'plastic',
+    look: 'plasticJug',
+    density: 950,
+    thickness: { min: 0.0005, max: 0.006, default: 0.001 },
+    heightM: 0.25,
+    widthM: 0.2,
+    angleAdjustable: true,
+    dragCoefficient: 0.5,
+    resistancePa: 25e6, // HDPE yield strength
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+  },
+  // Smartphone layers (#240): 150 x 75 mm, each only in the Smartphone preset.
+  {
+    id: 'phone-glass',
+    name: 'Phone display glass',
+    description: 'Chemically strengthened cover glass, 0.7 mm.',
+    behaviour: 'glass',
+    look: 'glass',
+    density: 2450,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0007 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 60e6,
+    hardness: 0.6,
+    ricochetAngleDeg: 82,
+    yawNeckScale: 0.2,
+    allowsExpansion: false,
+    exitDeflectionDeg: 3,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-cell',
+    name: 'Phone battery pouch',
+    description: 'Lithium-polymer pouch cell: foil and polymer laminate about 4 mm thick.',
+    behaviour: 'plastic',
+    look: 'phoneCell',
+    density: 2400,
+    thickness: { min: 0.002, max: 0.008, default: 0.004 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.6,
+    resistancePa: 40e6,
+    hardness: 0.05,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    dummyOnly: true,
+  },
+  {
+    id: 'phone-frame',
+    name: 'Phone aluminium back',
+    description: 'A thin aluminium back plate and frame, 0.8 mm.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 2700,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 0.15,
+    widthM: 0.075,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 1.15e9,
+    hardness: 0.45,
+    ricochetAngleDeg: 62,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    dummyOnly: true,
+  },
   // --- Showpiece objects (#156): everyday things to destroy, with their own models and effects. ---
   {
     id: 'bowling-ball',
@@ -946,9 +1381,17 @@ export const MEDIA: MediumSpec[] = [
 /** The large steel plates (#232), listed in Artillery and Missile. The 1 x 1 m `rha` stays as the small test coupon. */
 export const LARGE_PLATE_IDS = ['rha-plate', 'mild-plate', 'ar500-plate', 'cast-iron-plate'] as const;
 
-/** Whether a mode's material picker lists this medium: heavy targets never appear in the Bullet lab. */
+/** Missile targets are at least this big across the smaller side of the face, in metres (#245). */
+export const MISSILE_MIN_FACE_M = 2;
+
+/**
+ * Whether a mode's material picker lists this medium (#245): heavy targets never appear in the Bullet lab,
+ * and Missile lists only targets a missile could sensibly be fired at, never the bullet-scale blocks.
+ */
 export function mediumListedIn(medium: MediumSpec, mode: string): boolean {
-  return !medium.dummyOnly && (!medium.heavy || mode !== 'bullet');
+  if (medium.dummyOnly) return false;
+  if (mode === 'missile') return !!medium.structure || Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
+  return !medium.heavy || mode !== 'bullet';
 }
 
 export const DEFAULT_MEDIUM_ID = 'gel10';

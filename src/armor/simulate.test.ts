@@ -50,9 +50,11 @@ describe('simulateArmor', () => {
     expect(tl.shot.obliquityDeg).toBe(85);
   });
 
-  it('throws for the families later tickets will model', () => {
-    for (const family of MUNITION_FAMILIES.filter((f) => f.id !== 'ap-shot' && f.id !== 'apfsds' && f.id !== 'heat' && f.id !== 'hesh')) {
-      expect(() => simulateArmor(rhaShot({ impact: impactState(family.id, 120) }))).toThrow(/not model/);
+  it('models every family the lab offers, HE fragmentation included (#170)', () => {
+    for (const family of MUNITION_FAMILIES) {
+      const tl = simulateArmor(rhaShot({ impact: impactState(family.id, 120) }));
+      expect(tl.frames.length, family.id).toBeGreaterThan(1);
+      expect(tl.events[0].type, family.id).toBe('impact');
     }
   });
 });

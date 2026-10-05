@@ -63,7 +63,7 @@ export class TargetEffects {
         }
       } else if (medium.behaviour === 'sand') {
         loadSandEffect(timeline, layer, this.particles, this.holes);
-      } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall') {
+      } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall' || medium.behaviour === 'plastic') {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }
     });
@@ -73,7 +73,7 @@ export class TargetEffects {
     this.plateDish.load(timeline, target, targetLayers);
     this.objects.load(timeline, target, targetLayers);
     loadBoneEffect(timeline, layers, this.particles, this.holes);
-    this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes);
+    this.glass.load(timeline, layers, targetLayers.map((l) => l.offset), angleDeg, this.particles, this.holes, target.position.y);
   }
 
   /** Sim time when the last effect has settled (dust cleared, debris gone). */

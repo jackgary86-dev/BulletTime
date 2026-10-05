@@ -12,6 +12,8 @@
  */
 
 import type { ArmorTimeline } from './model';
+import { armorBeat, beatFactor } from '../sim/impactBeat';
+import type { ClockSource } from '../sim/playClock';
 
 /** Share of the scrubber given to the impact phase when there is an aftermath. */
 export const IMPACT_SHARE = 0.55;
@@ -54,4 +56,35 @@ export function playbackAt(timeline: PlaybackSource, u: number): PlaybackTime {
 export function playheadForImpactTime(timeline: PlaybackSource, t: number): number {
   const x = Math.min(1, Math.max(0, t / timeline.duration));
   return timeline.fragments ? x * IMPACT_SHARE : x;
+}
+
+/** How long a whole timeline takes to play at 1x, in real seconds. */
+export const PLAY_SECONDS = 8;
+/** A timeline with an aftermath (thrown pieces coming to rest) plays this much longer. */
+export const AFTERMATH_PLAY_FACTOR = 1.6;
+/** A stack of plates plays this much longer than one plate. */
+export const STACK_PLAY_FACTOR = 1.3;
+
+/** The real seconds a whole playback takes at 1x: longer with an aftermath and with several plates. */
+export function playSeconds(source: PlaybackSource & { stages?: readonly unknown[] }): number {
+  return PLAY_SECONDS * (source.fragments ? AFTERMATH_PLAY_FACTOR : 1) * ((source.stages?.length ?? 1) > 1 ? STACK_PLAY_FACTOR : 1);
+}
+
+/**
+ * The Armor lab on the shared clock (#242): the scrubber's playhead `u` (0 to
+ * 1) is the position, played at `speed / playSeconds` per real second, and the
+ * impact beat (#238) slows it as the round meets each plate (`impacts`, s on
+ * the timeline's own clock), during the impact phase only.
+ */
+export function armorClockSource(source: PlaybackSource, impacts: readonly number[], beatOn: boolean): ClockSource {
+  const shape = armorBeat(source.duration);
+  return {
+    duration: 1,
+    beat: beatOn
+      ? (u) => {
+          const pb = playbackAt(source, u);
+          return pb.aftermath ? 1 : beatFactor(pb.t, impacts, shape);
+        }
+      : undefined,
+  };
 }

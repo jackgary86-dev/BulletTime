@@ -7,6 +7,8 @@ import { MODES, roundsForMode } from '../data/modes';
 import { getMedium } from '../data/media';
 import { blastOverpressureKPa, layersFor, simulate } from './engine';
 import { blastResponse, debrisScale, outcomeFor } from './blastResponse';
+import { STACK_PRESETS, presetLayers } from '../data/stacks';
+import { fire } from './testUtil';
 
 function shoot(id: string, medium: string, thickness: number) {
   const m = getMedium(medium);
@@ -170,6 +172,24 @@ describe('jet stand-off (#260)', () => {
 
   it('a probe bores deeper than a charge fuzed at the nose', () => {
     for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-probe'))).toBeGreaterThan(depth(missileId(a, 'shaped-short')) * 1.15);
+  });
+});
+
+describe('reactive armour (#260)', () => {
+  const stack = presetLayers(STACK_PRESETS.find((p) => p.id === 'era-plate')!);
+  const bare = presetLayers({ id: 'bare', name: 'bare', layers: [{ medium: 'rha', thickness: 0.5 }] });
+  const rha = (id: string, layers = stack) => fire({ bullet: id, stack: layers }).summary.penetrationM;
+  const tile = stack[0].thickness + stack[1].gapM;
+
+  it('spoils a single shaped charge: it bores less of the plate than with no tile', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(rha(missileId(a, 'shaped')) - tile).toBeLessThan(rha(missileId(a, 'shaped'), bare) * 0.85);
+  });
+
+  it('a tandem warhead is hurt far less: its second jets pass the fired tile', () => {
+    for (const a of ['light-rocket', 'guided-at']) {
+      const lost = (h: string) => 1 - (rha(missileId(a, h)) - tile) / rha(missileId(a, h), bare);
+      expect(lost('tandem')).toBeLessThan(lost('shaped'));
+    }
   });
 });
 

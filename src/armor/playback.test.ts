@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getPlateMaterial } from './materials';
 import { impactState, type MunitionFamilyId } from './munitions';
-import { IMPACT_SHARE, aftermathEnd, playbackAt, playheadForImpactTime } from './playback';
+import { AFTERMATH_PLAY_FACTOR, IMPACT_SHARE, PLAY_SECONDS, STACK_PLAY_FACTOR, aftermathEnd, armorClockSource, playSeconds, playbackAt, playheadForImpactTime } from './playback';
+import { PlayClock } from '../sim/playClock';
 import { simulateArmor } from './simulate';
 
 const run = (family: MunitionFamilyId, thicknessM: number, obliquityDeg = 0, calibreMm = 120) =>
@@ -65,5 +66,39 @@ describe('playback clock (#165)', () => {
     const tl = run('heat', 0.1);
     expect(playheadForImpactTime(tl, tl.duration)).toBeCloseTo(IMPACT_SHARE, 12);
     expect(playbackAt(tl, playheadForImpactTime(tl, tl.duration / 3)).t).toBeCloseTo(tl.duration / 3, 12);
+  });
+});
+
+describe('the Armor lab on the shared clock (#242)', () => {
+  it('plays its 0 to 1 playhead, slowed round the impact during the impact phase only', () => {
+    const tl = run('heat', 0.1);
+    const source = armorClockSource(tl, [0], true);
+    expect(source.duration).toBe(1);
+    // At first contact the beat holds a tenth speed; long after it, full speed.
+    expect(source.beat!(0)).toBeCloseTo(0.1, 6);
+    expect(source.beat!(IMPACT_SHARE * 0.9)).toBe(1);
+    // In the aftermath the section is frozen, so nothing is slowed.
+    expect(source.beat!(IMPACT_SHARE + 0.1)).toBe(1);
+    expect(armorClockSource(tl, [0], false).beat).toBeUndefined();
+  });
+
+  it('takes longer with an aftermath and with several plates, as before', () => {
+    expect(playSeconds({ duration: 1, fragments: undefined })).toBe(PLAY_SECONDS);
+    const tl = run('heat', 0.1);
+    expect(playSeconds(tl)).toBeCloseTo(PLAY_SECONDS * AFTERMATH_PLAY_FACTOR, 12);
+    expect(playSeconds({ ...tl, stages: [1, 2] })).toBeCloseTo(PLAY_SECONDS * AFTERMATH_PLAY_FACTOR * STACK_PLAY_FACTOR, 12);
+  });
+
+  it('a clock at 1x with no beat plays the whole timeline in playSeconds', () => {
+    const tl = run('apfsds', 0.3, 0, 40);
+    const clock = new PlayClock();
+    clock.rate = 1 / playSeconds(tl);
+    clock.load(armorClockSource(tl, [0], false));
+    let real = 0;
+    while (clock.isPlaying && real < 60) {
+      clock.update(1 / 60);
+      real += 1 / 60;
+    }
+    expect(real).toBeCloseTo(PLAY_SECONDS, 1);
   });
 });

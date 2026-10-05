@@ -164,6 +164,11 @@ export class ParticleSystem {
   private shownShutter = 0;
   /** Brief flashes of light from hot impacts (steel sparks); one light shows the brightest. */
   private flashes: Flash[] = [];
+  /**
+   * Set while the effects are drawn in a frame turned onto a missile's real path (#250): its "down" and floor are not
+   * the world's, so bits fly free (gravity is invisible at these timescales anyway) and never land.
+   */
+  freeFlight = false;
   /** Always in the scene (dark when idle), so lighting a flash never recompiles the materials. */
   readonly flashLight = new THREE.PointLight(0xffb060, 0, 0.8, 2);
 
@@ -246,7 +251,7 @@ export class ParticleSystem {
         v,
         size,
         drag: spec.drag * (0.7 + 0.6 * rand()),
-        gravity: spec.gravity ?? 0,
+        gravity: this.freeFlight ? 0 : (spec.gravity ?? 0),
         stretch: spec.stretch ?? 1,
         grow: spec.grow ?? 1,
         // Small bits spin faster; a few thousand rad/s for a millimetre chip.
@@ -261,7 +266,7 @@ export class ParticleSystem {
         wall: spec.look === 'droplet',
         color: base.clone().multiplyScalar(shade),
       };
-      if (solid || spec.look === 'spark' || spec.look === 'droplet') land(q);
+      if (!this.freeFlight && (solid || spec.look === 'spark' || spec.look === 'droplet')) land(q);
       // A drop that lands leaves its splat for the rest of the shot.
       if (spec.look === 'droplet' && q.landPos) q.life = Math.max(q.life, q.landAge + SPLAT_LIFE_S);
       if (spec.look === 'spark' && q.landPos) {

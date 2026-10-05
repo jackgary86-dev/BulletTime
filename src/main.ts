@@ -8,13 +8,20 @@ import { samplePrimary } from './sim/sample';
 import { CameraDirector } from './scene/cameraDirector';
 import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
+import { siteForMode } from './data/sites';
+import { mountWitnessPanel } from './ui/witnessPanel';
+import { mountApproachPanel } from './ui/approachPanel';
+import { blockFrontWorld } from './sim/witness';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
+import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
+import { isStill } from './scene/still';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
 import { applyReplayLink, parseReplayLink } from './ui/replayLink';
+import { showNotice } from './ui/notice';
 import { mountScrubber } from './ui/scrubber';
 import { mountShotResults } from './ui/shotResults';
 import { mountShotsPanel, type FirePlan } from './ui/shotsPanel';
@@ -47,12 +54,15 @@ async function bootstrap(): Promise<void> {
 
   // Nothing renders until the player has seen the mature-content warning (#109).
   await contentGate();
-  const choice = await chooseSimulator();
+  // A fresh player skips the launcher and sees one shot play itself first (#241).
+  const firstShot = openWithShotNow();
+  const choice = firstShot ? 'bullet' : await chooseSimulator();
   if (choice === 'armor') {
     // The Armor lab is a 2D teaching screen: no renderer, no lane.
     document.body.classList.add('mode-armor');
     mountArmorLab(overlay);
     loader.finish();
+    document.body.dataset.ready = 'true';
     return;
   }
   const mode: SimulatorId = choice;
@@ -75,6 +85,14 @@ async function bootstrap(): Promise<void> {
   const resultsB = mountShotResults(overlay, 'lane-b');
   const shotsPanel = mountShotsPanel(overlay);
   const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
+  // Shells, missiles and charges are tested outdoors on the proving ground (#231): see further, orbit wider.
+  const site = siteForMode(mode);
+  if (site === 'range') {
+    director.setOutdoors(true);
+    camera.far = 400;
+    camera.updateProjectionMatrix();
+    controls.maxDistance = 45;
+  }
   let lighting: LightingMode = 'lab';
   let quality: QualityLevel = initialQuality();
   /** Renderer-wide parts of the quality setting; each lane applies the rest. */
@@ -104,6 +122,7 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  let witnessPanel: ReturnType<typeof mountWitnessPanel> | null = null;
   const clearShot = () => {
     for (const lane of lanes()) lane.clear();
     cueTrack.clear();
@@ -113,8 +132,31 @@ async function bootstrap(): Promise<void> {
     resultsB.hide();
     scrubber.hide();
     panel.setHasShot(false);
+    witnessPanel?.showResults(null);
   };
 
+  /** Set while the first-launch shot plays (#241); the loop reveals the panels when it stops. */
+  let revealAfterFirstShot = false;
+  const revealPanels = () => {
+    if (!document.body.classList.contains('first-shot')) return;
+    document.body.classList.remove('first-shot');
+    document.body.classList.add('first-shot-done');
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'first-shot-pick';
+    pick.textContent = 'Pick a simulator';
+    pick.addEventListener('click', () => location.assign(location.pathname));
+    overlay.append(pick);
+    window.setTimeout(() => pick.classList.add('fade'), 9000);
+  };
+  // A click or key during the first shot brings the panels in early.
+  const revealEarly = () => {
+    if (!revealAfterFirstShot) return;
+    revealAfterFirstShot = false;
+    revealPanels();
+  };
+  canvas.addEventListener('pointerdown', revealEarly);
+  window.addEventListener('keydown', revealEarly);
   const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'));
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
@@ -159,9 +201,13 @@ async function bootstrap(): Promise<void> {
     if (!laneA) return null;
     // Comparing: both lanes fire fresh from t = 0 so they stay in step.
     const timeline = laneA.fire(plan, !!laneB);
-    results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
+    const hit = laneA.approachHit;
+    // A dive or bearing (#250) says which face it met and how obliquely.
+    const faceName = hit ? (hit.face === 'top' ? (laneA.setup.layers[0]?.medium.id === 'tank-hull' ? 'Turret roof' : 'Roof') : hit.face === 'side' ? 'Side wall' : 'Front face') : '';
+    results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : hit ? `${faceName}, ${Math.round(hit.obliquityDeg)}° from square on` : null);
     if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
     results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
+    witnessPanel?.showResults(laneA.witnessResults.length ? laneA.witnessResults : null);
     let clock: Timeline = timeline;
     if (laneB) {
       const b = laneB.fire(plan, true);
@@ -169,7 +215,8 @@ async function bootstrap(): Promise<void> {
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
     }
-    director.setAim(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
+    director.setFrame(laneA.attackFrame.matrix);
+    director.setAim(laneA.approachHit ? laneA.impactWorld : new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
     unlockAudio();
     playback.start(clock, laneA.lastFireStart);
     cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
@@ -179,17 +226,55 @@ async function bootstrap(): Promise<void> {
     return timeline;
   }
 
+  const syncWitness = () => {
+    if (!laneA || !witnessPanel) return;
+    const frame = laneA.witnessFrame;
+    witnessPanel.setBuilding(laneA.building ?? null, frame?.roomM ?? 1);
+    witnessPanel.setBlocks(laneA.witnessBlocks);
+    // The inside view stands at the back of the room, off the shot line and a little up, looking at the breach.
+    if (frame) {
+      const from = blockFrontWorld({ distM: frame.roomM - 0.4, lateralM: 0.9 }, frame);
+      const look = blockFrontWorld({ distM: 0, lateralM: 0 }, frame);
+      director.setInside({ from: new THREE.Vector3(from.x, from.y + 0.5, from.z), look: new THREE.Vector3(look.x, look.y, look.z) });
+    } else director.setInside(null);
+  };
   const rebuildTarget = (setup: TargetSetup) => {
     if (!laneA) return;
     laneA.setTarget(setup);
+    syncWitness();
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
+    director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
     clearShot();
   };
-  const target = mountStackEditor(overlay, { initialId: DEFAULT_MEDIUM_ID, mode, onChange: rebuildTarget });
-  await loader.progress(0.25, 'Building the lab');
-  laneA = new Lane(renderer, camera, target, spec);
+  const startTargetId = modeInfo.defaultTargetId ?? DEFAULT_MEDIUM_ID;
+  const target = mountStackEditor(overlay, { initialId: startTargetId, initialThicknessM: modeInfo.defaultTargetThicknessM, mode, onChange: rebuildTarget });
+  await loader.progress(0.25, site === 'range' ? 'Building the proving ground' : 'Building the lab');
+  // Gel witness blocks inside a mock building (#249), in the target panel; only the proving ground has buildings.
+  const witnessHost = overlay.querySelector<HTMLElement>('.medium-panel');
+  witnessPanel =
+    site === 'range' && witnessHost
+      ? mountWitnessPanel(witnessHost, {
+          onChange: (blocks) => {
+            laneA?.setWitnessBlocks(blocks);
+            clearShot();
+            syncWitness();
+          },
+          onInsideView: () => director.setMode('inside'),
+        })
+      : null;
+  laneA = new Lane(renderer, camera, target, spec, undefined, site);
+  // Missile approach (#250): dive and bearing, in the missile panel.
+  const bulletHost = overlay.querySelector<HTMLElement>('.bullet-panel');
+  const approachPanel =
+    mode === 'missile' && bulletHost
+      ? mountApproachPanel(bulletHost, (approach) => {
+          if (!laneA) return;
+          laneA.setApproach(approach);
+          clearShot();
+          director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
+        })
+      : null;
   rebuildTarget(target);
   director.reset();
 
@@ -217,10 +302,10 @@ async function bootstrap(): Promise<void> {
 
   /** Lane B's emptied scene, reused the next time Compare turns on (see Lane's constructor, #133). */
   let spareScene: THREE.Scene | undefined;
-  const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: DEFAULT_MEDIUM_ID, mode }, {
+  const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: startTargetId, thicknessM: modeInfo.defaultTargetThicknessM, mode }, {
     onToggle: (on) => {
       if (on) {
-        laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
+        laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene, site);
         laneB.setLightingMode(lighting);
         laneB.setQuality(QUALITY[quality]);
       } else if (laneB) {
@@ -288,7 +373,9 @@ async function bootstrap(): Promise<void> {
 
   await loader.progress(0.5, 'Compiling shaders');
   await warmUp(laneA, renderer, camera, shotsPanel.plan(), (fraction, text) => loader.progress(0.5 + 0.45 * fraction, text));
-  director.intro();
+  // Still mode (#243) starts on the settled framing, so a screenshot never catches the opening glide.
+  if (isStill()) director.reset();
+  else director.intro();
 
   const timer = new THREE.Timer();
   timer.connect(document);
@@ -302,6 +389,10 @@ async function bootstrap(): Promise<void> {
     const advancing = playback.isPlaying;
     // While a shot plays only the two readouts sit over the scene; the results come in when it stops (#239).
     overlay.classList.toggle('shot-playing', advancing);
+    if (revealAfterFirstShot && !advancing && playback.timeline) {
+      revealAfterFirstShot = false;
+      revealPanels();
+    }
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
@@ -344,13 +435,35 @@ async function bootstrap(): Promise<void> {
   // A replay link (#230): fire the chosen setup and park the replay a set time after first contact.
   const link = parseReplayLink(location.search);
   if (link && !laneB) {
-    applyReplayLink(overlay, link);
+    const ignored = applyReplayLink(overlay, link);
+    if (ignored.length) showNotice(`${modeInfo.title} does not list ${ignored.join(', ')}, so the default setup is used.`);
+    if (link.witness && laneA) {
+      laneA.setWitnessBlocks(link.witness);
+      syncWitness();
+    }
+    if (link.approach && laneA && approachPanel) {
+      approachPanel.set(link.approach);
+      laneA.setApproach(approachPanel.get());
+      director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
+    }
     const timeline = fireShot(shotsPanel.plan());
     if (timeline) {
       playback.seek((timeline.shots[0]?.impactTime ?? 0) + link.atS);
       scrubber.sync();
     }
   }
+  // First launch (#241): fire the fixed shot with every panel hidden; they come in once it lands.
+  if (firstShot && !link && !laneB) {
+    document.body.classList.add('first-shot');
+    applyReplayLink(overlay, { atS: 0, bullet: FIRST_SHOT.bullet, medium: FIRST_SHOT.medium });
+    fireShot(shotsPanel.plan());
+    markFirstShotSeen();
+    revealAfterFirstShot = true;
+  }
+  // A replay link may change the target and round after start-up, which re-frames the view: snap to it in still mode.
+  if (isStill()) director.reset();
+  // Tells a screenshot run (#243) the scene is built and any replay link is parked.
+  document.body.dataset.ready = 'true';
 }
 
 /**

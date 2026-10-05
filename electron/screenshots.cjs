@@ -47,7 +47,8 @@ const setControl = (selector, value) => `(() => {
 })()`;
 
 async function openMode(win, base, mode) {
-  await win.loadURL(mode ? `${base}/index.html?mode=${mode}` : `${base}/index.html`);
+  // Without a mode, ask for the launcher: a fresh profile would otherwise open on the first-launch shot (#241).
+  await win.loadURL(mode ? `${base}/index.html?mode=${mode}` : `${base}/index.html?launcher`);
   await waitFor(win, 'the page', `!!${button('Continue')} || !!${button('Fire')} || !!document.querySelector('.launcher')`);
   await js(win, `${button('Continue')}?.click()`);
 }

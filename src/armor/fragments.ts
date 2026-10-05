@@ -44,6 +44,8 @@ export const REST_SPEED = 0.6;
 export const MAX_SEGMENTS = 64;
 /** Most pieces drawn for one shot. */
 export const MAX_FRAGMENTS = 40;
+/** Share of its speed a spray fragment keeps when it rebounds off the face it only pitted (#170). */
+export const FRAGMENT_REBOUND_SHARE = 0.15;
 /** Height of the room's floor and ceiling from the shot line, as a multiple of the air either side of the plate. */
 export const ROOM_HALF_HEIGHT_FACTOR = 1.4;
 /**
@@ -278,6 +280,24 @@ export function fragmentSeeds(timeline: ArmorTimeline, rand: () => number): { se
         massKg: impact.mass,
         hot: false,
       });
+    }
+    return { seeds, handoffS };
+  }
+
+  // A fragment spray (#170): those that only pitted the face bounce back off it, those that got through fly on; embedded ones stay put.
+  if (result.pits) {
+    for (const p of result.pits) {
+      if (!p.inSection) continue;
+      const t0 = p.t0 + p.digS;
+      const size = p.diameterM;
+      if (p.outcome === 'pit') {
+        const a = Math.PI + spreadAngle(rand, 0.6);
+        const speed = FRAGMENT_REBOUND_SHARE * p.velocity * (0.6 + 0.4 * rand());
+        seeds.push({ kind: 'shard', t0, x: 0, y: p.yM, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, lengthM: size, widthM: size * 0.8, massKg: p.massKg, hot: false });
+      } else if (p.outcome === 'perforate') {
+        const a = spreadAngle(rand, 0.15);
+        seeds.push({ kind: 'shard', t0, x: tLos, y: p.yM, vx: Math.cos(a) * p.residualVelocity, vy: Math.sin(a) * p.residualVelocity, lengthM: size, widthM: size * 0.8, massKg: p.massKg, hot: true });
+      }
     }
     return { seeds, handoffS };
   }

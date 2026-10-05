@@ -1,4 +1,5 @@
 import { layersFor, type TargetLayer } from '../sim/engine';
+import { BUILDINGS, interiorGapM } from './buildings';
 import { getMedium, type MediumLook, type MediumSpec } from './media';
 
 /** One layer of a target stack (#24): a medium, its thickness, and the air gap in front of it. */
@@ -52,6 +53,39 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'glass', thickness: 0.006 }, { medium: 'gel10', gapM: 0.3, thickness: 0.4 }],
   },
   {
+    id: 'car-door',
+    name: 'Car door',
+    // Outer skin, the hollow door, inner skin: the same two skins as the door in front of gel. A shot at the
+    // window regulator would meet more steel; the model has no regulator, so this is a shot through clear door.
+    layers: [
+      { medium: 'steel-mild', thickness: 0.0009, look: 'carDoorOuter' },
+      { medium: 'steel-mild', thickness: 0.0009, gapM: 0.1, look: 'carDoorInner' },
+    ],
+  },
+  {
+    id: 'drywall-wall',
+    name: 'Drywall wall',
+    // Two sheets of gypsum board over a 9 cm stud bay.
+    layers: [{ medium: 'drywall' }, { medium: 'drywall', gapM: 0.09 }],
+  },
+  {
+    id: 'water-jug',
+    name: 'Water jug',
+    // A thin polyethylene skin round water: skin, 20 cm of water, skin.
+    layers: [{ medium: 'polyethylene' }, { medium: 'water', thickness: 0.2, gapM: 0 }, { medium: 'polyethylene', gapM: 0 }],
+  },
+  {
+    id: 'smartphone',
+    name: 'Smartphone',
+    // Cover glass, battery pouch, aluminium back.
+    layers: [{ medium: 'phone-glass' }, { medium: 'phone-cell', gapM: 0.001 }, { medium: 'phone-frame', gapM: 0.001 }],
+  },
+  {
+    id: 'phone-book',
+    name: 'Phone book',
+    layers: [{ medium: 'phonebook' }],
+  },
+  {
     id: 'concrete-gel',
     name: 'Cinder block + gel',
     layers: [{ medium: 'cinder-block' }, { medium: 'gel10', gapM: 0.1, thickness: 0.4 }],
@@ -64,13 +98,58 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'ar500-plate', thickness: 0.025 }, { medium: 'rha-plate', thickness: 0.1, gapM: 0.3 }],
     heavy: true,
   },
+  // Full-size walls on the proving ground (#231).
+  { id: 'bunker', name: 'Bunker wall', layers: [{ medium: 'bunker-wall' }], heavy: true },
+  {
+    id: 'bunker-berm',
+    name: 'Bunker wall backed by earth',
+    layers: [{ medium: 'bunker-wall', thickness: 0.4 }, { medium: 'earth-berm-full', gapM: 0.05 }],
+    heavy: true,
+  },
+  {
+    id: 'brick-cavity',
+    name: 'Cavity brick wall',
+    layers: [{ medium: 'brick-wall-full', thickness: 0.1 }, { medium: 'brick-wall-full', thickness: 0.1, gapM: 0.05 }],
+    heavy: true,
+  },
+  // Three 300 mm RHA plates bolted face to face (#233): thick enough that a missile's jet stops inside and its depth shows.
+  {
+    id: 'plate-block',
+    name: 'RHA block (3 x 300 mm)',
+    layers: [{ medium: 'rha-plate', thickness: 0.3 }, { medium: 'rha-plate', thickness: 0.3, gapM: 0 }, { medium: 'rha-plate', thickness: 0.3, gapM: 0 }],
+    heavy: true,
+  },
+  { id: 'tank', name: 'Tank, broadside', layers: [{ medium: 'tank-hull' }], heavy: true },
   {
     id: 'plate-concrete',
     name: 'Plate in front of concrete',
     layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
     heavy: true,
   },
+  {
+    id: 'era-plate',
+    name: 'Reactive tile + RHA',
+    // The tile fires on a single shaped charge and spoils its jet; a tandem warhead clears it with the first charge.
+    layers: [{ medium: 'era-tile' }, { medium: 'rha', thickness: 0.5, gapM: 0.05 }],
+    heavy: true,
+  },
+  // Mock test buildings (#246): the struck wall, the room as an air gap, then the far wall.
+  ...Object.values(BUILDINGS).map((b) => ({
+    id: `building-${b.id}`,
+    name: b.name,
+    layers: [
+      { medium: b.front.medium, thickness: b.front.thicknessM },
+      { medium: b.back.medium, thickness: b.back.thicknessM, gapM: interiorGapM(b) },
+    ],
+    heavy: true,
+  })),
 ];
+
+/** Whether a mode's target presets list this one (#245): heavy ones outside the Bullet lab, and only heavy ones for Missile. */
+export function presetListedIn(preset: StackPreset, mode: string): boolean {
+  if (mode === 'missile') return !!preset.heavy;
+  return !preset.heavy || mode !== 'bullet';
+}
 
 export function presetLayers(preset: StackPreset): StackLayer[] {
   return preset.layers.map((l, i) => {

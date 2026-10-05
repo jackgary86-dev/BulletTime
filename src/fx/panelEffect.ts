@@ -26,6 +26,8 @@ const LOOKS: Record<string, Look> = {
   pine: { hole: 0x1c120a, raw: 0xf0d3a0, face: 0xd9b27a },
   oak: { hole: 0x140c06, raw: 0xc99a62, face: 0x9a6b3c },
   drywall: { hole: 0x1a1a1a, raw: 0xf6f4ee, face: 0xece8de },
+  plasticJug: { hole: 0x101418, raw: 0xf2f2ec, face: 0xe8ecea },
+  phoneCell: { hole: 0x0c0c0e, raw: 0x9a9ea6, face: 0x2a2d33 },
 };
 
 export function loadPanelEffect(
