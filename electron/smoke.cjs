@@ -28,7 +28,8 @@ async function passContentWarning(win, expected) {
 
 async function run(win, base) {
   // 1. The launcher: four simulator cards.
-  await win.loadURL(`${base}/index.html`);
+  // A fresh profile would open on the first-launch shot (#241); ?launcher asks for the launcher.
+  await win.loadURL(`${base}/index.html?launcher`);
   await passContentWarning(win, true);
   const cards = await waitFor(
     win,

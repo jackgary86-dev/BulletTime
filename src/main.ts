@@ -11,6 +11,7 @@ import { MODES, framingReach } from './data/modes';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
+import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
 import { isStill } from './scene/still';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
@@ -49,7 +50,9 @@ async function bootstrap(): Promise<void> {
 
   // Nothing renders until the player has seen the mature-content warning (#109).
   await contentGate();
-  const choice = await chooseSimulator();
+  // A fresh player skips the launcher and sees one shot play itself first (#241).
+  const firstShot = openWithShotNow();
+  const choice = firstShot ? 'bullet' : await chooseSimulator();
   if (choice === 'armor') {
     // The Armor lab is a 2D teaching screen: no renderer, no lane.
     document.body.classList.add('mode-armor');
@@ -118,6 +121,28 @@ async function bootstrap(): Promise<void> {
     panel.setHasShot(false);
   };
 
+  /** Set while the first-launch shot plays (#241); the loop reveals the panels when it stops. */
+  let revealAfterFirstShot = false;
+  const revealPanels = () => {
+    if (!document.body.classList.contains('first-shot')) return;
+    document.body.classList.remove('first-shot');
+    document.body.classList.add('first-shot-done');
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'first-shot-pick';
+    pick.textContent = 'Pick a simulator';
+    pick.addEventListener('click', () => location.assign(location.pathname));
+    overlay.append(pick);
+    window.setTimeout(() => pick.classList.add('fade'), 9000);
+  };
+  // A click or key during the first shot brings the panels in early.
+  const revealEarly = () => {
+    if (!revealAfterFirstShot) return;
+    revealAfterFirstShot = false;
+    revealPanels();
+  };
+  canvas.addEventListener('pointerdown', revealEarly);
+  window.addEventListener('keydown', revealEarly);
   const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'));
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
@@ -308,6 +333,10 @@ async function bootstrap(): Promise<void> {
     const advancing = playback.isPlaying;
     // While a shot plays only the two readouts sit over the scene; the results come in when it stops (#239).
     overlay.classList.toggle('shot-playing', advancing);
+    if (revealAfterFirstShot && !advancing && playback.timeline) {
+      revealAfterFirstShot = false;
+      revealPanels();
+    }
     const t = playback.update(delta);
     if (t !== null && playback.timeline) {
       const primary = samplePrimary(playback.timeline, t);
@@ -357,6 +386,14 @@ async function bootstrap(): Promise<void> {
       playback.seek((timeline.shots[0]?.impactTime ?? 0) + link.atS);
       scrubber.sync();
     }
+  }
+  // First launch (#241): fire the fixed shot with every panel hidden; they come in once it lands.
+  if (firstShot && !link && !laneB) {
+    document.body.classList.add('first-shot');
+    applyReplayLink(overlay, { atS: 0, bullet: FIRST_SHOT.bullet, medium: FIRST_SHOT.medium });
+    fireShot(shotsPanel.plan());
+    markFirstShotSeen();
+    revealAfterFirstShot = true;
   }
   // A replay link may change the target and round after start-up, which re-frames the view: snap to it in still mode.
   if (isStill()) director.reset();
