@@ -46,6 +46,8 @@ export type MediumLook =
   | 'carDoorInner'
   | 'ar500'
   | 'sandbag'
+  /** A mound of packed earth with sloped sides (#296). */
+  | 'earthBerm'
   | 'glass'
   | 'ice'
   | 'bone'
@@ -108,6 +110,8 @@ export interface MediumSpec {
   stockThicknessM?: readonly number[];
   /** Colour the metal sheet look is tinted with (copper, brass, lead). */
   tint?: number;
+  /** Brittle metal (cast iron, #296): a hit cracks the face and throws heavy spall instead of just denting. */
+  brittle?: boolean;
   /** Face size: height and width across the shot line, in metres. */
   heightM: number;
   widthM: number;
@@ -951,6 +955,9 @@ export const MEDIA: MediumSpec[] = [
     description: 'Grey cast iron at proving-ground size. Hard but brittle: it cracks and throws heavy spall, and fails sooner than steel of the same thickness.',
     behaviour: 'steel',
     look: 'mildSteel',
+    // A lighter, rougher grey than mill-scale steel, so the dark holes and cracks show on it.
+    tint: 0x9a9da2,
+    brittle: true,
     density: 7200,
     thickness: { min: 0.02, max: 0.3, default: 0.1 },
     heightM: 2,
@@ -1007,7 +1014,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Packed earth berm',
     description: 'A compacted earth bank. It soaks up energy over a long path and throws up a column of soil.',
     behaviour: 'sand',
-    look: 'sandbag',
+    look: 'earthBerm',
     density: 1800,
     thickness: { min: 0.3, max: 3, default: 1 },
     heightM: 1.0,
@@ -1063,7 +1070,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Earth berm (full size)',
     description: 'A 6 m wide, 2.5 m high bank of packed earth. Soaks up a shell over a long path and throws up a column of soil.',
     behaviour: 'sand',
-    look: 'sandbag',
+    look: 'earthBerm',
     density: 1800,
     thickness: { min: 0.5, max: 4, default: 2 },
     heightM: 2.5,

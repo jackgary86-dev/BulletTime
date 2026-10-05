@@ -7,7 +7,7 @@ import { createSupport, SHARED_STAND_MATERIALS } from './stands';
 import { plateStandSpans } from './plateStandLayout';
 import { brickMaterial, concreteMaterial, shedSheetMaterial } from './buildings';
 import { hullPaint } from './tank';
-import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
+import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, earthMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
 export { standSteel } from './stands';
 
@@ -330,6 +330,11 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
       });
       // Copper, brass, lead and the other metals share the sheet look, tinted (#261).
       if (spec.tint !== undefined) scale.color.setHex(spec.tint);
+      // Cast iron (#296) is a matte mid grey, not blue-black mill scale: the dark cracks and holes show on it.
+      if (spec.brittle) {
+        const grey = new THREE.MeshStandardMaterial({ color: spec.tint ?? 0x8d9096, roughnessMap: mill.roughnessMap, normalMap: mill.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), metalness: 0.3, roughness: 0.9 });
+        return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), grey), PLATE_BODY_NAME);
+      }
       if (spec.look === 'mildSteel') return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale), PLATE_BODY_NAME);
       const paint = steelPlateMaps('painted');
       const painted = new THREE.MeshStandardMaterial({
@@ -357,6 +362,9 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
 
     case 'sandbag':
       return createSandbag(t, h, w);
+
+    case 'earthBerm':
+      return createEarthBerm(t, h, w);
 
     case 'glass': {
       const pane = new THREE.MeshPhysicalMaterial({
@@ -591,6 +599,46 @@ export function addOrganicInserts(gel: THREE.Object3D, layoutId: string, t: numb
 }
 
 /** A pillow-shaped burlap bag: a subdivided box pinched toward its seams. */
+/**
+ * A mound of packed earth (#296): the struck face stays flat and upright (the
+ * hit marks sit on it), the sides slope in toward a rounded, lumpy top.
+ */
+function createEarthBerm(t: number, h: number, w: number): THREE.Mesh {
+  const geometry = new THREE.BoxGeometry(t, h, w, 16, 24, 28);
+  const pos = geometry.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const up = Math.min(1, Math.max(0, v.y / h + 0.5));
+    const edge = Math.abs(v.x) / (t / 2);
+    // The sides lean in toward the top, and the top shoulders round off.
+    const lean = 1 - 0.5 * up ** 1.6;
+    v.z *= lean;
+    // Lumps on the sides and top only; the flat front and back faces stay true.
+    if (edge < 0.999) {
+      const lump = Math.sin(v.x * 9 + v.z * 7) * Math.sin(v.z * 11 - v.x * 5) * 0.03;
+      v.y += lump * up * h * 0.5;
+      v.z += lump * w * 0.15 * (1 - up);
+    }
+    // A slightly domed top.
+    if (up > 0.98) v.y -= 0.12 * h * (1 - (1 - edge ** 2) * (1 - (Math.abs(v.z) / (w / 2)) ** 2));
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  // Tile the soil at a real scale: about 0.6 m a repeat.
+  const uv = geometry.attributes.uv;
+  const normal = geometry.attributes.normal;
+  for (let i = 0; i < uv.count; i++) {
+    const nx = Math.abs(normal.getX(i));
+    const ny = Math.abs(normal.getY(i));
+    const [a, b] = nx > 0.5 ? [pos.getZ(i), pos.getY(i)] : ny > 0.5 ? [pos.getX(i), pos.getZ(i)] : [pos.getX(i), pos.getY(i)];
+    uv.setXY(i, a / 0.6 + 0.5, b / 0.6 + 0.5);
+  }
+  geometry.computeVertexNormals();
+  const maps = earthMaps();
+  for (const m of [maps.map, maps.roughnessMap, maps.normalMap]) m.wrapS = m.wrapT = THREE.RepeatWrapping;
+  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ ...maps, roughness: 1, normalScale: new THREE.Vector2(0.8, 0.8) }));
+}
+
 function createSandbag(t: number, h: number, w: number): THREE.Mesh {
   const geometry = new THREE.BoxGeometry(t, h, w, 24, 10, 28);
   const pos = geometry.attributes.position;

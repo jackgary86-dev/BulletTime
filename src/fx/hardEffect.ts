@@ -53,7 +53,7 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
       const shed = e.type === 'exit' ? timeline.tracks.filter((tr) => tr.kind === 'fragment' && Math.abs(tr.spawnT - e.t) < 1e-5).length : 0;
       // The back face is bulged by the time the plate gives way (#221): the exit hole sits on top of the bulge.
       const dish = e.type === 'exit' ? dishes.find((x) => x.layer === e.layer && x.trackId === e.trackId) : undefined;
-      steelEvent(ctx, e, medium.look === 'ar500', perforated, shed, dish?.depthM ?? 0, particles, holes, seed++);
+      steelEvent(ctx, e, medium.look === 'ar500', perforated, shed, dish?.depthM ?? 0, particles, holes, seed++, !!medium.brittle);
     }
   }
 }
@@ -177,6 +177,7 @@ function steelEvent(
   system: ParticleSystem,
   holes: HoleMarks,
   seed: number,
+  brittle = false,
 ): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
   // Particle sizes are tuned for bullets: chips, sparks and the flash grow with the round (#234).
@@ -230,6 +231,23 @@ function steelEvent(
       glow: perforated ? { radius: d * 1.3, cool: GLOW_COOL_S } : undefined,
       seed,
     });
+    if (brittle) {
+      // Cast iron (#296) cracks rather than dents: dark cracks run out from the hit and angular chunks fly off the face.
+      holes.add({
+        t: e.t,
+        pos: e.pos,
+        normal,
+        radius: d * 0.6,
+        ragged: 0.4,
+        color: STEEL.hole,
+        noOpening: true,
+        noHalo: true,
+        streaks: { count: 22, length: [d * 2.5, d * (7 + 10 * k)], width: d * 0.12, color: STEEL.soot },
+        seed: seed + 700,
+      });
+      particles.add(bits('chunk', e.t, origin, normal, 1.1, 60 * w * (0.5 + k), [6, 30 + 40 * k], [0.003, 0.009], 0x4a4b50));
+      particles.add(dust(e.t, origin, normal, 1.2, 45 * w * (0.4 + k), 0.02, [2, 12]));
+    }
     particles.add(sparks(e.t, origin, normal, c.dir, 120 * w * (0.4 + k)));
     // Blow-back (#219): a dark cloud of jacket, lead and plate dust thrown back at wide angles, and thin droplet
     // sheets that run up and down the face. Both are gone in about 100 us.
@@ -275,6 +293,8 @@ function steelEvent(
     // Spall: hot steel flakes thrown off the back face.
     particles.add(sparks(e.t, origin, normal, normal, 160 * w * (0.4 + k)));
     particles.add(bits('shard', e.t, origin, normal, 0.9, 60 * w * k, [40, 120 + e.speed * 0.2], [0.001, 0.003], STEEL.bright));
+    // Cast iron fails brittle (#296): heavy spall, angular grey chunks, thrown from the back face.
+    if (brittle) particles.add(bits('chunk', e.t, origin, normal, 1.0, 70 * w * (0.5 + k), [10, 50 + e.speed * 0.08], [0.005, 0.018], 0x55565b));
     // The plug the bullet punches out leaves ahead of it, and a thin dark string of debris trails along the axis (#220).
     particles.add({ ...bits('chunk', e.t, origin, normal, 0.05, 1, [e.speed * 0.8, e.speed * 0.8], [0.002, 0.003], STEEL.bright), duration: 1e-6, life: [4e-3, 10e-3], drag: 0 });
     particles.add(debrisString(e.t, origin, normal, e.speed, 30 * w * (0.4 + k)));

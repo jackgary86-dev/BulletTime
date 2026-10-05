@@ -5,6 +5,8 @@ import type { HoleMarks } from './holes';
 import { forceChains } from './forceChains';
 import type { ParticleSystem } from './particles';
 import { seededRandom } from '../sim/random';
+import type { MediumSpec } from '../data/media';
+import { scaleBurst, shellScale } from './shellScale';
 
 /**
  * Sandbag: the burlap is punched with a small frayed hole, a fountain of sand
@@ -17,9 +19,12 @@ const CHAIN_WAVE_MS = 150;
 /** A lit grain glows for this long, in seconds. */
 const CHAIN_LIFE_S = 2.5e-3;
 const SAND = { chain: 0xffe2a8, grain: 0xc9b48a, dust: 0xb5a27c, hole: 0x2a2116, fibre: 0x8f7a55 };
+/** Packed earth throws darker, damper soil (#296). */
+const SOIL = { clod: 0x5e4630, dust: 0x8a7658, grain: 0x7a6244 };
 
-export function loadSandEffect(timeline: Timeline, layer: number, particles: ParticleSystem, holes: HoleMarks): void {
+export function loadSandEffect(timeline: Timeline, layer: number, system: ParticleSystem, holes: HoleMarks, medium?: MediumSpec): void {
   let seed = 301;
+  const earth = medium?.look === 'earthBerm';
   for (const e of timeline.events) {
     if (e.layer !== layer) continue;
     const track = timeline.tracks.find((tr) => tr.id === e.trackId);
@@ -29,6 +34,11 @@ export function loadSandEffect(timeline: Timeline, layer: number, particles: Par
     const k = Math.min(1, Math.sqrt((0.5 * track.massKg * e.speed ** 2) / 3000));
     const normal = new THREE.Vector3(e.normal?.x ?? -1, e.normal?.y ?? 0, e.normal?.z ?? 0).normalize();
     const origin = new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z);
+    // The grain and dust bursts are tuned for a bullet; a shell (#296) throws bigger pieces over a wider start area.
+    const s = shellScale(d);
+    const particles = { add: (spec: Parameters<ParticleSystem['add']>[0]) => system.add(scaleBurst(spec, s)) };
+    const grainColor = earth ? SOIL.grain : SAND.grain;
+    const dustColor = earth ? SOIL.dust : SAND.dust;
 
     if (e.type === 'impact' || e.type === 'enter' || e.type === 'exit') {
       const exit = e.type === 'exit';
@@ -79,7 +89,7 @@ export function loadSandEffect(timeline: Timeline, layer: number, particles: Par
         life: [6e-3, 20e-3],
         drag: 15,
         gravity: 9.8,
-        color: SAND.grain,
+        color: grainColor,
         colorJitter: 0.35,
       });
       particles.add({
@@ -96,9 +106,47 @@ export function loadSandEffect(timeline: Timeline, layer: number, particles: Par
         life: [1.5e-3, 4e-3],
         drag: 150,
         gravity: 2,
-        color: SAND.dust,
+        color: dustColor,
         grow: 3,
       });
+      if (earth && !exit) {
+        // The soil column (#296): clods and a dust plume thrown up and back off the face, sized to the shell.
+        const up = new THREE.Vector3(0, 1, 0).addScaledVector(normal, 0.6).normalize();
+        particles.add({
+          look: 'chunk',
+          t0: e.t,
+          duration: 1.2e-3,
+          origin,
+          originJitter: d * 0.5,
+          axis: up,
+          spread: 0.45,
+          count: Math.round(90 * w * (0.4 + k)),
+          speed: [6, 12 + 14 * k],
+          size: [0.002, 0.006],
+          life: [10e-3, 30e-3],
+          drag: 4,
+          gravity: 9.8,
+          color: SOIL.clod,
+          colorJitter: 0.4,
+        });
+        particles.add({
+          look: 'dust',
+          t0: e.t,
+          duration: 2.5e-3,
+          origin,
+          originJitter: d * 0.4,
+          axis: up,
+          spread: 0.5,
+          count: Math.round(70 * w * (0.4 + k)),
+          speed: [5, 11 + 10 * k],
+          size: [0.012, 0.03],
+          life: [12e-3, 36e-3],
+          drag: 30,
+          gravity: 1,
+          color: SOIL.dust,
+          grow: 4,
+        });
+      }
     }
   }
 }

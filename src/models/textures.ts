@@ -293,6 +293,61 @@ export function brickMaps(): MaterialMaps {
 }
 
 /**
+ * Packed earth (#296): brown soil with pale dry patches, small stones and a
+ * lumpy height map, as colour, roughness and normal maps.
+ */
+export function earthMaps(): MaterialMaps {
+  return cachedMaps('earth', () => {
+    const size = 256;
+    const rand = seededRandom(23);
+    const [colour, cctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
+    cctx.fillStyle = 'rgb(104, 80, 56)';
+    cctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = '#808080';
+    hctx.fillRect(0, 0, size, size);
+    // Soft clods: dark and pale blotches, each a bump in the height map.
+    for (let i = 0; i < 260; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = 4 + rand() * 22;
+      const pale = rand() < 0.35;
+      const tone = pale ? [150, 124, 92] : [66, 48, 32];
+      const g = cctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${tone[0]}, ${tone[1]}, ${tone[2]}, ${0.25 + rand() * 0.3})`);
+      g.addColorStop(1, `rgba(${tone[0]}, ${tone[1]}, ${tone[2]}, 0)`);
+      cctx.fillStyle = g;
+      cctx.fillRect(x - r, y - r, r * 2, r * 2);
+      const h = hctx.createRadialGradient(x, y, 0, x, y, r);
+      h.addColorStop(0, pale ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)');
+      h.addColorStop(1, 'rgba(128,128,128,0)');
+      hctx.fillStyle = h;
+      hctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    // Small stones.
+    for (let i = 0; i < 90; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = 1 + rand() * 3;
+      const s = 110 + rand() * 70;
+      cctx.fillStyle = `rgb(${s}, ${s * 0.95}, ${s * 0.85})`;
+      cctx.beginPath();
+      cctx.arc(x, y, r, 0, Math.PI * 2);
+      cctx.fill();
+      hctx.fillStyle = '#d8d8d8';
+      hctx.beginPath();
+      hctx.arc(x, y, r, 0, Math.PI * 2);
+      hctx.fill();
+    }
+    const [rough] = canvas(8, 8);
+    const rctx = rough.getContext('2d')!;
+    rctx.fillStyle = '#f2f2f2';
+    rctx.fillRect(0, 0, 8, 8);
+    return { map: toTexture(colour), roughnessMap: toTexture(rough, false), normalMap: toTexture(normalMapFromHeight(height, 2.2), false) };
+  });
+}
+
+/**
  * Woven polypropylene sandbag cloth (#59): flat tan tapes over and under,
  * with a few loose fibres and grime, as colour and normal maps.
  */
