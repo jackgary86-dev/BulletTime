@@ -964,7 +964,9 @@ function detonate(ctx: Context, body: Body, index: number): void {
   body.state = 'detonated';
   const spec = body.bullet?.blast;
   if (spec) {
-    throwFragments(ctx, body, body.pos, body.dir, spec, spec.jet ? 0.5 : 1.1, body.t);
+    // A top-attack jet fires straight into the struck face, whatever the heading (#260).
+    const axis = spec.jet?.fireNormal ? scale(ctx.normal, dot(body.dir, ctx.normal) > 0 ? 1 : -1) : body.dir;
+    throwFragments(ctx, body, body.pos, axis, spec, spec.jet ? 0.5 : 1.1, body.t);
     if (spec.spall) throwSpall(ctx, body, index, spec);
     event(ctx, body, 'detonate', { layer: index, yieldKg: spec.yieldKg, fireball: spec.fireball ?? 'standard' });
     return;

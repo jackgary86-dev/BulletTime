@@ -50,7 +50,9 @@ export interface BlastSpec {
   /** Shaped-charge jets: how many separate jets, each pair's speed and the fraction of the round's mass in each jet group. */
   jet?: { count: number; speedMs: number; massFraction: number; /** A second, delayed jet group (tandem warhead). */ tandem?: boolean;
     /** Stand-off from the cone to the target, in calibres: the jet needs about 4 to stretch out, and breaks up past that (see `jetStandoffFactor`). Omit for the tuned default. */
-    standoffCal?: number };
+    standoffCal?: number;
+    /** Top-attack (#260): the jet fires straight into the struck face, not along the missile's heading, so a dive onto a roof does not lengthen its path through the plate. */
+    fireNormal?: boolean };
   /** Fireball look. */
   fireball?: 'standard' | 'thermobaric' | 'incendiary' | 'none';
   /** Delay fuze: the round goes on through the target and detonates after this much path, in metres, instead of on contact (APHE, bunker-busting HE). */

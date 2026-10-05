@@ -41,6 +41,7 @@ export const WARHEADS: WarheadHead[] = [
   { id: 'shaped', name: 'Shaped charge', description: 'A hollow-charge jet: very narrow and very fast.' },
   { id: 'shaped-large', name: 'Large-calibre shaped charge', description: 'A wide, long-cone hollow charge: a faster, heavier jet that bores about 5 to 6 calibres of armour, deeper than the standard charge.' },
   { id: 'shaped-probe', name: 'Shaped charge with probe', description: 'A nose probe holds the cone at the best stand-off (about 4 calibres) so the jet is fully stretched.' },
+  { id: 'top-attack', name: 'Top-attack shaped charge', description: 'Flies over the target and fires its jet straight down through the roof, whatever angle it dives at, so a slanted roof does not lengthen the path of the jet through it.' },
   { id: 'shaped-short', name: 'Shaped charge, no probe', description: 'Fuzed at the nose with almost no stand-off: the jet has no room to stretch, so it bores far less.' },
   { id: 'efp', name: 'Explosively formed penetrator', description: 'A plate that folds into a single slug at about 2 km/s: it keeps its punch at long stand-off but bores far less than a jet.' },
   { id: 'tandem', name: 'Tandem shaped charge', description: 'Two shaped charges in a row: the first clears the way for the second.' },
@@ -81,6 +82,8 @@ const blastFor = (head: string, a: Airframe): BlastSpec => {
       return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 8400, massFraction: jetFraction(a) * 2.0 }, fireball: 'standard' };
     case 'shaped-probe':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), standoffCal: OPTIMUM_STANDOFF_CAL }, fireball: 'standard' };
+    case 'top-attack':
+      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), fireNormal: true }, fireball: 'standard' };
     case 'shaped-short':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), standoffCal: 1 }, fireball: 'standard' };
     case 'efp':

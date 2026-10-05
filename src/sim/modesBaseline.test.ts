@@ -100,6 +100,11 @@ const MISSILE_BASELINE: [string, number, FinalState, number][] = [
   ['missile:air-surface:shaped-short', 0.567, 'detonated', 16],
   ['missile:cruise:shaped-probe', 1, 'detonated', 16],
   ['missile:cruise:shaped-short', 1, 'detonated', 16],
+  ['missile:light-rocket:top-attack', 0.324, 'detonated', 16],
+  ['missile:shoulder-rocket:top-attack', 0.362, 'detonated', 16],
+  ['missile:guided-at:top-attack', 0.523, 'detonated', 16],
+  ['missile:air-surface:top-attack', 0.683, 'detonated', 16],
+  ['missile:cruise:top-attack', 1, 'detonated', 16],
 ];
 
 /** Charge columns: charge, overpressure at the test-bed stand-off (kPa), final state, fragments, on a 0.19 m concrete block. */
