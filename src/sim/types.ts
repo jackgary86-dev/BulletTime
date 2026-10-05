@@ -47,6 +47,8 @@ export interface Track {
   /** Whether the projectile is still visible after `endT` (embedded or at rest). */
   persists: boolean;
   finalState: FinalState;
+  /** A scab torn off a plate's far face by a squash head (#204): plate, not penetrator. */
+  scab?: boolean;
 }
 
 export type EventType =

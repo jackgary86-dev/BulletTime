@@ -79,7 +79,7 @@ const blastFor = (head: string, a: Airframe): BlastSpec => {
     case 'shaped':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a) }, fireball: 'standard' };
     case 'shaped-large':
-      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 8400, massFraction: jetFraction(a) * 2.0 }, fireball: 'standard' };
+      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 8400, massFraction: jetFraction(a) * 2.0, lengthScale: 1.2 }, fireball: 'standard' };
     case 'shaped-probe':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), standoffCal: OPTIMUM_STANDOFF_CAL }, fireball: 'standard' };
     case 'top-attack':

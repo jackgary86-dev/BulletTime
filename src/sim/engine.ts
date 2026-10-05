@@ -3,6 +3,7 @@ import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
 import { jetStandoffFactor } from '../data/missiles';
+import { MIN_JET_SPEED_MS, heshSpall, jetDecel, jetLengthFor, plateMaterialFor, rodThroughPlate, steadyDecel } from './armorBridge';
 import { PHYSICS as P, STANDARD_RESOLUTION, type SimResolution } from '../data/physics';
 import { crushFromSpeed } from './crush';
 import { seededRandom } from './random';
@@ -326,6 +327,15 @@ interface Body {
   followsJet?: boolean;
   /** A shaped-charge jet piece (as opposed to a casing fragment). */
   isJet?: boolean;
+  /** A piece of a shaped-charge jet (#204): the speed its tip left at and the jet's effective length, for the density law in metal plate. */
+  jet?: { tipSpeed: number; lengthM: number };
+  /**
+   * In a metal plate the Armor lab models (#204), the steady deceleration it sets for this body in that layer,
+   * replacing the engine's drag and resistance there, and what is left of a rod when it gets out.
+   */
+  armor?: { layer: number; decel: number; exit?: { massKg: number; lengthM: number }; /** A tandem's second jets, down the first group's hole. */ holeDecel?: number };
+  /** A scab torn off the far face by a squash head (#204): plate, not penetrator, so it does not count as penetration. */
+  scab?: boolean;
   /** A motor still burning: the speed it is accelerating to and how fast, in m/s and m/s². */
   thrustTo?: number;
   thrustAccel?: number;
@@ -345,6 +355,8 @@ interface Context {
   nextId: number;
   vd: VelocityDepthPoint[];
   depositedJ: number;
+  /** Deepest the first jet group of a tandem has bored, along the stack normal: the second group runs down that hole (#204). */
+  jetHoleM: number;
   res: SimResolution;
   /** Earlier damage by layer, built on first use from `setup.damage`. */
   damageByLayer?: Map<number, LayerDamage>;
@@ -368,6 +380,7 @@ export function simulate(setup: ShotSetup): Timeline {
     nextId: 0,
     vd: [],
     depositedJ: 0,
+    jetHoleM: 0,
     res: setup.resolution ?? STANDARD_RESOLUTION,
     damageNear: new Map(),
   };
@@ -499,6 +512,24 @@ export function stepIntoSkippedLayer(layers: readonly { offset: number; thicknes
   return best === null ? null : Math.min(1, (best + LAND_INSIDE_M) / along);
 }
 
+/**
+ * Like `stepIntoSkippedLayer`, for any layer: the share of a step (0 to 1) that lands a body in the air just inside
+ * the next face it would cross, or null when the step meets no face. Bodies whose plate behaviour the Armor lab
+ * sets (#204) use it so no part of a step inside a plate goes unresisted, which would make their depth jump about
+ * with where the face falls in a step.
+ */
+export function stepToFaceAhead(layers: readonly { offset: number; thickness: number }[], depth: number, cos: number, travelM: number): number | null {
+  const along = Math.abs(cos) * travelM;
+  if (!(along > 0)) return null;
+  let best: number | null = null;
+  for (const layer of layers) {
+    const ahead = cos > 0 ? layer.offset - depth : depth - (layer.offset + layer.thickness);
+    if (ahead < 0 || ahead >= along) continue;
+    if (best === null || ahead < best) best = ahead;
+  }
+  return best === null ? null : Math.min(1, (best + LAND_INSIDE_M) / along);
+}
+
 /** Furthest a body flies across air to reach a layer ahead before it counts as flown off, m (a steep path across a wide room). */
 const MAX_GAP_FLIGHT_M = 12;
 
@@ -605,7 +636,8 @@ function integrate(ctx: Context, body: Body): void {
     const noseFactor = nose * (1 - sinY) + P.sidewaysDragFactor * sinY;
 
     // A step that would jump clean over a thin layer lands just inside it instead (#265).
-    const jump = stepIntoSkippedLayer(ctx.setup.layers, depthOf(ctx, body.pos), dot(body.dir, ctx.normal), body.speed * dt);
+    const armorBody = !!body.jet || (body.kind === 'bullet' && body.bullet?.shape === 'dart' && ctx.setup.bullet.mode !== 'bullet');
+    const jump = (!medium && armorBody ? stepToFaceAhead : stepIntoSkippedLayer)(ctx.setup.layers, depthOf(ctx, body.pos), dot(body.dir, ctx.normal), body.speed * dt);
     const stepS = jump === null ? dt : Math.max(dt * jump, 1e-12);
 
     let force: number;
@@ -619,7 +651,13 @@ function integrate(ctx: Context, body: Body): void {
 
     const tailing = !medium && body.tailUntil !== undefined && body.t < body.tailUntil;
     const bursting = !medium && body.burstUntil !== undefined && body.t < body.burstUntil;
-    const dv = (force / body.mass) * stepS + (tailing ? (body.tailDecel ?? 0) * stepS : 0) + (bursting ? (body.burstDecel ?? 0) * stepS : 0);
+    // In a metal plate the Armor lab models, its steady deceleration replaces the drag and resistance (#204).
+    const armorLayer = medium && body.armor?.layer === layerIndex ? body.armor : null;
+    // A tandem's second jets meet little resistance down the hole the first group bored, until they pass its bottom.
+    const inHole = armorLayer?.holeDecel !== undefined && depthOf(ctx, body.pos) < ctx.jetHoleM;
+    const armorDecel = armorLayer ? (inHole ? armorLayer.holeDecel! : armorLayer.decel) : null;
+    const dv =
+      (armorDecel ?? force / body.mass) * stepS + (tailing ? (body.tailDecel ?? 0) * stepS : 0) + (bursting ? (body.burstDecel ?? 0) * stepS : 0);
     let newSpeed = Math.max(0, body.speed - dv);
     // The motor keeps pushing in the air until the missile is up to speed.
     if (!medium && body.thrustTo !== undefined && body.thrustAccel !== undefined && body.speed < body.thrustTo) newSpeed = Math.min(body.thrustTo, body.speed + body.thrustAccel * stepS);
@@ -648,6 +686,7 @@ function integrate(ctx: Context, body: Body): void {
       body.layerDist += dx;
       body.materialDist += dx;
       body.maxDepth = Math.max(body.maxDepth, depthOf(ctx, body.pos));
+      if (body.jet && !body.followsJet) ctx.jetHoleM = Math.max(ctx.jetHoleM, body.maxDepth);
       if (body.id === 0 && step % ctx.res.sampleEvery === 0) ctx.vd.push({ depth: body.pathSinceImpact, speed: body.speed });
       updateExpansion(body, medium);
       updateYawAndBreakup(ctx, body, medium, stepS);
@@ -707,6 +746,7 @@ function integrate(ctx: Context, body: Body): void {
     endT: body.t,
     persists,
     finalState: body.state,
+    ...(body.scab ? { scab: true } : {}),
   });
   ctx.tracks.sort((a, b) => a.id - b.id);
 }
@@ -755,7 +795,11 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
 
   // Reactive armour (#260): the tile fires as the first jet hits it and throws plates across the jet's path, so
   // a jet loses part of its mass crossing it. A tandem warhead's second jets arrive after the tile has fired.
-  if (body.isJet && !body.followsJet && medium.jetDisruption) body.mass *= 1 - medium.jetDisruption;
+  if (body.isJet && !body.followsJet && medium.jetDisruption) {
+    body.mass *= 1 - medium.jetDisruption;
+    // In metal plate the jet digs by its length (#204), so the tile shortens it as much as it thins it.
+    if (body.jet) body.jet = { ...body.jet, lengthM: body.jet.lengthM * (1 - medium.jetDisruption) };
+  }
 
   const b = body.bullet;
 
@@ -781,14 +825,51 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
       event(ctx, body, 'expand', { layer: index });
     }
   }
+  armorEntry(ctx, body, index);
   return 'entered';
+}
+
+/**
+ * A long rod or a jet entering a metal plate (#204): the Armor lab's model for that plate sets a steady deceleration
+ * over the path through it, ending at the model's exit speed or bringing the body to rest at the model's depth.
+ */
+function armorEntry(ctx: Context, body: Body, index: number): void {
+  body.armor = undefined;
+  if (ctx.setup.bullet.mode === 'bullet') return;
+  const layer = ctx.setup.layers[index];
+  const plate = plateMaterialFor(layer.medium);
+  if (!plate) return;
+  const pathM = layer.thickness / Math.max(0.05, Math.abs(dot(body.dir, ctx.normal)));
+  if (body.jet) {
+    // A tandem's second group runs down the first group's hole and digs on past its bottom with a share of the jet's reach.
+    const full = jetDecel(body.jet.tipSpeed, body.jet.lengthM, plate);
+    body.armor = body.followsJet
+      ? { layer: index, decel: jetDecel(body.jet.tipSpeed, body.jet.lengthM * TANDEM_SECOND_REACH, plate), holeDecel: full * DAMAGED_CHANNEL_FACTOR }
+      : { layer: index, decel: full };
+  } else if (body.kind === 'bullet' && body.bullet?.shape === 'dart') {
+    const out = rodThroughPlate({ speed: body.speed, massKg: body.mass, lengthM: body.lengthM }, plate, pathM);
+    body.armor = {
+      layer: index,
+      decel: steadyDecel(body.speed, { perforated: out.perforated, depthM: out.depthM, exitSpeed: out.residualSpeed }, pathM),
+      exit: out.perforated ? { massKg: Math.max(1e-6, out.residualMassKg), lengthM: Math.max(1e-3, out.residualLengthM) } : undefined,
+    };
+  }
 }
 
 function exitLayer(ctx: Context, body: Body, index: number): void {
   const medium = ctx.setup.layers[index].medium;
+  if (body.armor?.layer === index) {
+    // What the plate eroded off a rod stays behind (#204).
+    if (body.armor.exit) {
+      body.mass = body.armor.exit.massKg;
+      body.lengthM = body.armor.exit.lengthM;
+    }
+    body.armor = undefined;
+  }
   const cosOut = dot(body.dir, ctx.normal);
   event(ctx, body, 'exit', { normal: scale(ctx.normal, Math.sign(cosOut) || 1), layer: index });
-  if (medium.exitDeflectionDeg) {
+  // A jet runs straight on out of a plate (#204); a bullet or fragment is knocked off line.
+  if (medium.exitDeflectionDeg && !body.jet) {
     body.dir = perturb(body.dir, (medium.exitDeflectionDeg * Math.PI) / 180, ctx.rand);
   }
   if (medium.exitTail && body.kind !== 'fragment') {
@@ -897,6 +978,8 @@ function splash(ctx: Context, body: Body, index: number): void {
 const CHARGE_FUZE_S = 1.5e-3;
 /** Heaviest representative casing fragment, in kilograms. */
 const MAX_FRAGMENT_KG = 0.03;
+/** How much of a full jet's reach a tandem's second group adds past the bottom of the first group's hole (#204): 5 to 6 calibres in all, against 4 to 5 for one charge. */
+const TANDEM_SECOND_REACH = 0.3;
 /** Delay before a tandem warhead's second jet group, in seconds. */
 const TANDEM_DELAY_S = 40e-6;
 /** TNT's specific energy, in joules per kilogram, for the energy line in the results. */
@@ -929,6 +1012,10 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
         const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);
         piece.followsJet = g > 0;
         piece.isJet = true;
+        // A stretching jet digs metal by the density law (#204); a slow slug or formed penetrator keeps the engine's law.
+        if (jet.speedMs >= MIN_JET_SPEED_MS) {
+          piece.jet = { tipSpeed: jet.speedMs, lengthM: jetLengthFor(ctx.setup.bullet.caliberMm, jetStandoffFactor(jet.standoffCal) * (jet.lengthScale ?? 1)) };
+        }
         if (ctx.setup.bullet.behaviour === 'charge') piece.extraRangeM = ctx.setup.standOffM;
         ctx.queue.push(piece);
       }
@@ -944,8 +1031,16 @@ function throwSpall(ctx: Context, body: Body, index: number, spec: NonNullable<B
   const layer = ctx.setup.layers[index];
   const behaviour = layer?.medium.behaviour;
   if (!layer || (behaviour !== 'steel' && behaviour !== 'concrete')) return;
-  if (layer.thickness > HESH_SPALL_M_PER_KG13 * Math.cbrt(Math.max(1e-6, spec.yieldKg))) return;
-  const { count, speedMs } = spec.spall!;
+  let { count, speedMs } = spec.spall!;
+  const plate = plateMaterialFor(layer.medium);
+  if (plate) {
+    // Metal plate (#204): the stress-wave model decides whether a scab tears off, and how fast it leaves.
+    const pathM = layer.thickness / Math.max(0.05, Math.abs(dot(body.dir, ctx.normal)));
+    const spall = heshSpall(ctx.setup.bullet.caliberMm, body.impactSpeed || body.speed, plate, pathM);
+    if (!spall.spalls) return;
+    speedMs = Math.max(5, spall.speed);
+    count = Math.max(6, Math.round(count / 2));
+  } else if (layer.thickness > HESH_SPALL_M_PER_KG13 * Math.cbrt(Math.max(1e-6, spec.yieldKg))) return;
   const back = add(ctx.setup.impactPoint, scale(ctx.normal, layer.offset + layer.thickness + 0.002));
   // Scabs come off in the face area around the burst, as pieces of the plate itself.
   const mass = Math.min(0.04, 0.4 * layer.thickness * Math.min(layer.medium.heightM, layer.medium.widthM) ** 2 * layer.medium.density / count);
@@ -955,7 +1050,9 @@ function throwSpall(ctx: Context, body: Body, index: number, spec: NonNullable<B
     const a = ctx.rand() * Math.PI * 2;
     const start = v3(back.x, body.pos.y + r * Math.sin(a), body.pos.z + r * Math.cos(a));
     const dir = perturb(ctx.normal, 0.7 * Math.sqrt(ctx.rand()), ctx.rand);
-    ctx.queue.push(makeBody(ctx, 'fragment', start, dir, speedMs * (0.5 + 0.7 * ctx.rand()), m, fragmentDiameter(m), body.t));
+    const scab = makeBody(ctx, 'fragment', start, dir, speedMs * (0.5 + 0.7 * ctx.rand()), m, fragmentDiameter(m), body.t);
+    scab.scab = true;
+    ctx.queue.push(scab);
   }
 }
 
@@ -1060,6 +1157,8 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
   let blastExit: ShotEvent | undefined;
   if (blast) {
     for (const track of ctx.tracks) {
+      // A scab is plate thrown off the far face, not something that dug through it (#204).
+      if (track.scab) continue;
       for (const k of track.keyframes) blastPenetration = Math.max(blastPenetration, Math.min(ctx.stackDepth, depthOf(ctx, k.pos)));
     }
     for (const e of ctx.events) if (e.type === 'exit' && e.layer === lastLayer && (!blastExit || e.speed > blastExit.speed)) blastExit = e;
@@ -1097,6 +1196,7 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
 function deepestTrack(ctx: Context): ShotSummary['penetrator'] {
   let best: { track: Track; depth: number } | null = null;
   for (const track of ctx.tracks) {
+    if (track.scab) continue;
     let depth = 0;
     for (const k of track.keyframes) depth = Math.max(depth, Math.min(ctx.stackDepth, depthOf(ctx, k.pos)));
     if (depth > 0 && (!best || depth > best.depth)) best = { track, depth };

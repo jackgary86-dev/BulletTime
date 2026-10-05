@@ -23,7 +23,7 @@ const SIMULATORS: Simulator[] = [
   { id: 'artillery', name: 'Artillery', range: '20 mm to 240 mm', blurb: 'AP, HE, HEAT and HESH shells from autocannon to siege howitzers against plate, concrete and earth.', ready: true },
   { id: 'missile', name: 'Missile', range: '5 missiles, 5 warheads', blurb: 'Five basic missiles, each fitted with a different warhead.', ready: true },
   { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: true },
-  { id: 'armor', name: 'Armor lab', range: 'A cross-section of the plate', blurb: 'Shot, long rods, shaped-charge jets and squash heads against armour plate, with temperature, stress and energy.', ready: true },
+  { id: 'armor', name: 'Armor lab', range: 'A cross-section of the plate', blurb: 'Shot, long rods, shaped-charge jets, squash heads and HE fragments against armour plate, with a classroom mode.', ready: true },
 ];
 
 /** Which card keyboard focus moves to: arrow keys step through the grid, Home and End jump to the ends. */
