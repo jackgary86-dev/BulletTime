@@ -26,7 +26,10 @@ const SMOKE = process.env.BULLETTIME_SMOKE === '1';
 if (SMOKE || process.env.BULLETTIME_SHOTS) {
   app.setPath('userData', require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(), 'bullettime-smoke-')));
 }
-if (SMOKE) {
+// On macOS, SwiftShader goes through ANGLE's Vulkan backend, which fails to start on
+// the current GitHub macOS runners ("Internal Vulkan error (-3)"), leaving no WebGL at all.
+// Those runners have a virtual Metal GPU, so the default ANGLE Metal backend is used there.
+if (SMOKE && process.platform !== 'darwin') {
   app.commandLine.appendSwitch('use-angle', 'swiftshader');
   app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 }
