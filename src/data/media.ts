@@ -55,6 +55,12 @@ export type MediumLook =
   | 'plasticJug'
   /** A phone's battery pouch: dark laminate (#240). */
   | 'phoneCell'
+  /** A phone's aluminium back (#240). */
+  | 'phoneBack'
+  /** A phone book: a block of paper pages in a cover (#240). */
+  | 'paperStack'
+  /** The water inside a jug, with its neck, cap and handle (#240). */
+  | 'waterJug'
   // Showpiece objects (#156)
   | 'bowlingBall'
   | 'steelBall'
@@ -568,7 +574,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Phone book',
     description: 'A thick stack of paper. Soaks up pistol rounds better than it looks.',
     behaviour: 'wood',
-    look: 'pine',
+    look: 'paperStack',
     density: 700,
     thickness: { min: 0.03, max: 0.12, default: 0.06 },
     heightM: 0.25,
@@ -1538,7 +1544,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Phone aluminium back',
     description: 'A thin aluminium back plate and frame, 0.8 mm.',
     behaviour: 'steel',
-    look: 'mildSteel',
+    look: 'phoneBack',
     density: 2700,
     thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
     heightM: 0.15,

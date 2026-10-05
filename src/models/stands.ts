@@ -50,7 +50,12 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'pine':
     case 'oak':
     case 'drywall':
+    case 'paperStack':
       return createFrame(spec, t, shotY, standSteel, true);
+    case 'phoneBack':
+    case 'phoneCell':
+      // These layers ride in the holder of the phone's glass in front of them.
+      return new THREE.Group();
     case 'concrete':
     case 'brickWall':
     case 'sandbag':
