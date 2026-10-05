@@ -52,7 +52,9 @@ export interface BlastSpec {
     /** Stand-off from the cone to the target, in calibres: the jet needs about 4 to stretch out, and breaks up past that (see `jetStandoffFactor`). Omit for the tuned default. */
     standoffCal?: number;
     /** Top-attack (#260): the jet fires straight into the struck face, not along the missile's heading, so a dive onto a roof does not lengthen its path through the plate. */
-    fireNormal?: boolean };
+    fireNormal?: boolean;
+    /** A longer or shorter jet than the calibre's standard cone gives (a wide, long-cone head), as a factor on its length; omit for 1. */
+    lengthScale?: number };
   /** Fireball look. */
   fireball?: 'standard' | 'thermobaric' | 'incendiary' | 'none';
   /** Delay fuze: the round goes on through the target and detonates after this much path, in metres, instead of on contact (APHE, bunker-busting HE). */

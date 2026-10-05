@@ -178,6 +178,15 @@ A stack of up to four parallel plates with air gaps runs the single-plate models
 
 Generic textbook arrangements only: homogeneous plates with air gaps. Real or proprietary armor packages are not modelled. **Limits:** only the last plate reached throws pieces; earlier plugs and scabs are not tracked across a gap; a gap's flight time is capped at 2 ms on the timeline. Trust: **Illustrative** for the carry-over rules, **Fair** for the trends (a jet loses penetration across a gap, a spaced plate costs a rod penetration).
 
+## Used by the Artillery and Missile simulators (#204)
+
+`src/sim/armorBridge.ts` hands three of these models to the 3D simulators for metal plate (RHA, armour and mild steel, cast iron, aluminium; the mapping is `plateMaterialFor`). Concrete, earth, wood and every other material keep the engine's own drag-and-resistance law.
+- **Long rods** (APFSDS darts, missile kinetic cores): on entering a plate the rod runs `longRodShot` for its speed and remaining length (tungsten heavy alloy, diameter from its mass and length). The engine then slows it at a steady rate over its path through the plate, ending at Tate's residual speed, or brings it to rest at Tate's depth. What the plate eroded off the rod stays behind.
+- **Shaped-charge jets** faster than 5 km/s (not the slow slug of a formed penetrator): every piece of the jet is slowed at `v_tip² / (2 · reach)`, where the reach is the density law on the jet's length (`impactState('heat')` scaling, without its 150 mm clamp, times the warhead's stand-off and length factors). So the tip stops at the reach and slower pieces earlier. A tandem's second group runs down the first group's hole at 0.3 of that rate, then digs on with 0.3 of the reach.
+- **Squash heads:** the stress-wave model decides whether a scab tears off the far face, and the scab leaves at the model's speed. A scab is plate, not penetrator, so it no longer counts as penetration.
+
+Jets and rods land each step on the face they would cross, so no part of a step inside a plate goes unresisted. Their depth no longer depends on where a face falls in a step.
+
 ## Not modelled
 
 3D views of fragment pits, composite or reactive armor, shock heating and phase change, strain-rate and temperature-dependent material strength, and anything about how a munition is built.
