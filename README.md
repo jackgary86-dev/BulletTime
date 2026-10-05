@@ -56,6 +56,23 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 | **Steel ball, .308** | **Steel gong, .308** | |
 | ![Sparks off the steel ball](docs/objects-156/steel-ball.jpg) | ![Holed gong](docs/objects-156/gong.jpg) | |
 
+## Armor lab
+
+A teaching screen for how large-calibre munitions (40 to 150 mm) defeat metal plate, drawn as a sawn-open cross-section. Pick a family, calibre, plate material, thickness, slope and arrangement (up to four plates with gaps), press Fire, and scrub through the impact with temperature, stress and pressure-wave overlays. Open it from the launcher or with `?mode=armor`.
+
+- **Five families:** full-bore AP shot, APFSDS long rod, shaped-charge jet, HESH squash head and HE fragmentation, each with a results panel and a short explainer.
+- **Classroom mode:** press **Classroom** for six guided comparisons, each with two setups to fire in turn, a caption and a question for the class: full-bore shot vs long rod, square-on vs sloped plate, a jet in steel vs aluminium, a squash head on thin vs thick plate, the ricochet threshold, and a jet across a gap. The lab stays fully interactive at every step. A link opens a lesson directly: `?mode=armor&lesson=3` (add `&setup=b` for its second setup).
+- **Save PNG:** writes the cross-section at the current moment, 1600 × 900, with the setup, the time and the current event burnt in underneath, for slides. It works in the browser and desktop builds.
+- **Model notes:** the equations, constants, sources and limits for every family are in [docs/armor-models.md](docs/armor-models.md). These are simplified teaching models of what happens at the plate, not engineering data, and nothing about how a munition is built.
+
+| Full-bore AP shot | APFSDS long rod | Shaped-charge jet |
+| --- | --- | --- |
+| ![Full-bore shot plastically flowing 150 mm RHA, temperature overlay](docs/screenshots/armor-ap-shot.jpg) | ![Long rod eroding through 250 mm RHA](docs/screenshots/armor-apfsds.jpg) | ![Jet in 300 mm RHA, pressure overlay](docs/screenshots/armor-heat.jpg) |
+| **HESH squash head** | **HE fragmentation** | |
+| ![Tension band at the rear face of 60 mm RHA, stress overlay](docs/screenshots/armor-hesh.jpg) | ![Fragments pitting and holing 15 mm mild steel](docs/screenshots/armor-he-frag.jpg) | |
+
+`npm run screenshots:armor` retakes these five pictures (`scripts/armor-screenshots.mjs`); they double as store screenshots for itch.io and Steam.
+
 ## Running it
 
 You need Node 20.15 or newer.
