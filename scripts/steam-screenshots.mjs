@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 
 if (!process.argv.includes('--skip-build')) execSync('npm run build:desktop', { stdio: 'inherit' });
 
-const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : ['1', '2', '3', '4', '5', '6'];
+const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : ['1', '2', '3', '4', '5', '6', '7'];
 const electron = createRequire(import.meta.url)('electron');
 let failed = 0;
 for (const scene of only) {
