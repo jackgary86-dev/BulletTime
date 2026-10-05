@@ -111,6 +111,7 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'brick-wall-full', thickness: 0.1 }, { medium: 'brick-wall-full', thickness: 0.1, gapM: 0.05 }],
     heavy: true,
   },
+  { id: 'tank', name: 'Tank, broadside', layers: [{ medium: 'tank-hull' }], heavy: true },
   {
     id: 'plate-concrete',
     name: 'Plate in front of concrete',
