@@ -103,6 +103,13 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
     heavy: true,
   },
+  {
+    id: 'era-plate',
+    name: 'Reactive tile + RHA',
+    // The tile fires on a single shaped charge and spoils its jet; a tandem warhead clears it with the first charge.
+    layers: [{ medium: 'era-tile' }, { medium: 'rha', thickness: 0.5, gapM: 0.05 }],
+    heavy: true,
+  },
 ];
 
 export function presetLayers(preset: StackPreset): StackLayer[] {

@@ -324,6 +324,8 @@ interface Body {
   ricocheted: boolean;
   /** A tandem warhead's second jets fly down the first group's hole, so the medium resists them less. */
   followsJet?: boolean;
+  /** A shaped-charge jet piece (as opposed to a casing fragment). */
+  isJet?: boolean;
   /** A motor still burning: the speed it is accelerating to and how fast, in m/s and m/s². */
   thrustTo?: number;
   thrustAccel?: number;
@@ -696,6 +698,10 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
   body.impacted = true;
   event(ctx, body, first ? 'impact' : 'enter', { normal: faceNormal, layer: index });
 
+  // Reactive armour (#260): the tile fires as the first jet hits it and throws plates across the jet's path, so
+  // a jet loses part of its mass crossing it. A tandem warhead's second jets arrive after the tile has fired.
+  if (body.isJet && !body.followsJet && medium.jetDisruption) body.mass *= 1 - medium.jetDisruption;
+
   const b = body.bullet;
 
   // Oblique entry bends the path a little toward the surface normal.
@@ -866,6 +872,7 @@ function throwFragments(ctx: Context, body: Body, origin: Vec3, axis: Vec3, spec
         const speed = jet.speedMs * (0.55 + 0.45 * (1 - i / jet.count)) * (0.97 + 0.06 * ctx.rand());
         const piece = makeBody(ctx, 'fragment', { ...origin }, dir, speed, m, fragmentDiameter(m) * 0.6, t + g * TANDEM_DELAY_S);
         piece.followsJet = g > 0;
+        piece.isJet = true;
         if (ctx.setup.bullet.behaviour === 'charge') piece.extraRangeM = ctx.setup.standOffM;
         ctx.queue.push(piece);
       }

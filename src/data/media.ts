@@ -126,6 +126,8 @@ export interface MediumSpec {
   dummyOnly?: boolean;
   /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
   heavy?: boolean;
+  /** Reactive armour (#260): the share of a shaped-charge jet's mass lost crossing this layer (0-1). Follow-up jets of a tandem warhead are not affected. */
+  jetDisruption?: number;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
   shape?: ObjectShape;
   /**
@@ -682,6 +684,26 @@ export const MEDIA: MediumSpec[] = [
     yawNeckScale: 0.05,
     allowsExpansion: false,
     heavy: true,
+  },
+  {
+    id: 'era-tile',
+    name: 'Reactive armour tile',
+    description: 'An explosive-reactive tile: two thin steel plates round a sheet of explosive. It fires when a jet hits and throws plates across it, so a single shaped charge loses much of its jet. A tandem warhead sets it off with its first charge and the second goes through.',
+    behaviour: 'steel',
+    look: 'mildSteel',
+    density: 4500,
+    thickness: { min: 0.02, max: 0.06, default: 0.03 },
+    heightM: 0.5,
+    widthM: 0.5,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.7,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    jetDisruption: 0.6,
   },
   {
     id: 'reinforced-concrete',
