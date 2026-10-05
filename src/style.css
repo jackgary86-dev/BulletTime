@@ -2121,6 +2121,9 @@ body {
 .armor-head button,
 .armor-fire,
 .armor-play,
+.armor-export,
+.armor-lesson-setups button,
+.armor-lesson-nav button,
 .armor-overlays button {
   font: inherit;
   font-size: 12px;
@@ -2135,6 +2138,9 @@ body {
 
 .armor-head button:hover,
 .armor-overlays button:not(:disabled):hover,
+.armor-export:hover,
+.armor-lesson-setups button:hover,
+.armor-lesson-nav button:not(:disabled):hover,
 .armor-play:hover {
   background: var(--control-hover);
 }
@@ -2313,6 +2319,8 @@ body {
   max-width: 55%;
 }
 
+.armor-head button.active,
+.armor-lesson-setups button.active,
 .armor-overlays button.active {
   color: #1a1206;
   background: var(--accent);
@@ -2596,4 +2604,53 @@ body {
 
 .witness-results li + li {
   margin-top: 2px;
+}
+
+/* Classroom mode (#173): the lesson card at the top of the side column. */
+.armor-classroom {
+  border-color: var(--accent);
+}
+
+.armor-classroom h2 output {
+  margin-left: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.armor-lesson-title {
+  margin-top: 0 !important;
+  color: var(--fg) !important;
+  font-size: 14px !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+
+.armor-lesson-caption,
+.armor-lesson-question {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.armor-lesson-question {
+  color: var(--accent);
+}
+
+.armor-lesson-setups,
+.armor-lesson-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.armor-lesson-nav {
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+
+.armor-lesson-nav button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

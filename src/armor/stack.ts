@@ -20,7 +20,7 @@
  */
 
 import { withFragments } from './fragments';
-import type { PlateMaterial, PlateMaterialId } from './materials';
+import { getPlateMaterial, type PlateMaterial, type PlateMaterialId } from './materials';
 import {
   MAX_OBLIQUITY_DEG,
   losThickness,
@@ -328,6 +328,11 @@ export interface StackPreset {
   name: string;
   description: string;
   build(main: PlateMaterial, mainThicknessM: number, extra: { spaced: PlateMaterial; soft: PlateMaterial; hard: PlateMaterial }): PlateLayer[];
+}
+
+/** The extra plates the arrangements use besides the main one: a mild-steel spaced plate and soft backing, an RHA hard face. */
+export function arrangementExtras(): { spaced: PlateMaterial; soft: PlateMaterial; hard: PlateMaterial } {
+  return { spaced: getPlateMaterial('mild-steel'), soft: getPlateMaterial('mild-steel'), hard: getPlateMaterial('rha') };
 }
 
 export const STACK_PRESETS: StackPreset[] = [
