@@ -4,6 +4,7 @@ import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
+import { hullPaint } from './tank';
 import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
 export { standSteel } from './stands';
@@ -268,6 +269,10 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         new THREE.MeshStandardMaterial({ ...maps, roughness: 1 }),
       );
     }
+
+    case 'tankHull':
+      // The tank's near hull side, painted olive; the rest of the vehicle is its support.
+      return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), hullPaint()), PLATE_BODY_NAME);
 
     case 'cinderBlock': {
       // Front and back shells joined by webs set in from the top and bottom, so the

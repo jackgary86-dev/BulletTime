@@ -33,6 +33,8 @@ export type MediumLook =
   | 'cinderBlock'
   /** A full-size fired brick wall in running bond, for the proving ground (#231). */
   | 'brickWall'
+  /** The side armour of a procedural tank, with the vehicle built round it (#231). */
+  | 'tankHull'
   | 'mildSteel'
   /** Car door skins (#60): mild steel physics, painted outer and primed inner panel. */
   | 'carDoorOuter'
@@ -128,6 +130,10 @@ export interface MediumSpec {
   dummyOnly?: boolean;
   /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
   heavy?: boolean;
+  /** A full-size vehicle (#231): listed for Missile whatever the struck plate's size, since the vehicle round it is big. */
+  vehicle?: boolean;
+  /** On the proving ground, how far above the ground the layer's lower edge stands, m (a tank's hull side rides above its tracks). */
+  groundClearanceM?: number;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
   shape?: ObjectShape;
   /**
@@ -778,6 +784,27 @@ export const MEDIA: MediumSpec[] = [
     heavy: true,
   },
   {
+    id: 'tank-hull',
+    name: 'Tank (hull side)',
+    description: 'A main battle tank parked broadside. The shot strikes the side of the hull above the tracks: rolled armour, thinner than the front.',
+    behaviour: 'steel',
+    look: 'tankHull',
+    density: 7850,
+    thickness: { min: 0.03, max: 0.15, default: 0.07 },
+    heightM: 0.9,
+    widthM: 6.4,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 3.0e9,
+    hardness: 1.0,
+    ricochetAngleDeg: 68,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    vehicle: true,
+    groundClearanceM: 0.95,
+  },
+  {
     id: 'sandbag',
     name: 'Sandbag',
     description: 'A filled burlap sandbag. Grains scatter and absorb energy fast; stops most rounds within a bag.',
@@ -1094,7 +1121,7 @@ export const MISSILE_MIN_FACE_M = 2;
  */
 export function mediumListedIn(medium: MediumSpec, mode: string): boolean {
   if (medium.dummyOnly) return false;
-  if (mode === 'missile') return Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
+  if (mode === 'missile') return !!medium.vehicle || Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
   return !medium.heavy || mode !== 'bullet';
 }
 

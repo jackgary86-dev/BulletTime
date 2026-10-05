@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MediumLook, MediumSpec } from '../data/media';
+import { createTank } from './tank';
 import { woodTexture } from './textures';
 
 /**
@@ -52,6 +53,8 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
       return bottom > 0.03 ? createRisers(spec, t, shotY, bottom) : createMat(spec, t, shotY);
     case 'cinderBlock':
       return createMat(spec, t, shotY);
+    case 'tankHull':
+      return createTank(spec, t, shotY);
     default:
       return bottom > 0.03 ? createCart(spec, t, shotY, bottom) : createMat(spec, t, shotY);
   }

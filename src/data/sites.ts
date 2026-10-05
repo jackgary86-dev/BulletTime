@@ -36,9 +36,10 @@ export function siteForMode(mode: SimulatorId): SiteId {
  * layer (so that layer stands on the ground), and never below the site's base
  * height, so small targets stand on supports rather than in the gravel.
  */
-export function siteShotY(site: SiteId, layers: readonly Pick<MediumSpec, 'heightM'>[]): number {
+export function siteShotY(site: SiteId, layers: readonly Pick<MediumSpec, 'heightM' | 'groundClearanceM'>[]): number {
   const base = SITES[site].baseShotY;
   if (site === 'lab') return base;
-  const tallest = layers.reduce((m, l) => Math.max(m, l.heightM), 0);
-  return Math.max(base, tallest / 2);
+  // A layer that rides above the ground (a tank's hull side over its tracks) lifts the line to its middle.
+  const tallest = layers.reduce((m, l) => Math.max(m, l.heightM / 2 + (l.groundClearanceM ?? 0)), 0);
+  return Math.max(base, tallest);
 }

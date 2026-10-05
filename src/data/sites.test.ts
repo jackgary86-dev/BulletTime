@@ -44,4 +44,17 @@ describe('proving-ground site (#231)', () => {
       expect(s.impactSpeed, id).toBeGreaterThan(0);
     }
   });
+
+  it('parks the tank with its hull side above the tracks, listed for Missile and Artillery only', () => {
+    const tank = getMedium('tank-hull');
+    // The struck plate's middle: its lower edge rides 0.95 m up, over the tracks.
+    expect(siteShotY('range', [tank])).toBeCloseTo(0.95 + tank.heightM / 2, 9);
+    expect(targetsForMode('missile').map((m) => m.id)).toContain('tank-hull');
+    expect(targetsForMode('artillery').map((m) => m.id)).toContain('tank-hull');
+    expect(targetsForMode('bullet').map((m) => m.id)).not.toContain('tank-hull');
+    const missile = getBullet(MODES.missile.defaultId).id;
+    const s = fire({ bullet: missile, stack: [{ medium: tank, thickness: tank.thickness.default, gapM: 0 }] }).summary;
+    expect(Number.isFinite(s.penetrationM)).toBe(true);
+    expect(s.impactSpeed).toBeGreaterThan(0);
+  });
 });
