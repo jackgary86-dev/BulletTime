@@ -3,8 +3,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Frame-time budget (#244): plays the heaviest shots in software WebGL at
- * Low quality and records the median and 95th-percentile frame time over
- * `FRAMES` frames. Software rendering is far slower than any GPU and runners
+ * Low quality and records the median and 90th-percentile frame time over
+ * `FRAMES` frames (#288: 48 frames and the 90th percentile, so up to four
+ * stalled frames on a runner, a GC pause or a late shader compile, cannot
+ * decide the result; with 24 frames the 95th percentile was the second-worst
+ * frame, and one stall doubled it). Software rendering is far slower than any GPU and runners
  * differ in speed, so each shot is measured against the idle lab in the same
  * run (its frame time divided by the idle lab's median) and against a fixed
  * script workload (#283). A shot fails when both ratios regress by more than
@@ -15,21 +18,23 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * Low, not Medium: in software WebGL, Medium's full-screen ambient occlusion
  * and bloom take nearly the whole frame, so doubling the particles moved the
- * buckshot shot by under 5%. At Low the same change moves it from 1.6x to
- * 2.5x the idle lab, and fails.
+ * buckshot shot by under 5%. At Low the same change moved it from 1.6x to
+ * 2.5x the idle lab when this was written (#244). By #288 it no longer did:
+ * doubling Low's particle density and cap left the buckshot shot at about
+ * 3.2 s a frame in software WebGL, so particles are no longer what limits it.
  */
-const FRAMES = 24;
+const FRAMES = 48;
 const MAX_REGRESSION = 0.25;
 const BASELINE = 'tests/perf/baseline.json';
 const RESULTS = 'test-results/perf/frames.json';
 
 interface FrameStats {
   medianMs: number;
-  p95Ms: number;
+  p90Ms: number;
 }
 
 /**
- * A shot's 95th-percentile frame time against two yardsticks on the same
+ * A shot's 90th-percentile frame time against two yardsticks on the same
  * machine (#283): the idle lab's median frame (raster-bound) and a fixed
  * single-thread script workload (main-thread bound). Runners differ in how
  * many cores SwiftShader gets against how fast one thread is, so a shot can
@@ -37,14 +42,14 @@ interface FrameStats {
  * against both.
  */
 interface Relative extends FrameStats {
-  p95Ratio: number;
-  p95CpuRatio: number;
+  p90Ratio: number;
+  p90CpuRatio: number;
 }
 
 interface Baseline {
-  p95Ratio: number;
+  p90Ratio: number;
   /** Missing in baselines recorded before #283: the raster ratio alone decides. */
-  p95CpuRatio?: number;
+  p90CpuRatio?: number;
 }
 
 const IDLE = 'idle-lab';
@@ -108,7 +113,7 @@ async function measure(page: Page): Promise<FrameStats> {
   );
   const sorted = deltas.slice(1).sort((a, b) => a - b);
   const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
-  return { medianMs: Math.round(at(0.5)), p95Ms: Math.round(at(0.95)) };
+  return { medianMs: Math.round(at(0.5)), p90Ms: Math.round(at(0.9)) };
 }
 
 async function open(page: Page, query: string): Promise<void> {
@@ -157,8 +162,8 @@ test.afterAll(() => {
     if (name !== IDLE) {
       relative[name] = {
         ...r,
-        p95Ratio: Math.round((r.p95Ms / Math.max(1, idle.medianMs)) * 100) / 100,
-        p95CpuRatio: Math.round((r.p95Ms / Math.max(1, cpuMs)) * 100) / 100,
+        p90Ratio: Math.round((r.p90Ms / Math.max(1, idle.medianMs)) * 100) / 100,
+        p90CpuRatio: Math.round((r.p90Ms / Math.max(1, cpuMs)) * 100) / 100,
       };
     }
   }
@@ -166,11 +171,11 @@ test.afterAll(() => {
   writeFileSync(RESULTS, `${JSON.stringify({ idle, cpuMs: Math.round(cpuMs), shots: relative }, null, 2)}\n`);
   console.log(
     `frame times: idle median ${idle.medianMs} ms, script yardstick ${Math.round(cpuMs)} ms; ${Object.entries(relative)
-      .map(([n, r]) => `${n} p95 ${r.p95Ms} ms (${r.p95Ratio}x idle, ${r.p95CpuRatio}x script)`)
+      .map(([n, r]) => `${n} p90 ${r.p90Ms} ms (${r.p90Ratio}x idle, ${r.p90CpuRatio}x script)`)
       .join('; ')}`,
   );
   if (process.env.PERF_UPDATE) {
-    writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(relative).map(([n, r]) => [n, { p95Ratio: r.p95Ratio, p95CpuRatio: r.p95CpuRatio }])), null, 2)}\n`);
+    writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(relative).map(([n, r]) => [n, { p90Ratio: r.p90Ratio, p90CpuRatio: r.p90CpuRatio }])), null, 2)}\n`);
     return;
   }
   expect(existsSync(BASELINE), `${BASELINE} is missing: run npm run perf:update`).toBe(true);
@@ -181,10 +186,10 @@ test.afterAll(() => {
     .filter(([name, r]) => {
       const b = baseline[name];
       if (!b) return false;
-      const raster = r.p95Ratio > b.p95Ratio * limit;
-      const cpu = b.p95CpuRatio === undefined || r.p95CpuRatio > b.p95CpuRatio * limit;
+      const raster = r.p90Ratio > b.p90Ratio * limit;
+      const cpu = b.p90CpuRatio === undefined || r.p90CpuRatio > b.p90CpuRatio * limit;
       return raster && cpu;
     })
-    .map(([name, r]) => `${name}: 95th percentile ${r.p95Ratio}x the idle lab and ${r.p95CpuRatio}x the script yardstick, against ${baseline[name].p95Ratio}x and ${baseline[name].p95CpuRatio}x`);
+    .map(([name, r]) => `${name}: 90th percentile ${r.p90Ratio}x the idle lab and ${r.p90CpuRatio}x the script yardstick, against ${baseline[name].p90Ratio}x and ${baseline[name].p90CpuRatio}x`);
   expect(regressions, regressions.join('\n')).toEqual([]);
 });
