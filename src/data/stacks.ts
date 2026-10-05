@@ -72,7 +72,7 @@ export const STACK_PRESETS: StackPreset[] = [
     id: 'water-jug',
     name: 'Water jug',
     // A thin polyethylene skin round water: skin, 20 cm of water, skin.
-    layers: [{ medium: 'polyethylene' }, { medium: 'water', thickness: 0.2, gapM: 0 }, { medium: 'polyethylene', gapM: 0 }],
+    layers: [{ medium: 'polyethylene' }, { medium: 'water', thickness: 0.2, gapM: 0, look: 'waterJug' }, { medium: 'polyethylene', gapM: 0 }],
   },
   {
     id: 'smartphone',

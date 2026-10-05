@@ -65,4 +65,14 @@ describe('everyday targets (#240)', () => {
     expect(outcomeFor('plastic', 0.5).outcome).toBe('intact');
     expect(impactSound('plastic')).toBeTruthy();
   });
+
+  it('each target has its own look, not a generic plank, plate or tank', () => {
+    expect(getMedium('phonebook').look).toBe('paperStack');
+    expect(getMedium('phone-frame').look).toBe('phoneBack');
+    expect(getMedium('phone-cell').look).toBe('phoneCell');
+    expect(getMedium('polyethylene').look).toBe('plasticJug');
+    // The jug's water is drawn as a jug (neck, cap, handle); the skins on either side stay plastic.
+    const jug = STACK_PRESETS.find((p) => p.id === 'water-jug')!;
+    expect(jug.layers.map((l) => l.look)).toEqual([undefined, 'waterJug', undefined]);
+  });
 });

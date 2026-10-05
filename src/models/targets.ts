@@ -256,7 +256,18 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         clearcoatRoughness: 0.03,
       });
       const primer = new THREE.MeshStandardMaterial({ color: 0x55595e, roughness: 0.6, metalness: 0.3 });
-      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [primer, paint, paint, paint, paint, paint]);
+      const door = new THREE.Group();
+      door.add(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [primer, paint, paint, paint, paint, paint]));
+      // The window (dark glass in a black surround) across the top third, and a chrome handle, proud of the paint.
+      const proud = -t / 2 - 0.0008;
+      const glassPane = new THREE.Mesh(new THREE.BoxGeometry(0.0008, h * 0.3, w * 0.86), new THREE.MeshPhysicalMaterial({ color: 0x0a1218, roughness: 0.05, metalness: 0.2, clearcoat: 1 }));
+      glassPane.position.set(proud, h * 0.33, 0);
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(0.0006, h * 0.33, w * 0.9), new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.5 }));
+      trim.position.set(proud + 0.0003, h * 0.33, 0);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.014, w * 0.32), new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: 0.2, metalness: 1 }));
+      handle.position.set(-t / 2 - 0.006, h * 0.1, w * 0.22);
+      door.add(trim, glassPane, handle);
+      return door;
     }
 
     case 'concrete': {
@@ -355,6 +366,44 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         new THREE.BoxGeometry(t, h, w),
         new THREE.MeshPhysicalMaterial({ color: 0xf1f3ef, roughness: 0.35, transmission: 0.55, thickness: t * 4, ior: 1.5, attenuationColor: new THREE.Color(0xdfe6e2), attenuationDistance: 0.02 }),
       );
+
+    case 'phoneBack':
+      // Brushed aluminium back; named so the plate dishing works on it like on any thin metal.
+      return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: 0xbfc4ca, roughness: 0.32, metalness: 1 })), PLATE_BODY_NAME);
+
+    case 'paperStack': {
+      // A phone book: pages on three sides, a dark cover front and back, a spine on one edge.
+      const pages = pageEdgeMaterial();
+      const cover = new THREE.MeshStandardMaterial({ color: 0x1d2b44, roughness: 0.55 });
+      const spine = new THREE.MeshStandardMaterial({ color: 0x15203a, roughness: 0.5 });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z. The shot goes through the covers (±x); the spine is -z.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [cover, cover, pages, pages, pages, spine]);
+    }
+
+    case 'waterJug': {
+      // The water in a jug (#240): the body between the two skins, then the shoulder, neck, cap and handle on top.
+      const jug = new THREE.Group();
+      const water = new THREE.Mesh(
+        new THREE.BoxGeometry(t, h * 0.86, w * 0.97),
+        new THREE.MeshPhysicalMaterial({ color: 0xd8eef7, roughness: 0.03, transmission: 1, thickness: t, ior: 1.33, attenuationColor: new THREE.Color(0x58b4d8), attenuationDistance: 0.6, specularIntensity: 1 }),
+      );
+      water.position.y = -h * 0.07;
+      water.name = WATER_BODY_NAME;
+      jug.add(water);
+      const plastic = new THREE.MeshPhysicalMaterial({ color: 0xf1f3ef, roughness: 0.35, transmission: 0.55, thickness: 0.004, ior: 1.5 });
+      const top = h * 0.5;
+      const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.03, Math.min(t, w) * 0.42, h * 0.1, 20), plastic);
+      shoulder.position.y = top - h * 0.12 - h * 0.07 + h * 0.07;
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.03, 20), plastic);
+      neck.position.y = shoulder.position.y + h * 0.05 + 0.015;
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 20), new THREE.MeshStandardMaterial({ color: 0x2a6fd6, roughness: 0.45 }));
+      cap.position.y = neck.position.y + 0.025;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.007, 8, 20, Math.PI), plastic);
+      handle.rotation.set(0, Math.PI / 2, 0);
+      handle.position.set(0, shoulder.position.y + 0.01, 0.0);
+      jug.add(shoulder, neck, cap, handle);
+      return jug;
+    }
 
     case 'phoneCell':
       // Dark laminate pouch.
@@ -680,4 +729,21 @@ function tileUvs(geometry: THREE.BoxGeometry, tileM: number): THREE.BoxGeometry 
   }
   uv.needsUpdate = true;
   return geometry;
+}
+
+/** Pages seen edge-on: fine cream and grey lines, repeated along the height of the block. */
+function pageEdgeMaterial(): THREE.MeshStandardMaterial {
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  for (let y = 0; y < 64; y++) {
+    ctx.fillStyle = y % 4 === 0 ? '#bdb7a6' : y % 4 === 2 ? '#e8e3d2' : '#f4f0e2';
+    ctx.fillRect(0, y, 8, 1);
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(1, 4);
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
 }
