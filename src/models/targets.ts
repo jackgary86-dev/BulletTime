@@ -339,12 +339,20 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         roughness: 1,
         envMapIntensity: 2,
       });
-      // Copper, brass, lead and the other metals share the sheet look, tinted (#261).
-      if (spec.tint !== undefined) scale.color.setHex(spec.tint);
-      // Cast iron (#296) is a matte mid grey, not blue-black mill scale: the dark cracks and holes show on it.
-      if (spec.brittle) {
-        const grey = new THREE.MeshStandardMaterial({ color: spec.tint ?? 0x8d9096, roughnessMap: mill.roughnessMap, normalMap: mill.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), metalness: 0.3, roughness: 0.9 });
-        return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), grey), PLATE_BODY_NAME);
+      // Tinted metals (#261: copper, brass, lead, stainless, titanium, 3003; #296: cast iron) are a flat colour over the
+      // plate's roughness and grain. Multiplying a tint into the blue-black mill scale would just make them black.
+      if (spec.tint !== undefined) {
+        const matte = !!spec.brittle || spec.id === 'lead-sheet';
+        const metal = new THREE.MeshStandardMaterial({
+          color: spec.tint,
+          roughnessMap: mill.roughnessMap,
+          normalMap: mill.normalMap,
+          normalScale: new THREE.Vector2(0.9, 0.9),
+          metalness: matte ? 0.3 : 0.55,
+          roughness: matte ? 0.9 : 0.6,
+          envMapIntensity: 2,
+        });
+        return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), metal), PLATE_BODY_NAME);
       }
       if (spec.look === 'mildSteel') return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale), PLATE_BODY_NAME);
       const paint = steelPlateMaps('painted');
