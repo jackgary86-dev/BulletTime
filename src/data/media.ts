@@ -1070,7 +1070,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Earth berm (full size)',
     description: 'A 6 m wide, 2.5 m high bank of packed earth. Soaks up a shell over a long path and throws up a column of soil.',
     behaviour: 'sand',
-    look: 'sandbag',
+    look: 'earthBerm',
     density: 1800,
     thickness: { min: 0.5, max: 4, default: 2 },
     heightM: 2.5,

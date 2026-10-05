@@ -21,7 +21,21 @@ The targets the Artillery and Missile modes shoot at. The data is in `src/data/l
 | Packed earth berm | Density | 1800 kg/m³ | published |
 | Packed earth berm | Resistance | 25 MPa | model |
 | Packed earth berm | Soil column and crater | drawn for the look | illustrative |
+| Tank (hull side) | Density, yield, Brinell, Rt | RHA figures from `src/armor/materials.ts` | published |
+| Tank (hull side) | Default thickness (70 mm) | chosen so shells separate; not a real vehicle | illustrative |
+| Turret roof plate | Density, yield, Brinell, Rt | RHA figures; default 40 mm is illustrative | published / illustrative |
+| Hull floor plate | Density, yield, Brinell, Rt | RHA figures; default 20 mm is illustrative | published / illustrative |
+| Bunker wall (full size) | Density | 2400 kg/m³ | published |
+| Bunker wall (full size) | Resistance | 750 MPa | model |
+| Bunker wall (full size) | Crater, spall and scab at shell scale | scaled from bullet-scale panels | illustrative |
+| Block house (front wall) | Density; resistance | 2400 kg/m³ published; 750 MPa model | published / model |
+| Brick wall (full size) | Density | 1900 kg/m³ | published |
+| Brick wall (full size) | Resistance | 120 MPa | model |
+| Brick wall (full size) | Breach spray | drawn for the look | illustrative |
+| Earth berm (full size) | Density | 1800 kg/m³ | published |
+| Earth berm (full size) | Resistance | 25 MPa | model |
+| Earth berm (full size) | Soil column and crater | drawn for the look | illustrative |
 
 ## Not yet covered
 
-Tank hull, turret and side armour, and brick masonry walls: they join the catalogue with the proving-ground targets (#231). Animated side views at set timestamps and contact sheets, as in the bullet-scale `index.html`, need that three-quarter range camera to be useful and are not built yet.
+Animated side views at set timestamps and contact sheets, as in the bullet-scale `index.html`, are not built yet; the three-quarter range camera they need is now in.
