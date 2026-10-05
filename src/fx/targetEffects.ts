@@ -62,7 +62,7 @@ export class TargetEffects {
           if (result) this.organic = mergeOrganic(this.organic, result);
         }
       } else if (medium.behaviour === 'sand') {
-        loadSandEffect(timeline, layer, this.particles, this.holes);
+        loadSandEffect(timeline, layer, this.particles, this.holes, medium);
       } else if (medium.behaviour === 'wood' || medium.behaviour === 'drywall' || medium.behaviour === 'plastic') {
         loadPanelEffect(timeline, medium, layer, this.particles, this.holes);
       }

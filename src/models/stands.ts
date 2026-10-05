@@ -57,6 +57,9 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
       return bottom > 0.03 ? createRisers(spec, t, shotY, bottom) : createMat(spec, t, shotY);
     case 'cinderBlock':
       return createMat(spec, t, shotY);
+    case 'earthBerm':
+      // A berm sits on the ground and needs no holder.
+      return new THREE.Group();
     case 'tankHull':
       return createTank(spec, t, shotY);
     case 'blockHouse':

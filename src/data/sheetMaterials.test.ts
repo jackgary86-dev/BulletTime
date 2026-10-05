@@ -32,7 +32,8 @@ describe('stock thicknesses (#261)', () => {
 });
 
 /** Which stock thickness of each metal a round perforates: pinned so tuning cannot quietly move it. */
-describe('perforation by stock thickness (#261)', () => {
+// Hundreds of simulations: slow enough to pass 5 s when the whole suite runs in parallel.
+describe('perforation by stock thickness (#261)', { timeout: 60_000 }, () => {
   const perforates = (bullet: string, medium: string, t: number) => fire({ bullet, medium, thickness: t }).summary.passedThrough;
   const metals = ['steel-mild', 'steel-stainless', 'steel-galvanised', 'titanium', 'aluminum', 'copper', 'brass', 'lead-sheet'];
   const rounds = ['9mm-fmj', '308-sp', '12ga-slug'];

@@ -274,7 +274,8 @@ describe('pieces about as large as the room', () => {
     expectSettles(field);
   });
 
-  it('lands and rests what large-calibre shots throw through thin plates', () => {
+  // A sweep of 160 simulations: slow enough to pass 5 s when the whole suite runs in parallel.
+  it('lands and rests what large-calibre shots throw through thin plates', { timeout: 30_000 }, () => {
     const families: MunitionFamilyId[] = ['ap-shot', 'apfsds', 'heat', 'hesh'];
     let fields = 0;
     for (const family of families) {
