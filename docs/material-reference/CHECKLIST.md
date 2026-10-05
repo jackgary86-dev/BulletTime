@@ -18,6 +18,13 @@ If a change moves a look on purpose, retake the screenshot (same link, same time
 | Large cast iron plate (Artillery) | `?mode=artillery&bullet=76mm-ap&medium=cast-iron-plate&at=1ms` | `material-cast-iron-plate.jpg` | Brittle failure, heavy spall. Baseline shows only a flash and sparks: no visible brittle failure or spall at 1 ms. The look does not yet match the model. |
 | Reinforced concrete wall (Artillery) | `?mode=artillery&bullet=155mm-he&medium=reinforced-concrete&at=3ms` | `material-reinforced-concrete.jpg` | Crater and spall on the face, scab and dust behind; shell-scale chunks. Baseline: crater and angular chunks on the face, spall thrown from the block; the block is small beside a 155 mm shell. |
 | Packed earth berm (Artillery) | `?mode=artillery&bullet=155mm-he&medium=packed-earth&at=3ms` | `material-packed-earth.jpg` | Soil column thrown up, long soft stop, no hole through. Baseline: a sandbag-shaped bag with a small debris puff; no soil column and no berm shape. The look does not yet match the model. |
+| Tank hull side (Artillery) | `?mode=artillery&bullet=76mm-ap&medium=tank-hull&at=1ms` | _pending_ | Hull side struck above the tracks; AP holes it, HE only marks it. |
+| Turret roof (Missile) | `?mode=missile&medium=turret-roof&at=1ms` | _pending_ | Thin roof plate holed by a shaped charge from above. |
+| Hull floor (Missile) | `?mode=missile&medium=hull-floor&at=1ms` | _pending_ | Thin floor plate. |
+| Bunker wall (Artillery) | `?mode=artillery&bullet=155mm-he&medium=bunker-wall&at=3ms` | _pending_ | Crater and spall on a 5 x 3 m concrete wall. |
+| Block house front wall (Artillery) | `?mode=artillery&bullet=155mm-he&medium=block-house-wall&at=3ms` | _pending_ | 300 mm wall cratered or breached. |
+| Brick wall (Artillery) | `?mode=artillery&bullet=155mm-he&medium=brick-wall-full&at=3ms` | _pending_ | Breach with brick and mortar thrown out. |
+| Earth berm (Artillery) | `?mode=artillery&bullet=155mm-he&medium=earth-berm-full&at=3ms` | _pending_ | Soil column, long soft stop. |
 
 Figures behind these rows, and whether each is published, an engine constant or illustrative, are in `large-targets.md` (data in `src/data/largeTargetReference.ts`, #262). Baselines for the large targets were captured at 800x600, Medium quality, side camera, from a dev server. They record what the build draws today, which for the cast iron plate and the packed earth berm is not yet what the "What to see" column asks for: those two rows say so. Check at close and three-quarter range for clipping.
 
