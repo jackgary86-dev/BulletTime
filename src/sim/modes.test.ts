@@ -37,10 +37,10 @@ describe('simulator catalogues', () => {
     expect(Math.max(...calibres)).toBe(240);
   });
 
-  it('builds five airframes with nine warheads each', () => {
+  it('builds five airframes with ten warheads each', () => {
     expect(AIRFRAMES).toHaveLength(5);
-    expect(WARHEADS).toHaveLength(9);
-    expect(MISSILES).toHaveLength(45);
+    expect(WARHEADS).toHaveLength(10);
+    expect(MISSILES).toHaveLength(50);
     expect(findMissile(missileId('cruise', 'thermobaric'))?.mode).toBe('missile');
     expect(findMissile('missile:nope:shaped')).toBeUndefined();
   });
@@ -190,6 +190,19 @@ describe('reactive armour (#260)', () => {
       const lost = (h: string) => 1 - (rha(missileId(a, h)) - tile) / rha(missileId(a, h), bare);
       expect(lost('tandem')).toBeLessThan(lost('shaped'));
     }
+  });
+});
+
+describe('top-attack head (#260)', () => {
+  const at = (id: string, angleDeg: number) =>
+    simulate({ bullet: getBullet(id), layers: layersFor(getMedium('rha'), 0.6), angleDeg, impactPoint: { x: -0.2, y: 0.16, z: 0 }, standOffM: 0.5 }).summary.penetrationM;
+
+  it('matches a standard shaped charge head-on', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(at(missileId(a, 'top-attack'), 0)).toBeCloseTo(at(missileId(a, 'shaped'), 0), 1);
+  });
+
+  it('on a steeply slanted roof it bores deeper than a charge that fires along its heading', () => {
+    for (const a of ['light-rocket', 'guided-at']) expect(at(missileId(a, 'top-attack'), 60)).toBeGreaterThan(at(missileId(a, 'shaped'), 60) * 1.15);
   });
 });
 
