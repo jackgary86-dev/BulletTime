@@ -569,6 +569,10 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   window.addEventListener('keydown', onKey);
   q('.armor-back').addEventListener('click', () => location.assign(location.pathname));
   window.addEventListener('resize', resize);
+  // The stage can change size without the window doing so, as when the web fonts arrive and the header settles: keep the
+  // canvas's pixels matched to its box, or the section is drawn stretched.
+  const stageObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => resize());
+  stageObserver?.observe(q('.armor-stage'));
 
   calibre.value = '120';
   thickness.value = '120';
@@ -655,6 +659,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       cancelAnimationFrame(raf);
       view3d?.dispose();
       window.removeEventListener('resize', resize);
+      stageObserver?.disconnect();
       window.removeEventListener('keydown', onKey);
       screen.remove();
     },
