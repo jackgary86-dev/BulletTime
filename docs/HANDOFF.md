@@ -38,6 +38,8 @@ First launch (#241, `src/ui/firstShot.ts`): a fresh profile with a plain address
 
 Performance budgets (#244): `npm run perf` runs `src/sim/simBudget.perf.ts` (every round into every material under 500 ms, the sweep under 150 s; about a minute, so not in `npm test`) and tests/perf/frames.spec.ts, which times 24 frames of the idle lab and the heaviest shots (12 ga buckshot into gel, the Explosion default, a four-plate Armor lab stack in 3D) in software WebGL at Low quality. Each shot's 95th-percentile frame time is divided by the idle lab's median on the same machine, and that ratio may not grow by more than 25% over tests/perf/baseline.json; `npm run perf:update` records a new baseline. The `perf` job in quality.yml writes the frame times to the job summary.
 
+One playback clock (#242): `src/sim/playClock.ts` (`PlayClock`) holds the playhead, play/pause, rate, beat, gaps, seek, step and update. The simulators' `Playback` is a `PlayClock` over simulated seconds (impact beat, dead air between rounds); the Armor lab's is a `PlayClock` over its 0 to 1 scrubber, from `armorClockSource` and `playSeconds` in `src/armor/playback.ts`. The Armor lab's render loop only advances the clock and redraws; Space and the arrow keys work there as on the simulators' scrubber.
+
 URL shortcuts: `?mode=bullet|artillery|missile|explosion|armor` skips the launcher; `?ultra` raises quality.
 
 CI: `deploy.yml` (test, build, Pages), `quality.yml` (type check, tests, `npm audit`, gzipped-bundle budget of 600 KB), `release.yml` (installers on `v*` tags, with a launcher smoke test). Dependabot is on.
