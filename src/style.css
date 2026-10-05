@@ -2492,3 +2492,86 @@ body {
     transform: translate(-50%, 12px);
   }
 }
+
+/* Gel witness blocks inside a mock building (#249). */
+.witness-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.witness-section[hidden] {
+  display: none;
+}
+
+.witness-section h3 {
+  margin: 0 0 4px;
+  font-size: inherit;
+}
+
+.witness-hint {
+  margin: 0 0 6px;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.witness-plan {
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+  background: var(--control);
+  border-radius: 8px;
+}
+
+.witness-room {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: var(--border);
+}
+
+.witness-wall {
+  fill: #9a968e;
+}
+
+.witness-shotline {
+  stroke: #e0703a;
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.witness-block {
+  fill: rgba(255, 214, 160, 0.55);
+  stroke: #e0a458;
+  cursor: pointer;
+}
+
+.witness-block.hit {
+  fill: rgba(255, 140, 90, 0.75);
+}
+
+.witness-label {
+  fill: var(--fg);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.witness-inside {
+  margin-top: 6px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.witness-results {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.85em;
+}
+
+.witness-results li + li {
+  margin-top: 2px;
+}

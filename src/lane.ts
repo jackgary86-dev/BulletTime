@@ -12,7 +12,9 @@ import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { siteShotY, type SiteId } from './data/sites';
-import { buildingForFront } from './data/buildings';
+import { buildingForFront, type BuildingSpec } from './data/buildings';
+import { WitnessBlocks } from './fx/witnessBlocks';
+import { clampBlocks, type WitnessBlock, type WitnessFrame, type WitnessResult } from './sim/witness';
 import type { MediumSpec } from './data/media';
 import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
@@ -47,6 +49,9 @@ export class Lane {
   readonly shot = new ShotRenderer();
   readonly effects = new TargetEffects();
   readonly muzzle = new MuzzleEffect();
+  /** Gel witness blocks inside a mock building (#249). */
+  readonly witness = new WitnessBlocks();
+  private witnessLayout: WitnessBlock[] = [];
   /** Every shot fired since the last Reset, on one timeline (#22). */
   session: Timeline | null = null;
   /** Where the last Fire starts on the session timeline. */
@@ -72,7 +77,7 @@ export class Lane {
     this.scene = scene;
     this.studio = createStudio(this.scene, renderer, site);
     this.postFx = createPostFx(renderer, this.scene, camera);
-    this.scene.add(this.muzzle.group, this.shot.group, this.effects.group);
+    this.scene.add(this.muzzle.group, this.shot.group, this.effects.group, this.witness.group);
     this.setTarget(setup);
   }
 
@@ -109,7 +114,50 @@ export class Lane {
     this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, this.baseY, 0));
     this.scene.add(this.targetGroup);
     this.studio.fitContactShadow(this.targetGroup);
+    this.placeWitness();
     this.clear();
+  }
+
+  /** The mock building being shot, if the struck layer is one's wall (#246). */
+  get building(): BuildingSpec | undefined {
+    const front = this.setup.layers[0];
+    return this.setup.dummy || !front ? undefined : buildingForFront(front.medium.id);
+  }
+
+  /** The room behind the struck wall, for the witness blocks; null when the target is not a building. */
+  get witnessFrame(): WitnessFrame | null {
+    const b = this.building;
+    const front = this.setup.layers[0];
+    if (!b || !front) return null;
+    return {
+      origin: { x: TARGET_FRONT_X, y: this.lineY, z: 0 },
+      angleDeg: this.setup.angleDeg,
+      wallM: front.thickness,
+      roomM: Math.max(0.5, b.depthM - front.thickness - b.back.thicknessM),
+      wall: front.medium,
+    };
+  }
+
+  /** Where the witness blocks stand, kept inside the room; they only appear in a building. */
+  setWitnessBlocks(blocks: readonly WitnessBlock[]): void {
+    this.witnessLayout = [...blocks];
+    this.placeWitness();
+    this.clear();
+  }
+
+  get witnessBlocks(): WitnessBlock[] {
+    const frame = this.witnessFrame;
+    const b = this.building;
+    return frame && b ? clampBlocks(this.witnessLayout, frame.roomM, b.widthM) : [];
+  }
+
+  /** What reached each witness block in the last shot. */
+  get witnessResults(): WitnessResult[] {
+    return this.witness.results;
+  }
+
+  private placeWitness(): void {
+    this.witness.setBlocks(this.witnessBlocks, this.witnessFrame, this.baseY);
   }
 
   setLightingMode(mode: LightingMode): void {
@@ -148,6 +196,7 @@ export class Lane {
     this.lastFireStart = 0;
     this.shot.clear();
     this.effects.clear();
+    this.witness.clearEffects();
   }
 
   /**
@@ -193,8 +242,9 @@ export class Lane {
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
     if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim, this.baseY));
     addVapourTrails(timeline, this.effects.particles);
+    this.witness.load(timeline);
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
-    timeline.duration = Math.max(timeline.duration, Math.min(this.effects.endTime, timeline.duration + EFFECT_TAIL_S));
+    timeline.duration = Math.max(timeline.duration, Math.min(Math.max(this.effects.endTime, this.witness.endTime), timeline.duration + EFFECT_TAIL_S));
     return timeline;
   }
 
@@ -206,6 +256,7 @@ export class Lane {
   dispose(keep: THREE.Object3D | null = null): void {
     this.clear();
     this.shot.dispose();
+    this.witness.dispose();
     if (this.targetGroup) disposeTarget(this.targetGroup);
     this.targetGroup = null;
     disposeTree(this.scene, keep);
@@ -221,6 +272,7 @@ export class Lane {
     if (timeline && t !== null) {
       this.shot.update(t, shutterS);
       this.effects.update(t, shutterS);
+      this.witness.update(t, shutterS);
     }
     // The muzzle flash belongs to whichever shot is playing, at that shot's aim point.
     const current = timeline && t !== null ? activeShot(timeline, t) : null;
