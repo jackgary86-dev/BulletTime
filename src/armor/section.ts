@@ -56,6 +56,8 @@ export interface SectionShapes {
   heat: number;
   /** How far the crater has progressed through the plate, 0 to 1 (by depth over line-of-sight thickness). */
   progress: number;
+  /** A fragment spray's pits (#170), each a closed outline cut into the face at its own height; `through` when open at the rear. */
+  pits: { outline: Point[]; through: boolean; digging: boolean }[];
 }
 
 /** The penetrator's diameter at impact, m (the jet's width, the shot's or rod's own, or a fragment's). */
@@ -104,7 +106,8 @@ export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout
 
   // The crater: radius at CRATER_PROFILE_SAMPLES depths from the face, or a cylinder with a rounded bottom.
   const crater: Point[] = [];
-  if (depth > 0) {
+  // A fragment spray has no single crater on the axis, only its pits.
+  if (depth > 0 && !timeline.result.pits) {
     const profile = frame.craterProfile && frame.craterProfile.length > 1 ? frame.craterProfile : null;
     const n = profile ? profile.length : 12;
     const top: Point[] = [];
@@ -129,10 +132,11 @@ export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout
     crater.push(...top, ...nose, ...noseBottom, ...bottom);
   }
 
-  // The rear bulge: a dome on the rear face, as wide as four crater radii.
+  // The rear bulge: a dome on the rear face, as wide as four crater radii (a blast dish spreads over most of the face).
   const bulge: Point[] = [];
-  if (frame.rearBulge > 1e-6 && !through) {
-    const half = Math.max(frame.craterRadius * 4, frame.rearBulge * 3) * pxPerM;
+  const dish = timeline.result.pits !== undefined;
+  if (frame.rearBulge > 1e-6 && (!through || dish)) {
+    const half = dish ? layout.height * 0.4 : Math.max(frame.craterRadius * 4, frame.rearBulge * 3) * pxPerM;
     const h = frame.rearBulge * pxPerM;
     for (let i = 0; i <= 12; i++) {
       const s = -1 + (2 * i) / 12;
@@ -145,6 +149,8 @@ export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout
   const length = Math.max(0, frame.penetratorLength) * pxPerM;
   const radiusPx = Math.max(1.2, (penetratorDiameter(timeline) / 2) * pxPerM);
 
+  const pits = pitShapes(timeline, frame, layout);
+
   const handoff = timeline.fragments ? timeline.fragments.handoffS : null;
   const total = timeline.result.impactEnergyJ;
   return {
@@ -155,7 +161,44 @@ export function sectionShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout
     penetrator: { noseX, tailX: noseX - length, radiusPx, hidden: handoff !== null && fragmentT >= handoff },
     heat: total > 0 ? Math.min(1, Math.max(0, frame.energyDepositedJ / total)) : 0,
     progress: tLos > 0 ? Math.min(1, depth / tLos) : 0,
+    pits,
   };
+}
+
+/** Each fragment's pit as deep as it has dug at this frame: a cup narrowing into the plate, rounded at the bottom, or a channel open at the rear once through. */
+function pitShapes(timeline: ArmorTimeline, frame: ArmorFrame, layout: SectionLayout): SectionShapes['pits'] {
+  const pits = timeline.result.pits;
+  const depths = frame.pitDepths;
+  if (!pits || !depths) return [];
+  const { pxPerM, frontX, axisY } = layout;
+  const tLos = timeline.result.losThicknessM;
+  const out: SectionShapes['pits'] = [];
+  pits.forEach((p, i) => {
+    const d = depths[i] ?? 0;
+    if (!(d > 0) || !p.inSection) return;
+    const through = p.outcome === 'perforate' && d >= tLos - 1e-9;
+    const cy = axisY - p.yM * pxPerM;
+    const r0 = p.radiusM * pxPerM;
+    const len = d * pxPerM;
+    const top: Point[] = [];
+    const n = 6;
+    for (let k = 0; k <= n; k++) {
+      const s = k / n;
+      // Narrows to half its mouth along the way, like a crater made by a blunt body.
+      top.push({ x: frontX + len * s, y: cy - r0 * (1 - 0.5 * s) });
+    }
+    const end = top[top.length - 1];
+    const rEnd = cy - end.y;
+    const nose: Point[] = [];
+    if (!through) for (let k = 1; k <= 4; k++) {
+      const a = (k / 5) * (Math.PI / 2);
+      nose.push({ x: end.x + Math.sin(a) * rEnd * 0.7, y: cy - Math.cos(a) * rEnd });
+    }
+    if (!through) nose.push({ x: end.x + rEnd * 0.7, y: cy });
+    const mirror = (q: Point) => ({ x: q.x, y: 2 * cy - q.y });
+    out.push({ outline: [...top, ...nose, ...nose.map(mirror).reverse(), ...top.map(mirror).reverse()], through, digging: d < p.depthM - 1e-12 });
+  });
+  return out;
 }
 
 /** A piece thrown from the plate, in pixels. */

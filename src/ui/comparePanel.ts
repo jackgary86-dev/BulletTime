@@ -2,7 +2,7 @@ import { getBullet, type BulletSpec, type SimulatorId } from '../data/bullets';
 import { MISSILES } from '../data/missiles';
 import { roundsForMode } from '../data/modes';
 import { MEDIA, getMedium, mediumListedIn } from '../data/media';
-import { STACK_PRESETS, presetLayers } from '../data/stacks';
+import { STACK_PRESETS, presetLayers, presetListedIn } from '../data/stacks';
 import type { TargetSetup } from './stackEditor';
 
 export interface ComparePanelOptions {
@@ -21,7 +21,7 @@ export interface ComparePanel {
  * Comparison mode (#14): a toggle and shot B's round and target. Shot A is the
  * main setup on the left; B plays on the right, on the same clock.
  */
-export function mountComparePanel(root: HTMLElement, initial: { bulletId: string; mediumId: string; mode?: SimulatorId }, options: ComparePanelOptions): ComparePanel {
+export function mountComparePanel(root: HTMLElement, initial: { bulletId: string; mediumId: string; thicknessM?: number; mode?: SimulatorId }, options: ComparePanelOptions): ComparePanel {
   const panel = document.createElement('section');
   panel.className = 'panel compare-panel';
   panel.innerHTML = `
@@ -47,7 +47,7 @@ export function mountComparePanel(root: HTMLElement, initial: { bulletId: string
   for (const m of MEDIA.filter((m) => mediumListedIn(m, initial.mode ?? 'bullet'))) materials.append(new Option(m.name, `medium:${m.id}`));
   const stacks = document.createElement('optgroup');
   stacks.label = 'Layered targets';
-  for (const p of STACK_PRESETS.filter((p) => !p.heavy || (initial.mode ?? 'bullet') !== 'bullet')) stacks.append(new Option(p.name, `preset:${p.id}`));
+  for (const p of STACK_PRESETS.filter((p) => presetListedIn(p, initial.mode ?? 'bullet'))) stacks.append(new Option(p.name, `preset:${p.id}`));
   targetSelect.append(materials, stacks);
   bulletSelect.value = initial.bulletId;
   targetSelect.value = `medium:${initial.mediumId}`;
@@ -57,6 +57,8 @@ export function mountComparePanel(root: HTMLElement, initial: { bulletId: string
     spec: getBullet(initial.bulletId),
     setup: setupFor(targetSelect.value),
   };
+  // Shot B starts on the same thickness as shot A when the mode starts on a particular one (#245).
+  if (initial.thicknessM !== undefined) state.setup.layers[0].thickness = initial.thicknessM;
 
   toggle.addEventListener('click', () => {
     state.on = !state.on;

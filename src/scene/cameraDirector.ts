@@ -4,7 +4,8 @@ import { samplePrimary } from '../sim/sample';
 import { activeShot } from '../sim/session';
 import type { Timeline } from '../sim/types';
 
-export type CameraMode = 'auto' | 'side' | 'tracking' | 'closeup' | 'orbit';
+/** 'inside' looks from the back of a mock building's room toward the breach (#249); it has no button of its own. */
+export type CameraMode = 'auto' | 'side' | 'tracking' | 'closeup' | 'orbit' | 'inside';
 
 export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
   { mode: 'auto', label: 'Auto' },
@@ -18,7 +19,7 @@ export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
  * Natural frequency of the camera's spring toward each pose, per real second. Higher = snappier.
  * The spring is critically damped, so the camera glides in without overshooting (#75).
  */
-const EASE_RATE = { side: 5, tracking: 20, closeup: 6 } as const;
+const EASE_RATE = { side: 5, tracking: 20, closeup: 6, inside: 4 } as const;
 /** Where the intro move starts, relative to the default framing, in metres. */
 const INTRO_OFFSET = new THREE.Vector3(-0.9, 0.55, 1.1);
 const INTRO_LOOK_RISE = 0.12;
@@ -53,6 +54,14 @@ export class CameraDirector {
   /** Largest face dimension of the target, and the stand-off the view should take in. */
   private span = 0.3;
   private reach = 0.5;
+  /** On the outdoor range (#231) targets stand on the ground centred on their own shot line, so the view frames the middle and stands off a little toward the firing line. */
+  private outdoors = false;
+  /** The shot's drawing frame (#250): the timeline is in the engine's frame, turned onto the real path by this. */
+  private readonly frame = new THREE.Matrix4();
+  private readonly framePos = new THREE.Vector3();
+  private readonly frameDir = new THREE.Vector3();
+  /** Where the inside view stands and looks, when the target is a building (#249). */
+  private insideView: { from: THREE.Vector3; look: THREE.Vector3 } | null = null;
   private readonly look = new THREE.Vector3();
   private readonly pose: Pose = { position: new THREE.Vector3(), look: new THREE.Vector3(), ease: EASE_RATE.side };
   /** Velocities of the camera position and look point, in metres per real second. */
@@ -85,6 +94,21 @@ export class CameraDirector {
     this.aimPoint.copy(aim);
   }
 
+  /** The frame the shot is drawn in (identity for a level run), so the tracking shot follows the round where it really flies. */
+  setFrame(frame: THREE.Matrix4): void {
+    this.frame.copy(frame);
+  }
+
+  /** The inside view of a building's room, or null when the target is not one (the inside mode then falls back to the side view). */
+  setInside(view: { from: THREE.Vector3; look: THREE.Vector3 } | null): void {
+    this.insideView = view ? { from: view.from.clone(), look: view.look.clone() } : null;
+  }
+
+  /** Frames for the outdoor proving ground instead of the lab bench (#231). */
+  setOutdoors(outdoors: boolean): void {
+    this.outdoors = outdoors;
+  }
+
   /** How far in front of the face the action starts (a charge's stand-off), in metres, so the side view includes it. */
   setReach(reachM: number): void {
     this.reach = Math.max(0.5, reachM);
@@ -99,7 +123,17 @@ export class CameraDirector {
       // Start soft, so the glide away from a hand-placed view is gentle.
       this.stiffness = Math.min(this.stiffness, EASE_RATE.side);
     }
+    // Into a building's room: cut rather than glide, so the camera never flies through the wall.
+    const into = mode === 'inside' && this.mode !== 'inside' ? this.insideView : null;
     this.mode = mode;
+    if (into) {
+      this.camera.position.copy(into.from);
+      this.look.copy(into.look);
+      this.velocity.set(0, 0, 0);
+      this.lookVelocity.set(0, 0, 0);
+      this.camera.lookAt(this.look);
+      this.controls.target.copy(this.look);
+    }
     if (mode === 'orbit') this.controls.target.copy(this.look);
     this.onModeChange(mode);
   }
@@ -149,6 +183,13 @@ export class CameraDirector {
       case 'closeup':
         this.closeupPose(pose);
         break;
+      case 'inside':
+        if (this.insideView) {
+          pose.position.copy(this.insideView.from);
+          pose.look.copy(this.insideView.look);
+          pose.ease = EASE_RATE.inside;
+        } else this.sidePose(pose);
+        break;
       default:
         this.sidePose(pose);
     }
@@ -177,8 +218,14 @@ export class CameraDirector {
     const stand = Math.max(0, this.reach - 0.5);
     const scale = Math.max(((this.reach + depth) / (0.5 + depth)) * (stand > 0 ? 1.35 : 1), 1 + Math.max(0, this.span - 0.3) * 2.2);
     const centreX = this.impactPoint.x + depth / 2 - stand * 0.9;
-    pose.look.set(centreX, this.impactPoint.y + Math.max(0, this.span - 0.3) * 0.25, 0);
-    pose.position.set(centreX + 0.15, this.impactPoint.y + 0.17 * scale, (1.15 + depth * 0.3) * scale);
+    if (this.outdoors) {
+      // A three-quarter view from the firing side, a little above the shot line, as a range camera would stand.
+      pose.look.set(centreX, this.impactPoint.y, 0);
+      pose.position.set(centreX - 0.35 * scale, this.impactPoint.y + 0.2 * scale, (1.15 + depth * 0.3) * scale);
+    } else {
+      pose.look.set(centreX, this.impactPoint.y + Math.max(0, this.span - 0.3) * 0.25, 0);
+      pose.position.set(centreX + 0.15, this.impactPoint.y + 0.17 * scale, (1.15 + depth * 0.3) * scale);
+    }
     pose.ease = EASE_RATE.side;
   }
 
@@ -186,10 +233,11 @@ export class CameraDirector {
     if (t === null || !timeline) return false;
     const frame = samplePrimary(timeline, t);
     if (!frame) return false;
-    const p = frame.pos;
+    const p = this.framePos.set(frame.pos.x, frame.pos.y, frame.pos.z).applyMatrix4(this.frame);
+    const d = this.frameDir.set(frame.dir.x, frame.dir.y, frame.dir.z).transformDirection(this.frame);
     // Low, slightly behind and to the side of the bullet, looking just ahead of its nose.
-    pose.position.set(p.x - 0.16, p.y + 0.04, p.z + 0.2);
-    pose.look.set(p.x + frame.dir.x * 0.08, p.y + frame.dir.y * 0.08, p.z + frame.dir.z * 0.08);
+    pose.position.set(p.x - 0.16 * d.x, p.y + 0.04 - 0.16 * d.y, p.z + 0.2 - 0.16 * d.z);
+    pose.look.set(p.x + d.x * 0.08, p.y + d.y * 0.08, p.z + d.z * 0.08);
     pose.ease = EASE_RATE.tracking;
     return true;
   }

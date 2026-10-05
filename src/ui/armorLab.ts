@@ -6,11 +6,11 @@ import { dimensionLine, fragmentShapes, roomShapes } from '../armor/section';
 import { MAX_LAYERS, STACK_PRESETS, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
 import { activeStage, extendedFrame, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
 import { mountView3d, type View3d } from '../armor/view3d';
-import { playbackAt } from '../armor/playback';
+import { armorClockSource, playSeconds, playbackAt } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
 import { familyDiagram } from './armorDiagrams';
-import { armorBeat, beatFactor } from '../sim/impactBeat';
+import { PlayClock } from '../sim/playClock';
 import { loadImpactBeat } from './beatSetting';
 
 /**
@@ -24,10 +24,8 @@ import { loadImpactBeat } from './beatSetting';
 const PLATE_MIN_MM = 10;
 const PLATE_MAX_MM = 300;
 const OBLIQUITY_MAX_DEG = 85;
-/** How long a whole timeline takes to play at 1x, in real seconds. */
-const PLAY_SECONDS = 8;
-/** A timeline with an aftermath (thrown pieces coming to rest) plays this much longer. */
-const AFTERMATH_PLAY_FACTOR = 1.6;
+/** One frame step on the scrubber (arrow keys), as a share of the whole playback. */
+const STEP_U = 1 / 480;
 const SPEEDS = [
   { label: '1×', factor: 1 },
   { label: '¼×', factor: 0.25 },
@@ -201,10 +199,15 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   let rows: LayerRow[] = [];
   /** The front plate as the user set it, for the presets that build round it. */
   let mainRef = { materialId: DEFAULT_PLATE_MATERIAL_ID as PlateMaterialId, thicknessMm: 120 };
-  /** Playhead, 0 to 1 (see `playbackAt`). */
-  let u = 0;
-  let playing = true;
+  /** The shared playback clock (#242), playing the scrubber's 0 to 1 playhead (see `playbackAt`). */
+  const player = new PlayClock();
   const impactBeat = loadImpactBeat();
+  /** The playhead, 0 to 1. */
+  const playhead = () => player.position;
+  /** Speed (the menu) over the playback's length: playhead units per real second. */
+  const syncRate = () => {
+    player.rate = stack ? SPEEDS[Number(speedSel.value)].factor / playSeconds(stack) : 0;
+  };
   let last = performance.now();
   let raf = 0;
 
@@ -305,8 +308,9 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       notice.hidden = false;
       notice.textContent = `${e instanceof Error ? e.message : String(e)}. Pick another munition for now.`;
     }
-    u = 0;
-    playing = true;
+    if (stack) player.load(armorClockSource(stack, stack.stages.map((s) => s.offsetT), impactBeat));
+    else player.unload();
+    syncRate();
     view3d?.setStack(stack);
     renderResults();
     redraw();
@@ -332,12 +336,12 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     const rect = canvas.getBoundingClientRect();
     const w = rect.width || canvas.width;
     const h = rect.height || canvas.height;
-    playBtn.textContent = playing ? 'Pause' : u >= 1 ? 'Replay' : 'Play';
+    playBtn.textContent = player.isPlaying ? 'Pause' : player.atEnd ? 'Replay' : 'Play';
     if (!stack) {
       ctx.clearRect(0, 0, w, h);
       return;
     }
-    const pb = playbackAt(stack, u);
+    const pb = playbackAt(stack, playhead());
     if (view === '3d' && view3d) {
       view3d.render(pb.t, pb.fragmentT, overlay);
       syncHud(pb);
@@ -385,7 +389,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     q('.armor-hud-time').textContent = `t = ${clock(pb.fragmentT)}`;
     q('.armor-hud-depth').textContent = `${platePrefix}depth ${mm(frame.depth)} of ${mm(stage.timeline.result.losThicknessM)}`;
     q('.armor-hud-speed').textContent = `${Math.round(frame.speed)} m/s`;
-    scrub.value = String(Math.round(u * 1000));
+    scrub.value = String(Math.round(playhead() * 1000));
     const reached = stack.events.filter((e) => e.t <= pb.fragmentT);
     caption.textContent = reached.length ? reached[reached.length - 1].label : '';
     resultsBox.querySelectorAll<HTMLElement>('[data-event]').forEach((li) => li.classList.toggle('reached', Number(li.dataset.event) <= pb.fragmentT));
@@ -429,6 +433,15 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       [r.ricochet ? 'Carried away by the ricochet' : 'Carried through', joules(r.residualEnergyJ)],
     ];
     if (r.shattered) rows.push(['Penetrator', `Shattered into ${r.fragments} pieces`]);
+    if (r.pits) {
+      const n = (o: string) => r.pits!.filter((p) => p.outcome === o).length;
+      const heaviest = r.pits.reduce((m, p) => Math.max(m, p.massKg), 0);
+      rows.push(
+        ['Fragments', `${r.pits.length}: ${n('pit')} pitted the face, ${n('embed')} embedded, ${n('perforate')} got through`],
+        ['Heaviest fragment', `${(heaviest * 1000).toFixed(1)} g`],
+        ['Blast dish', r.blastDishM ? mm(r.blastDishM) : 'none: the plate only rings'],
+      );
+    }
     if (r.plug) rows.push(['Plug', `${kg(r.plug.massKg)} at ${Math.round(r.plug.velocity)} m/s`]);
     if (r.ricochet) rows.push(['Ricochet', `leaves at ${r.ricochet.exitAngleDeg.toFixed(0)}° to the face, ${Math.round(r.ricochet.exitSpeed)} m/s; critical slope ${r.ricochet.criticalDeg.toFixed(0)}°`]);
     const debris = (r as unknown as { debris?: { halfAngleDeg: number } }).debris;
@@ -442,20 +455,13 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       <ol class="armor-events">${stack.events.map((e) => `<li data-event="${e.t}"><time>${us(e.t)}</time> ${e.label}</li>`).join('')}</ol>`;
   };
 
+  /** The render loop: the shared clock keeps the time, this only advances it and redraws while it plays. */
   const step = (now: number) => {
     raf = requestAnimationFrame(step);
-    const dt = (now - last) / 1000;
+    const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
     last = now;
-    if (!playing || !stack) return;
-    const factor = SPEEDS[Number(speedSel.value)].factor;
-    // The impact beat (#238): ease into a tenth speed as the round meets each plate, then ramp back.
-    const pb = playbackAt(stack, u);
-    const beat = impactBeat && !pb.aftermath ? beatFactor(pb.t, stack.stages.map((s) => s.offsetT), armorBeat(stack.duration)) : 1;
-    u += (dt * factor * beat) / (PLAY_SECONDS * (stack.fragments ? AFTERMATH_PLAY_FACTOR : 1) * (stack.stages.length > 1 ? 1.3 : 1));
-    if (u >= 1) {
-      u = 1;
-      playing = false;
-    }
+    if (!player.isPlaying || !stack) return;
+    player.update(dt);
     redraw();
   };
 
@@ -486,16 +492,30 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   q('.armor-fire').addEventListener('click', fire);
   playBtn.addEventListener('click', () => {
     if (!stack) return;
-    if (u >= 1) u = 0;
-    playing = !playing;
+    player.toggle();
     redraw();
   });
   scrub.addEventListener('input', () => {
     if (!stack) return;
-    playing = false;
-    u = Number(scrub.value) / 1000;
+    player.seek(Number(scrub.value) / 1000);
     redraw();
   });
+  speedSel.addEventListener('input', syncRate);
+  // The same keys as the simulators' scrubber: Space plays or pauses, the arrows step (Shift for ten).
+  const onKey = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (!stack || (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) && target !== scrub)) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (target instanceof HTMLButtonElement) target.blur();
+      player.toggle();
+    } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+      e.preventDefault();
+      player.stepBy((e.code === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1), STEP_U);
+    } else return;
+    redraw();
+  };
+  window.addEventListener('keydown', onKey);
   q('.armor-back').addEventListener('click', () => location.assign(location.pathname));
   window.addEventListener('resize', resize);
 
@@ -535,6 +555,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       cancelAnimationFrame(raf);
       view3d?.dispose();
       window.removeEventListener('resize', resize);
+      window.removeEventListener('keydown', onKey);
       screen.remove();
     },
   };

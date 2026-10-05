@@ -4,7 +4,10 @@ import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
-import { bowlingBallTexture, watermelonTexture, concreteMaps, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
+import { plateStandSpans } from './plateStandLayout';
+import { brickMaterial, concreteMaterial, shedSheetMaterial } from './buildings';
+import { hullPaint } from './tank';
+import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
 export { standSteel } from './stands';
 
@@ -42,13 +45,15 @@ export const layerGroupName = (i: number) => `layer-${i}`;
  * A stack of target layers along the shot line (#24), front face at the shot
  * line's target point. The impact angle turns the whole stack.
  */
-export function createTargetStack(layers: StackLayer[], angleDeg: number): THREE.Group {
+/** `shotY` is the height of the stack's centre line above the floor (the bench line, or higher on the range, #231). */
+export function createTargetStack(layers: StackLayer[], angleDeg: number, shotY = SHOT_Y): THREE.Group {
   const group = new THREE.Group();
   group.name = `target:${layers.map((l) => l.medium.id).join('+')}`;
-  group.position.set(TARGET_FRONT_X, SHOT_Y, 0);
+  group.position.set(TARGET_FRONT_X, shotY, 0);
   group.rotation.y = THREE.MathUtils.degToRad(angleDeg);
 
   const offsets = stackOffsets(layers);
+  const standSpans = plateStandSpans(layers);
   layers.forEach(({ medium: spec, thickness, look }, i) => {
     const layer = new THREE.Group();
     layer.name = layerGroupName(i);
@@ -56,7 +61,9 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number): THREE
     const body = buildBody(spec, thickness, look ?? spec.look);
     body.position.x = thickness / 2;
     layer.add(body);
-    layer.add(createSupport(spec, thickness, SHOT_Y, look ?? spec.look));
+    // A plate bolted to the one before it rides in that plate's stand (#232).
+    const span = standSpans[i];
+    if (span !== null) layer.add(createSupport(spec, span, shotY, look ?? spec.look));
     group.add(layer);
   });
 
@@ -258,6 +265,31 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         tileUvs(new THREE.BoxGeometry(t, h, w), 0.5),
         new THREE.MeshStandardMaterial({ ...maps, roughness: 1 }),
       );
+    }
+
+    case 'brickWall': {
+      const maps = brickMaps();
+      return new THREE.Mesh(
+        tileUvs(new THREE.BoxGeometry(t, h, w), BRICK_TILE_M),
+        new THREE.MeshStandardMaterial({ ...maps, roughness: 1 }),
+      );
+    }
+
+    case 'tankHull':
+      // The tank's near hull side, painted olive; the rest of the vehicle is its support.
+      return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), hullPaint()), PLATE_BODY_NAME);
+
+    case 'blockHouse':
+    case 'frameColumn':
+      return new THREE.Mesh(tileUvs(new THREE.BoxGeometry(t, h, w), 0.5), concreteMaterial());
+
+    case 'frameInfill':
+      return new THREE.Mesh(tileUvs(new THREE.BoxGeometry(t, h, w), BRICK_TILE_M), brickMaterial());
+
+    case 'shedSheet': {
+      // Corrugated sheet, its ribs about 100 mm apart.
+      const geometry = tileUvs(new THREE.BoxGeometry(Math.max(t, 0.002), h, w), 0.4);
+      return new THREE.Mesh(geometry, shedSheetMaterial());
     }
 
     case 'cinderBlock': {

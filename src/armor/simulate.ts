@@ -6,6 +6,7 @@
 
 import { fullBoreShot } from './fullBore';
 import { withFragments } from './fragments';
+import { heFragShot } from './heFrag';
 import { heshShot } from './hesh';
 import { jetShot } from './jet';
 import { longRodShot } from './longRod';
@@ -31,6 +32,8 @@ export function penetrate(shot: ArmorShot): ArmorTimeline {
       return jetShot(shot);
     case 'hesh':
       return heshShot(shot);
+    case 'he-frag':
+      return heFragShot(shot);
     default:
       throw new Error(`The armor lab does not model '${family}' against plate yet`);
   }

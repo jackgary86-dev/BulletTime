@@ -1,5 +1,6 @@
 import { reducedGore, setReducedGore } from '../data/content';
 import { mountSoundBoard } from './soundBoard';
+import { openWithShotAlways, setOpenWithShotAlways } from './firstShot';
 
 /**
  * Mounts the heads-up overlay: the app title with About and Sounds windows, and a hint
@@ -43,6 +44,10 @@ export function mountOverlay(root: HTMLElement, simulator = 'Bullet'): void {
         <input type="checkbox" class="reduced-gore" />
         Reduced gore: show blood as a clear blue simulant
       </label>
+      <label class="about-option">
+        <input type="checkbox" class="open-with-shot" />
+        Open with a shot: every launch starts by playing a .308 into gel
+      </label>
       <h3>Credits &amp; licenses</h3>
       <p class="about-credits">
         Built with <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT).
@@ -57,6 +62,9 @@ export function mountOverlay(root: HTMLElement, simulator = 'Bullet'): void {
   const dialog = root.querySelector<HTMLDialogElement>('.about')!;
   const gore = dialog.querySelector<HTMLInputElement>('.reduced-gore')!;
   gore.addEventListener('change', () => setReducedGore(gore.checked));
+  const withShot = dialog.querySelector<HTMLInputElement>('.open-with-shot')!;
+  withShot.checked = openWithShotAlways();
+  withShot.addEventListener('change', () => setOpenWithShotAlways(withShot.checked));
   root.querySelector('.about-open')!.addEventListener('click', () => {
     gore.checked = reducedGore();
     dialog.showModal();
