@@ -27,6 +27,7 @@ const LOOKS: Record<string, Look> = {
   oak: { hole: 0x140c06, raw: 0xc99a62, face: 0x9a6b3c },
   drywall: { hole: 0x1a1a1a, raw: 0xf6f4ee, face: 0xece8de },
   plasticJug: { hole: 0x101418, raw: 0xf2f2ec, face: 0xe8ecea },
+  paperStack: { hole: 0x24211c, raw: 0xf4f1e8, face: 0xe6e0d0 },
   phoneCell: { hole: 0x0c0c0e, raw: 0x9a9ea6, face: 0x2a2d33 },
 };
 
@@ -38,7 +39,9 @@ export function loadPanelEffect(
   holes: HoleMarks,
 ): void {
   const look = LOOKS[medium.look] ?? LOOKS.pine;
-  const wood = medium.behaviour === 'wood';
+  // A phone book is a wood-class stop in the physics but tears like paper: flakes and pale dust, no splinters.
+  const paper = medium.look === 'paperStack';
+  const wood = medium.behaviour === 'wood' && !paper;
   const events = timeline.events.filter((e) => e.layer === layer);
   let seed = 1;
 
@@ -73,7 +76,8 @@ export function loadPanelEffect(
       if (wood) {
         particles.add(burst('splinter', e.t, origin, normal, 0.7, 30 * weight * (0.5 + k), [5, 15 + 25 * k], [0.001, 0.003], debris(look.raw), { stretch: 2 }));
       }
-      particles.add(dust(e.t, origin, normal, wood ? 0.6 : 1.1, (wood ? 18 : 50) * weight * (0.5 + k), look.raw, wood ? 0.018 : 0.03));
+      if (paper) particles.add(paperShreds(e.t, origin, normal, 0.9, 24 * weight * (0.5 + k), [3, 10 + 14 * k], look));
+      particles.add(dust(e.t, origin, normal, wood ? 0.6 : 1.1, (wood ? 18 : 50) * weight * (0.5 + k) * (paper ? 0.3 : 1), look.raw, wood ? 0.018 : 0.03));
     } else if (e.type === 'exit') {
       // Exit holes are larger and torn: the material spalls outward around the bullet.
       const spall = wood ? 2 + 1.2 * k : 1.6;
@@ -96,6 +100,10 @@ export function loadPanelEffect(
         particles.add(burst('splinter', e.t, origin, normal, 0.55, 90 * weight * (0.4 + k), [10, 40 + e.speed * 0.15], [0.002, 0.007], debris(look.raw), { stretch: 5, grainSpread: true }));
         particles.add(burst('chunk', e.t, origin, normal, 0.5, 20 * weight * (0.3 + k), [5, 20 + e.speed * 0.06], [0.002, 0.006], debris(look.raw), {}));
         particles.add(dust(e.t, origin, normal, 0.6, 25 * weight, look.raw, 0.022));
+      } else if (paper) {
+        // Paper: a fan of torn sheets and fibres thrown out of the back, drifting down slowly.
+        particles.add(paperShreds(e.t, origin, normal, 0.7, 70 * weight * (0.4 + k), [4, 14 + e.speed * 0.05], look));
+        particles.add(dust(e.t, origin, normal, 0.7, 20 * weight, look.raw, 0.025));
       } else {
         // Drywall: a cone of gypsum chunks and a big chalky cloud.
         particles.add(burst('chunk', e.t, origin, normal, 0.6, 40 * weight, [5, 15 + e.speed * 0.04], [0.002, 0.008], debris(look.raw), {}));
@@ -105,6 +113,11 @@ export function loadPanelEffect(
       }
     }
   }
+}
+
+/** Torn paper: light flakes that flutter, so high drag and a slow fall. */
+function paperShreds(t: number, origin: THREE.Vector3, axis: THREE.Vector3, spread: number, count: number, speed: [number, number], look: Look) {
+  return { ...burst('chunk', t, origin, axis, spread, count, speed, [0.004, 0.012], debris(look.face), {}), look: 'flake' as const, drag: 140, gravity: 1.5, life: [8e-3, 24e-3] as [number, number] };
 }
 
 /** Debris is lit hard by the key light; a darker base keeps it from blooming into sparks. */
