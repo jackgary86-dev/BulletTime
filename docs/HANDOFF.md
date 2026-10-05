@@ -71,6 +71,8 @@ What display work is left:
 
 - **#231, proving ground:** Artillery, Missile and Explosion are set outdoors (`src/data/sites.ts` picks the site per mode; `src/scene/rangeSet.ts` builds the gravel range, concrete pad, berm, tree line, sky and sun, in the same `Studio` slot as the lab). On the range a target stands on the ground: its centre line is half the tallest layer, never below 0.6 m (`siteShotY`), threaded through `createTargetStack(..., shotY)`, `Lane.baseY` and the glass cracks. Shot aims are stored relative to `Lane.baseY`. New heavy targets: `bunker-wall`, `brick-wall-full` (procedural `brickMaps`, look `brickWall`), `earth-berm-full`, and presets `bunker`, `bunker-berm`, `brick-cavity`. `CameraDirector.setOutdoors` gives a three-quarter side view; the camera far plane and orbit distance grow on the range. The procedural tank (`src/models/tank.ts`, medium `tank-hull`, preset `tank`): the struck layer is the hull side above the tracks (a plate body, so it dishes and holes); hull, tracks, wheels and turret are its support. `groundClearanceM` lifts a layer's lower edge off the ground on the range, and `vehicle` lists it for Missile despite the plate band being under 2 m.
 
+- **#233, Missile plates:** the large plates came with #232/#245; every Missile jet goes through 300 mm, so preset `plate-block` (three 300 mm RHA plates face to face, no gap) is where a jet stops and its depth shows. Tests in `largePlates.test.ts`. Trap: a 2 mm gap between plates stalls every jet at 0.603 m (no gap or 5 cm is fine); ticketed as #281.
+
 ## Ticket state
 
 Epic #186 (3 versions x 4 modes). Everything for the four simulators is closed. Still open there:

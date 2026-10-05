@@ -111,6 +111,13 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'brick-wall-full', thickness: 0.1 }, { medium: 'brick-wall-full', thickness: 0.1, gapM: 0.05 }],
     heavy: true,
   },
+  // Three 300 mm RHA plates bolted face to face (#233): thick enough that a missile's jet stops inside and its depth shows.
+  {
+    id: 'plate-block',
+    name: 'RHA block (3 x 300 mm)',
+    layers: [{ medium: 'rha-plate', thickness: 0.3 }, { medium: 'rha-plate', thickness: 0.3, gapM: 0 }, { medium: 'rha-plate', thickness: 0.3, gapM: 0 }],
+    heavy: true,
+  },
   { id: 'tank', name: 'Tank, broadside', layers: [{ medium: 'tank-hull' }], heavy: true },
   {
     id: 'plate-concrete',
