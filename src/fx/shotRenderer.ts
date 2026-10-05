@@ -6,6 +6,7 @@ import { bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
 import { createMissileTrail, motorLight, type MissileTrail } from './missileTrail';
+import { wallClockS } from '../scene/still';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
 const MAX_FRAGMENTS = 256;
@@ -178,7 +179,8 @@ export class ShotRenderer {
           trail.group.position.copy(model.group.position);
           trail.group.quaternion.setFromUnitVectors(X_AXIS, tmpDir.set(frame.dir.x, frame.dir.y, frame.dir.z));
         }
-        const now = performance.now() / 1000;
+        // Wall-clock flicker, frozen in still mode (#243).
+        const now = wallClockS();
         trail.layers = this.plumeLayers;
         trail.update(inAir, model.length, frame?.diameter ?? 0, now);
         if (inAir && frame && this.motorLightOn && !lit) {

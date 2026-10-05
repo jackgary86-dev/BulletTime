@@ -32,6 +32,8 @@ Playback has an impact beat (#238, `src/sim/impactBeat.ts`): the clock eases to 
 
 While a shot plays, only the camera HUD's timecode and speed sit over the scene: the results panel and the shot panel's own readout step aside (`shot-playing` on the overlay, set from the render loop) and come back when playback stops or is paused (#239).
 
+Visual regression (#243): `npm run visual` builds the site, serves it with `vite preview` and compares one frame per shot (tests/visual/visual.spec.ts) with tests/visual/references, in software WebGL at 1280×720 and Low quality; `npm run visual:update` rewrites the references after an intended change. Pages are opened with `?clean&still`: `?still` (src/scene/still.ts) freezes the film grain and rocket-trail flicker and snaps the camera, and the app sets `document.body.dataset.ready` once the scene is built and any replay link is parked. `@playwright/test` is pinned to an exact version so local references match CI's Chromium. The `visual` job in quality.yml uploads actual/diff images on failure. A full run takes about 10 minutes; a frame with a large burst can take a minute or more to render in software.
+
 URL shortcuts: `?mode=bullet|artillery|missile|explosion|armor` skips the launcher; `?ultra` raises quality.
 
 CI: `deploy.yml` (test, build, Pages), `quality.yml` (type check, tests, `npm audit`, gzipped-bundle budget of 600 KB), `release.yml` (installers on `v*` tags, with a launcher smoke test). Dependabot is on.
