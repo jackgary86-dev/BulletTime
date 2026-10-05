@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { BulletSpec } from '../data/bullets';
 import { createBulletModel, disposeBulletModel, type BulletModel } from '../models/bullet';
+import { BASE_VIEW_WIDTH_M, previewScale, scaleNote } from './bulletPreviewScale';
 
-/** Width of the preview window in metres: wide enough for the 75 mm cannon shell. */
-const VIEW_WIDTH_M = 0.09;
+/** Width of the preview window at scale 1, in metres. The window zooms out for rounds too big for it. */
+const VIEW_WIDTH_M = BASE_VIEW_WIDTH_M;
 
 /**
  * A small, separate renderer that shows the selected projectile at true scale
@@ -14,7 +15,10 @@ export interface BulletPreview {
   show(spec: BulletSpec): void;
 }
 
-export function createBulletPreview(canvas: HTMLCanvasElement): BulletPreview {
+/** The note under the preview says what the ruler ticks are when the view is zoomed out. */
+export type ScaleNoteListener = (note: string) => void;
+
+export function createBulletPreview(canvas: HTMLCanvasElement, onScale?: ScaleNoteListener): BulletPreview {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -29,7 +33,10 @@ export function createBulletPreview(canvas: HTMLCanvasElement): BulletPreview {
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 1);
   camera.position.set(0, 0, 0.5);
-  scene.add(createRuler());
+  const ruler = createRuler();
+  scene.add(ruler);
+  /** How far the view is zoomed out for the round on show; the ruler and model are drawn at this scale. */
+  let zoom = 1;
 
   let model: BulletModel | null = null;
   const spinner = new THREE.Group();
@@ -39,7 +46,7 @@ export function createBulletPreview(canvas: HTMLCanvasElement): BulletPreview {
     const width = canvas.clientWidth || 260;
     const height = canvas.clientHeight || 100;
     renderer.setSize(width, height, false);
-    const halfW = VIEW_WIDTH_M / 2;
+    const halfW = (VIEW_WIDTH_M * zoom) / 2;
     const halfH = (halfW * height) / width;
     camera.left = -halfW;
     camera.right = halfW;
@@ -63,8 +70,13 @@ export function createBulletPreview(canvas: HTMLCanvasElement): BulletPreview {
         disposeBulletModel(model);
       }
       model = createBulletModel(spec);
+      // Big rounds zoom the view out (#preview-fit), so the ruler grows with it and its ticks stay whole millimetres.
+      zoom = previewScale(model.length, spec.caliberMm / 1000);
+      ruler.scale.setScalar(zoom);
+      resize();
+      onScale?.(scaleNote(zoom));
       // Left-align the base on the ruler's zero mark.
-      model.group.position.x = -VIEW_WIDTH_M / 2 + 0.004 + model.length;
+      model.group.position.x = (-VIEW_WIDTH_M / 2 + 0.004) * zoom + model.length;
       spinner.add(model.group);
     },
   };
