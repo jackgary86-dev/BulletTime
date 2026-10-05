@@ -35,6 +35,11 @@ export type MediumLook =
   | 'brickWall'
   /** The side armour of a procedural tank, with the vehicle built round it (#231). */
   | 'tankHull'
+  /** Mock test buildings (#246): the struck wall builds the rest of its building. */
+  | 'blockHouse'
+  | 'frameInfill'
+  | 'frameColumn'
+  | 'shedSheet'
   | 'mildSteel'
   /** Car door skins (#60): mild steel physics, painted outer and primed inner panel. */
   | 'carDoorOuter'
@@ -130,8 +135,8 @@ export interface MediumSpec {
   dummyOnly?: boolean;
   /** Proving-ground sized targets (#232): listed in Artillery, Missile and Explosion, never in the Bullet lab. */
   heavy?: boolean;
-  /** A full-size vehicle (#231): listed for Missile whatever the struck plate's size, since the vehicle round it is big. */
-  vehicle?: boolean;
+  /** Part of a full-size vehicle or building (#231, #246): listed for Missile whatever the struck layer's size, since the structure round it is big. */
+  structure?: boolean;
   /** On the proving ground, how far above the ground the layer's lower edge stands, m (a tank's hull side rides above its tracks). */
   groundClearanceM?: number;
   /** Showpiece objects (#156): listed under Objects in the picker, with their own outline. */
@@ -801,8 +806,169 @@ export const MEDIA: MediumSpec[] = [
     yawNeckScale: 0.05,
     allowsExpansion: false,
     heavy: true,
-    vehicle: true,
+    structure: true,
     groundClearanceM: 0.95,
+  },
+  // Mock test buildings (#246): each struck wall is listed and builds its building round it; the far walls only appear in the presets.
+  {
+    id: 'block-house-wall',
+    name: 'Block house (front wall)',
+    description: 'A 4 x 4 x 3 m reinforced concrete block house with a slab roof. The shot strikes its 300 mm front wall; what gets through crosses the room to the back wall.',
+    look: 'blockHouse',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.2, max: 0.5, default: 0.3 },
+    heightM: 3,
+    widthM: 4,
+  },
+  {
+    id: 'block-house-back',
+    name: 'Block house (back wall)',
+    description: 'The far wall of the block house.',
+    look: 'blockHouse',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.2, max: 0.5, default: 0.3 },
+    heightM: 3,
+    widthM: 4,
+  },
+  {
+    id: 'frame-infill',
+    name: 'Concrete frame (brick infill panel)',
+    description: 'A two-storey concrete frame, 8 x 6 x 6 m, with brick infill. The shot strikes a ground-floor infill panel between two columns.',
+    look: 'frameInfill',
+    behaviour: 'concrete',
+    density: 1900,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.1, max: 0.35, default: 0.23 },
+    heightM: 2.75,
+    widthM: 3.6,
+  },
+  {
+    id: 'frame-infill-back',
+    name: 'Concrete frame (back infill panel)',
+    description: 'The far infill panel of the concrete frame.',
+    look: 'frameInfill',
+    behaviour: 'concrete',
+    density: 1900,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.1, max: 0.35, default: 0.23 },
+    heightM: 2.75,
+    widthM: 3.6,
+  },
+  {
+    id: 'frame-column',
+    name: 'Concrete frame (column)',
+    description: 'The same two-storey frame, struck on a 400 mm reinforced concrete column instead of an infill panel.',
+    look: 'frameColumn',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.3, max: 0.6, default: 0.4 },
+    heightM: 2.75,
+    widthM: 0.4,
+  },
+  {
+    id: 'frame-column-back',
+    name: 'Concrete frame (far column)',
+    description: 'The column on the far side of the frame, behind the struck one.',
+    look: 'frameColumn',
+    behaviour: 'concrete',
+    density: 2400,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.3, max: 0.6, default: 0.4 },
+    heightM: 2.75,
+    widthM: 0.4,
+  },
+  {
+    id: 'shed-sheet',
+    name: 'Steel shed (wall sheet)',
+    description: 'A 10 x 6 x 4 m shed of corrugated steel sheet on a light frame. The thin sheet barely slows anything.',
+    look: 'shedSheet',
+    behaviour: 'steel',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 60,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    structure: true,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 3,
+    widthM: 10,
+  },
+  {
+    id: 'shed-sheet-back',
+    name: 'Steel shed (back sheet)',
+    description: 'The far wall of the steel shed.',
+    look: 'shedSheet',
+    behaviour: 'steel',
+    density: 7850,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 1.2e9,
+    hardness: 0.75,
+    ricochetAngleDeg: 60,
+    yawNeckScale: 0.05,
+    allowsExpansion: false,
+    heavy: true,
+    dummyOnly: true,
+    thickness: { min: 0.0005, max: 0.002, default: 0.0008 },
+    heightM: 3,
+    widthM: 10,
   },
   {
     id: 'sandbag',
@@ -1121,7 +1287,7 @@ export const MISSILE_MIN_FACE_M = 2;
  */
 export function mediumListedIn(medium: MediumSpec, mode: string): boolean {
   if (medium.dummyOnly) return false;
-  if (mode === 'missile') return !!medium.vehicle || Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
+  if (mode === 'missile') return !!medium.structure || Math.min(medium.heightM, medium.widthM) >= MISSILE_MIN_FACE_M;
   return !medium.heavy || mode !== 'bullet';
 }
 

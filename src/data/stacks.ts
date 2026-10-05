@@ -1,4 +1,5 @@
 import { layersFor, type TargetLayer } from '../sim/engine';
+import { BUILDINGS, interiorGapM } from './buildings';
 import { getMedium, type MediumLook, type MediumSpec } from './media';
 
 /** One layer of a target stack (#24): a medium, its thickness, and the air gap in front of it. */
@@ -125,6 +126,16 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
     heavy: true,
   },
+  // Mock test buildings (#246): the struck wall, the room as an air gap, then the far wall.
+  ...Object.values(BUILDINGS).map((b) => ({
+    id: `building-${b.id}`,
+    name: b.name,
+    layers: [
+      { medium: b.front.medium, thickness: b.front.thicknessM },
+      { medium: b.back.medium, thickness: b.back.thicknessM, gapM: interiorGapM(b) },
+    ],
+    heavy: true,
+  })),
 ];
 
 /** Whether a mode's target presets list this one (#245): heavy ones outside the Bullet lab, and only heavy ones for Missile. */

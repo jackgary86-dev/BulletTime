@@ -73,6 +73,8 @@ What display work is left:
 
 - **#233, Missile plates:** the large plates came with #232/#245; every Missile jet goes through 300 mm, so preset `plate-block` (three 300 mm RHA plates face to face, no gap) is where a jet stops and its depth shows. Tests in `largePlates.test.ts`. Trap: a 2 mm gap between plates stalls every jet at 0.603 m (no gap or 5 cm is fine); ticketed as #281.
 
+- **#246, mock buildings:** `src/data/buildings.ts` (sizes, layer stacks) and `src/models/buildings.ts` (block house, two-storey concrete frame struck on an infill panel or a column, steel shed). Each building is a preset `building-<id>`: the struck wall, the room as an air gap, the far wall (a `dummyOnly` medium). The struck wall's support draws the rest of the building; `Lane.faceSpan` frames the whole building. `structure` (was `vehicle`) lists such parts for Missile despite small faces. Not done: picker thumbnails (the picker has none for any target).
+
 ## Ticket state
 
 Epic #186 (3 versions x 4 modes). Everything for the four simulators is closed. Still open there:
