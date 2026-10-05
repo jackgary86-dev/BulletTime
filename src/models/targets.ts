@@ -61,6 +61,12 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number, shotY 
     const body = buildBody(spec, thickness, look ?? spec.look);
     body.position.x = thickness / 2;
     layer.add(body);
+    // Two sheets of board on a stud frame (#240): a stud stands at the wall's edge, out of the line of fire.
+    const before = layers[i - 1];
+    if (spec.look === 'drywall' && before?.medium.look === 'drywall') {
+      const bay = offsets[i] - offsets[i - 1] - before.thickness;
+      if (bay > 0.01) layer.add(createStud(bay, spec.heightM, spec.widthM));
+    }
     // A plate bolted to the one before it rides in that plate's stand (#232).
     const span = standSpans[i];
     if (span !== null) layer.add(createSupport(spec, span, shotY, look ?? spec.look));
@@ -74,6 +80,18 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number, shotY 
     }
   });
   return group;
+}
+
+/** A vertical timber stud filling the bay between two sheets, `bay` m deep, at the wall's far edge: the side camera still sees the bullet cross the bay. */
+function createStud(bay: number, height: number, width: number): THREE.Group {
+  const studs = new THREE.Group();
+  studs.name = 'stud';
+  const timber = new THREE.MeshStandardMaterial({ color: 0xc89a62, roughness: 0.9 });
+  const stud = 0.038;
+  const post = new THREE.Mesh(new THREE.BoxGeometry(bay, height, stud), timber);
+  post.position.set(-bay / 2, 0, -(width / 2 - stud / 2));
+  studs.add(post);
+  return studs;
 }
 
 /** Frees geometry and per-target materials. Shared textures are kept. */
