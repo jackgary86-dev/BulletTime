@@ -2445,3 +2445,50 @@ body {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* First launch (#241): only the scene and the readout while the shot plays; the panels slide in after. */
+#overlay > *,
+.range-start {
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.first-shot #overlay > :not(.camera-hud),
+.first-shot .range-start {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.first-shot-pick {
+  position: fixed;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  padding: 12px 22px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1206;
+  background: var(--accent);
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  animation: first-shot-in 0.6s ease both;
+  transition: opacity 0.8s ease;
+}
+
+.first-shot-pick.fade {
+  opacity: 0.55;
+}
+
+.first-shot-pick:hover {
+  opacity: 1;
+}
+
+@keyframes first-shot-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+}
