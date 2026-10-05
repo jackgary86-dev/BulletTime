@@ -4,8 +4,8 @@ import { expect, test, type Page } from '@playwright/test';
  * Visual regression screenshots (#243): one frame per shot, parked a fixed
  * time after first contact through a replay link (`?at=`), with every panel
  * hidden (`?clean`) and the wall clock frozen (`?still`), at Low quality so
- * no bloom or ambient occlusion noise gets in. A change to an effect that
- * moves more than 1% of the pixels fails the job; `npm run visual:update`
+ * no bloom or ambient occlusion noise gets in. A change that moves more than
+ * 200 pixels fails the job (a clean run moves none); `npm run visual:update`
  * accepts it.
  */
 
