@@ -5,7 +5,7 @@ import { BULLET_MATERIALS } from '../models/materials';
 import { bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
-import { createMissileTrail, motorLight, type MissileTrail } from './missileTrail';
+import { createMissileTrail, hazeColumn, motorLight, type MissileTrail } from './missileTrail';
 import { wallClockS } from '../scene/still';
 import { airIntervals, createMotionStreak, createWake, type MotionStreak, type Wake } from './wake';
 
@@ -48,6 +48,9 @@ export class ShotRenderer {
   private readonly motor = new THREE.PointLight(0xff9a4a, 0, 10, 2);
   private plumeLayers: 1 | 2 | 3 = 3;
   private motorLightOn = true;
+  private heatHazeOn = true;
+  /** The hot air behind the first burning motor this frame, in this group's frame (#247). */
+  readonly haze = { active: false, nozzle: new THREE.Vector3(), tip: new THREE.Vector3(), radius: 0 };
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
   private readonly jacketCurls: THREE.InstancedMesh;
@@ -137,7 +140,8 @@ export class ShotRenderer {
   }
 
   /** Plume layers and the motor light for a quality level (#247). */
-  setQuality(quality: { plumeLayers: 1 | 2 | 3; motorLight: boolean }): void {
+  setQuality(quality: { plumeLayers: 1 | 2 | 3; motorLight: boolean; heatHaze: boolean }): void {
+    this.heatHazeOn = quality.heatHaze;
     this.plumeLayers = quality.plumeLayers;
     this.motorLightOn = quality.motorLight;
   }
@@ -148,6 +152,7 @@ export class ShotRenderer {
     if (!timeline) return;
 
     let lit = false;
+    this.haze.active = false;
     for (const { model, trackId, wake, streak, air, trail, crumples } of this.bullets) {
       const track = timeline.tracks[trackId];
       let frame = sampleTrack(track, t);
@@ -189,6 +194,13 @@ export class ShotRenderer {
           this.motor.position.set(-light.offset, 0, 0).applyQuaternion(trail.group.quaternion).add(trail.group.position);
           this.motor.intensity = light.intensity;
           this.motor.distance = light.distance;
+        }
+        if (inAir && frame && this.heatHazeOn && !this.haze.active) {
+          const column = hazeColumn(model.length, frame.diameter);
+          this.haze.active = true;
+          this.haze.radius = column.radius;
+          this.haze.nozzle.set(-model.length, 0, 0).applyQuaternion(trail.group.quaternion).add(trail.group.position);
+          this.haze.tip.set(-model.length - column.length, 0, 0).applyQuaternion(trail.group.quaternion).add(trail.group.position);
         }
       }
     }

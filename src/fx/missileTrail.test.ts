@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QUALITY } from '../scene/quality';
-import { motorLight } from './missileTrail';
+import { hazeColumn, motorLight } from './missileTrail';
 
 describe('missile motor light (#247)', () => {
   it('is brighter and reaches further for a bigger motor', () => {
@@ -37,5 +37,20 @@ describe('plume quality (#247)', () => {
     expect(QUALITY.high.plumeLayers).toBeGreaterThanOrEqual(QUALITY.medium.plumeLayers);
     expect(QUALITY.ultra.plumeLayers).toBe(3);
     expect(QUALITY.medium.motorLight && QUALITY.high.motorLight && QUALITY.ultra.motorLight).toBe(true);
+  });
+});
+
+describe('heat haze (#247)', () => {
+  it('is off on Low only', () => {
+    expect(QUALITY.low.heatHaze).toBe(false);
+    expect(QUALITY.medium.heatHaze && QUALITY.high.heatHaze && QUALITY.ultra.heatHaze).toBe(true);
+  });
+
+  it('is a column behind the flame that grows with the missile', () => {
+    const small = hazeColumn(1, 0.07);
+    const big = hazeColumn(6, 0.52);
+    expect(small.length).toBeGreaterThan(0.9 * 1);
+    expect(big.length).toBeGreaterThan(small.length);
+    expect(big.radius).toBeGreaterThan(small.radius);
   });
 });
