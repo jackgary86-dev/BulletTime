@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import checklist from '../../docs/material-reference/CHECKLIST.md?raw';
 import { fire } from '../sim/testUtil';
 import { formatThickness, gaugeOf } from './gauge';
 import { MEDIA, getMedium } from './media';
 
 const withStock = MEDIA.filter((m) => m.stockThicknessM);
-const SHEET_IDS = ['steel-mild', 'steel-stainless', 'steel-galvanised', 'titanium', 'aluminum', 'copper', 'brass', 'lead-sheet', 'sheet-metal', 'polycarbonate', 'acrylic', 'glass', 'plywood', 'mdf', 'osb', 'drywall', 'cement-board', 'fibreglass', 'kevlar', 'ceramic-tile'];
+const SHEET_IDS = ['steel-mild', 'steel-stainless', 'steel-galvanised', 'titanium', 'aluminum', 'aluminum-3003', 'copper', 'brass', 'lead-sheet', 'sheet-metal', 'polycarbonate', 'acrylic', 'glass', 'plywood', 'mdf', 'osb', 'drywall', 'cement-board', 'fibreglass', 'kevlar', 'ceramic-tile'];
 
 /** Sheet and plate materials in their stock thicknesses (#261). */
 describe('stock thicknesses (#261)', () => {
@@ -35,7 +36,7 @@ describe('stock thicknesses (#261)', () => {
 // Hundreds of simulations: slow enough to pass 5 s when the whole suite runs in parallel.
 describe('perforation by stock thickness (#261)', { timeout: 60_000 }, () => {
   const perforates = (bullet: string, medium: string, t: number) => fire({ bullet, medium, thickness: t }).summary.passedThrough;
-  const metals = ['steel-mild', 'steel-stainless', 'steel-galvanised', 'titanium', 'aluminum', 'copper', 'brass', 'lead-sheet'];
+  const metals = ['steel-mild', 'steel-stainless', 'steel-galvanised', 'titanium', 'aluminum', 'aluminum-3003', 'copper', 'brass', 'lead-sheet'];
   const rounds = ['9mm-fmj', '308-sp', '12ga-slug'];
 
   it.each(metals.flatMap((m) => rounds.map((r) => [m, r] as const)))('%s vs %s: thicker never perforates what thinner stops', (medium, bullet) => {
@@ -61,6 +62,7 @@ describe('perforation by stock thickness (#261)', { timeout: 60_000 }, () => {
       'steel-galvanised': [3, 6, 6],
       titanium: [1, 10, 3],
       aluminum: [6, 25, 8],
+      'aluminum-3003': [12, 25, 16],
       copper: [8, 12, 10],
       brass: [6, 12, 8],
       'lead-sheet': [6, 12, 8],
@@ -75,6 +77,8 @@ describe('perforation by stock thickness (#261)', { timeout: 60_000 }, () => {
       expect(limit('titanium', bullet), bullet).toBeLessThanOrEqual(limit('steel-stainless', bullet));
       expect(limit('steel-mild', bullet), bullet).toBeLessThanOrEqual(limit('aluminum', bullet));
       expect(limit('brass', bullet), bullet).toBeLessThanOrEqual(limit('copper', bullet));
+      // 6061-T6 stops sooner than soft 3003.
+      expect(limit('aluminum', bullet), bullet).toBeLessThanOrEqual(limit('aluminum-3003', bullet));
     }
   });
 
@@ -97,5 +101,27 @@ describe('gauge labels (#261)', () => {
     expect(formatThickness(getMedium('steel-mild'), 0.0015)).toBe('16 ga · 1.5 mm');
     expect(formatThickness(getMedium('steel-mild'), 0.006)).toBe('6.0 mm');
     expect(formatThickness(getMedium('gel10'), 0.4)).toBe('40.0 cm');
+  });
+});
+
+describe('replay links in the material checklist (#261)', () => {
+  const links = [...checklist.matchAll(/medium=([a-z0-9-]+)&thickness=([0-9.]+)&at=/g)].map((m) => ({ id: m[1], thickness: Number(m[2]) }));
+
+  it('lists every new sheet material at its thinnest and thickest stock', () => {
+    for (const id of ['steel-stainless', 'steel-galvanised', 'titanium', 'aluminum-3003', 'copper', 'brass', 'lead-sheet', 'polycarbonate', 'mdf', 'osb', 'cement-board', 'fibreglass', 'kevlar', 'ceramic-tile']) {
+      const stock = getMedium(id).stockThicknessM!;
+      const mine = links.filter((l) => l.id === id).map((l) => l.thickness);
+      expect(mine, id).toContain(stock[0]);
+      expect(mine, id).toContain(stock[stock.length - 1]);
+    }
+  });
+
+  it('only names materials that exist, at thicknesses they allow', () => {
+    expect(links.length).toBeGreaterThan(20);
+    for (const { id, thickness } of links) {
+      const m = getMedium(id);
+      expect(thickness, id).toBeGreaterThanOrEqual(m.thickness.min - 1e-12);
+      expect(thickness, id).toBeLessThanOrEqual(m.thickness.max + 1e-12);
+    }
   });
 });

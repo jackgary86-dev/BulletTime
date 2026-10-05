@@ -32,3 +32,22 @@ Figures behind these rows, and whether each is published, an engine constant or 
 Steel effects that are in the model (#219-#221): a dark blow-back cone and two droplet sheets on entry, a plug chip, an axis debris string, about ten bright side chips and 3 to 8 petals on exit, and the back face bulging about 0.3 bullet diameters before it opens. Concrete (#223-#226): hourglass footprints sized from the measured panels, a scab that lets go 1.8 / 2.2 / 2.8 ms after impact (C35 / C75 / C110), and a bullet that is a crushed stub by about 0.4 ms.
 
 The baselines are 800x600 captures of the whole screen in the browser pane at Medium quality, side camera. The camera eases in, so small framing differences are not a regression; look at the marks.
+
+Sheet and plate materials added in #261. Each is checked at its thinnest and its thickest stock thickness (replay links below, with `thickness` in metres). Baseline screenshots for these are _pending_: at the default side camera the plate is a few pixels across and the materials look alike, so a close-up capture (the Close preset, or a new camera link) is needed first.
+
+| Material | Thinnest stock | Thickest stock | Baselines | What to see |
+|---|---|---|---|---|
+| Stainless steel (304) | `?mode=bullet&bullet=308-sp&medium=steel-stainless&thickness=0.0005&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=steel-stainless&thickness=0.025&at=0.5ms` | _pending_ | Bright polished dent and a clean petalled hole; slightly stronger than mild steel. |
+| Galvanised steel | `?mode=bullet&bullet=308-sp&medium=steel-galvanised&thickness=0.0005&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=steel-galvanised&thickness=0.006&at=0.5ms` | _pending_ | Pale spangled sheet, clean hole, bright chips. |
+| Titanium (Ti-6Al-4V) | `?mode=bullet&bullet=308-sp&medium=titanium&thickness=0.001&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=titanium&thickness=0.025&at=0.5ms` | _pending_ | Dark grey metal; stops a .308 at the thick end, bright splash. |
+| Aluminium 3003 (soft) | `?mode=bullet&bullet=9mm-fmj&medium=aluminum-3003&thickness=0.0005&at=0.5ms` | `?mode=bullet&bullet=9mm-fmj&medium=aluminum-3003&thickness=0.025&at=0.5ms` | _pending_ | Soft pale sheet, a pistol round goes through all but the thickest. |
+| Copper | `?mode=bullet&bullet=308-sp&medium=copper&thickness=0.0005&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=copper&thickness=0.012&at=0.5ms` | _pending_ | Copper-coloured sheet; soft, round hole. |
+| Brass | `?mode=bullet&bullet=308-sp&medium=brass&thickness=0.0005&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=brass&thickness=0.012&at=0.5ms` | _pending_ | Yellow-gold sheet; clean round hole. |
+| Lead | `?mode=bullet&bullet=308-sp&medium=lead-sheet&thickness=0.0008&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=lead-sheet&thickness=0.012&at=0.5ms` | _pending_ | Matt dark grey; the metal flows round the bullet. |
+| Polycarbonate | `?mode=bullet&bullet=9mm-fmj&medium=polycarbonate&thickness=0.003&at=0.5ms` | `?mode=bullet&bullet=9mm-fmj&medium=polycarbonate&thickness=0.025&at=0.5ms` | _pending_ | Clear sheet that tears and stretches, no shatter; a pistol round is stopped at the thick end. |
+| MDF | `?mode=bullet&bullet=308-sp&medium=mdf&thickness=0.006&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=mdf&thickness=0.025&at=0.5ms` | _pending_ | Pale board, dust and fine splinters. |
+| OSB | `?mode=bullet&bullet=308-sp&medium=osb&thickness=0.0095&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=osb&thickness=0.018&at=0.5ms` | _pending_ | Strand board, ragged exit. |
+| Cement board | `?mode=bullet&bullet=308-sp&medium=cement-board&thickness=0.006&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=cement-board&thickness=0.0127&at=0.5ms` | _pending_ | Grey board, cracks and grey dust. |
+| Fibreglass | `?mode=bullet&bullet=308-sp&medium=fibreglass&thickness=0.002&at=0.5ms` | `?mode=bullet&bullet=308-sp&medium=fibreglass&thickness=0.01&at=0.5ms` | _pending_ | Pale sheet, splits and fuzzes at the exit. |
+| Kevlar panel | `?mode=bullet&bullet=9mm-fmj&medium=kevlar&thickness=0.004&at=0.5ms` | `?mode=bullet&bullet=9mm-fmj&medium=kevlar&thickness=0.024&at=0.5ms` | _pending_ | Dark panel; a pistol round is caught at 8 mm and above, a thin one goes through. |
+| Ceramic tile | `?mode=bullet&bullet=9mm-fmj&medium=ceramic-tile&thickness=0.006&at=0.5ms` | `?mode=bullet&bullet=9mm-fmj&medium=ceramic-tile&thickness=0.012&at=0.5ms` | _pending_ | Brittle: breaks into sharp pieces round the hit. |
