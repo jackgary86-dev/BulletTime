@@ -15,6 +15,7 @@ import { siteShotY, type SiteId } from './data/sites';
 import { buildingForFront, type BuildingSpec } from './data/buildings';
 import { WitnessBlocks } from './fx/witnessBlocks';
 import { clampBlocks, type WitnessBlock, type WitnessFrame, type WitnessResult } from './sim/witness';
+import { LEVEL, approachHit, clampApproach, engineToWorld, isLevel, type Approach, type ApproachHit } from './sim/approach';
 import type { MediumSpec } from './data/media';
 import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
@@ -52,6 +53,15 @@ export class Lane {
   /** Gel witness blocks inside a mock building (#249). */
   readonly witness = new WitnessBlocks();
   private witnessLayout: WitnessBlock[] = [];
+  /** Where the missile comes from (#250): level and head on unless a dive or bearing is set. */
+  private approach: Approach = LEVEL;
+  /**
+   * The engine always shoots along +x; the shot, its effects and the muzzle are drawn in this frame, turned onto the
+   * real path and struck face when the approach is not level (identity otherwise).
+   */
+  readonly attackFrame = new THREE.Group();
+  /** Stands in for the target while the engine's frame is turned: the body effects (plate dish, gel) look for meshes and find none. */
+  private readonly frameTarget = new THREE.Group();
   /** Every shot fired since the last Reset, on one timeline (#22). */
   session: Timeline | null = null;
   /** Where the last Fire starts on the session timeline. */
@@ -77,7 +87,10 @@ export class Lane {
     this.scene = scene;
     this.studio = createStudio(this.scene, renderer, site);
     this.postFx = createPostFx(renderer, this.scene, camera);
-    this.scene.add(this.muzzle.group, this.shot.group, this.effects.group, this.witness.group);
+    this.attackFrame.name = 'attack-frame';
+    this.attackFrame.matrixAutoUpdate = false;
+    this.attackFrame.add(this.muzzle.group, this.shot.group, this.effects.group);
+    this.scene.add(this.attackFrame, this.witness.group);
     this.setTarget(setup);
   }
 
@@ -116,6 +129,28 @@ export class Lane {
     this.studio.fitContactShadow(this.targetGroup);
     this.placeWitness();
     this.clear();
+  }
+
+  /** Sets where the missile comes from (#250); clears the shot, since earlier rounds came in another way. */
+  setApproach(approach: Approach): void {
+    this.approach = clampApproach(approach);
+    this.clear();
+  }
+
+  get currentApproach(): Approach {
+    return this.approach;
+  }
+
+  /** The face the approach meets and what is behind it, or null for a level run (and outside the proving ground). */
+  get approachHit(): ApproachHit | null {
+    if (this.site !== 'range' || this.setup.dummy || isLevel(this.approach)) return null;
+    return approachHit(this.approach, this.setup.layers, this.baseY);
+  }
+
+  /** Where the round meets the target in the world: the struck face's entry point, or the front face at the shot line. */
+  get impactWorld(): THREE.Vector3 {
+    const hit = this.approachHit;
+    return hit ? new THREE.Vector3(TARGET_FRONT_X + hit.entry.x, this.baseY + hit.entry.y, hit.entry.z) : new THREE.Vector3(TARGET_FRONT_X, this.lineY, 0);
   }
 
   /** The mock building being shot, if the struck layer is one's wall (#246). */
@@ -205,9 +240,13 @@ export class Lane {
    */
   fire(plan: FirePlan, fresh = false): Timeline {
     if (fresh) this.clear();
-    const { angleDeg } = this.setup;
-    const layers = physicsLayers(this.setup.layers);
-    const face = faceLimits(this.setup);
+    // A dive or a bearing (#250): shoot the layers behind the face it meets, at its obliquity, and turn the drawing onto the real path.
+    const hit = this.approachHit;
+    const shotSetup: TargetSetup = hit ? { layers: hit.layers, angleDeg: hit.obliquityDeg } : this.setup;
+    const { angleDeg } = shotSetup;
+    const layers = physicsLayers(shotSetup.layers);
+    const face = faceLimits(shotSetup);
+    this.effects.particles.freeFlight = !!hit;
     const lineY = this.lineY;
     const offsets = roundOffsets(plan.mode, plan.count, plan.spreadM, seededRandom(patternSeed(plan.mode, this.session?.shots.length ?? 0)));
     const limitY = face.y - 0.01;
@@ -218,7 +257,7 @@ export class Lane {
       // A group scatters round the aim point; a burst climbs with recoil (#153). Every round stays on the face.
       // Round objects (#156) keep the shot inside their outline, and the bullet crosses the chord at that point.
       const { y, z } = clampAimToObjects(
-        this.setup.layers,
+        shotSetup.layers,
         Math.max(-limitY, Math.min(limitY, plan.aimY + o.y)),
         Math.max(-limitZ, Math.min(limitZ, plan.aimZ + o.z)),
       );
@@ -238,14 +277,32 @@ export class Lane {
     });
     const timeline = this.session!;
     this.lastFireStart = fireStart;
-    this.shot.load(timeline, this.setup.layers[0]?.medium.hardness);
-    if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
+    this.setAttackFrame(hit);
+    this.shot.load(timeline, shotSetup.layers[0]?.medium.hardness);
+    if (this.targetGroup) this.effects.load(timeline, hit ? this.frameTarget : this.targetGroup, layers, angleDeg);
     if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim, this.baseY));
     addVapourTrails(timeline, this.effects.particles);
-    this.witness.load(timeline);
+    // Witness blocks read the room behind the front wall: only for a level run through it.
+    if (hit) this.witness.clearEffects();
+    else this.witness.load(timeline);
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
     timeline.duration = Math.max(timeline.duration, Math.min(Math.max(this.effects.endTime, this.witness.endTime), timeline.duration + EFFECT_TAIL_S));
     return timeline;
+  }
+
+  /** Turns the shot's drawing frame onto the approach's path and face, or back to the engine's own (identity). */
+  private setAttackFrame(hit: ApproachHit | null): void {
+    const m = this.attackFrame.matrix;
+    if (!hit) {
+      m.identity();
+    } else {
+      const lineY = this.lineY;
+      this.frameTarget.position.set(TARGET_FRONT_X, lineY, 0);
+      const world = this.impactWorld;
+      const r = engineToWorld(hit, { x: TARGET_FRONT_X, y: lineY, z: 0 }, { x: world.x, y: world.y, z: world.z });
+      m.set(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15]);
+    }
+    this.attackFrame.matrixWorldNeedsUpdate = true;
   }
 
   /**
@@ -284,7 +341,8 @@ export class Lane {
     const blast = timeline && t !== null ? blastShock(timeline.events, t) : null;
     const shock = blast ?? this.muzzle.shock;
     shockwave.enabled = shock.strength > 0;
-    shockwave.center.copy(shock.center);
+    // The blast and the muzzle shell are in the engine's frame; the pass works in the world.
+    shockwave.center.copy(shock.center).applyMatrix4(this.attackFrame.matrix);
     shockwave.radius = shock.radius;
     shockwave.strength = shock.strength;
     this.postFx.grade.setFlash(current && t !== null ? flashExposure(t - current.start, shutterS) : 0);

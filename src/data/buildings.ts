@@ -18,6 +18,8 @@ export interface BuildingSpec {
   /** The struck wall's medium and thickness, and the far wall's. */
   front: { medium: string; thicknessM: number };
   back: { medium: string; thicknessM: number };
+  /** What a steep dive meets (#250): the roof, the room below it and the floor it lands on. */
+  roof: { medium: string; thicknessM: number; roomM: number; floor: { medium: string; thicknessM: number } };
 }
 
 /** Storey height of the concrete frame, floor to floor, m, and its slab thickness. */
@@ -35,6 +37,7 @@ export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
     heightM: 3,
     front: { medium: 'block-house-wall', thicknessM: 0.3 },
     back: { medium: 'block-house-back', thicknessM: 0.3 },
+    roof: { medium: 'roof-slab', thicknessM: 0.25, roomM: 2.6, floor: { medium: 'floor-slab', thicknessM: 0.15 } },
   },
   'frame-panel': {
     id: 'frame-panel',
@@ -44,6 +47,7 @@ export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
     heightM: 2 * FRAME_STOREY_M,
     front: { medium: 'frame-infill', thicknessM: 0.23 },
     back: { medium: 'frame-infill-back', thicknessM: 0.23 },
+    roof: { medium: 'roof-slab', thicknessM: FRAME_SLAB_M, roomM: FRAME_STOREY_M - FRAME_SLAB_M, floor: { medium: 'floor-slab', thicknessM: FRAME_SLAB_M } },
   },
   'frame-column': {
     id: 'frame-column',
@@ -53,6 +57,7 @@ export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
     heightM: 2 * FRAME_STOREY_M,
     front: { medium: 'frame-column', thicknessM: FRAME_COLUMN_M },
     back: { medium: 'frame-column-back', thicknessM: FRAME_COLUMN_M },
+    roof: { medium: 'roof-slab', thicknessM: FRAME_SLAB_M, roomM: FRAME_STOREY_M - FRAME_SLAB_M, floor: { medium: 'floor-slab', thicknessM: FRAME_SLAB_M } },
   },
   'steel-shed': {
     id: 'steel-shed',
@@ -62,6 +67,8 @@ export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
     heightM: 4,
     front: { medium: 'shed-sheet', thicknessM: 0.0008 },
     back: { medium: 'shed-sheet-back', thicknessM: 0.0008 },
+    // The ridge is a metre above the eaves; a dive meets the sloping roof sheet and the concrete floor 3 m below.
+    roof: { medium: 'shed-sheet-back', thicknessM: 0.0008, roomM: 3, floor: { medium: 'floor-slab', thicknessM: 0.15 } },
   },
 };
 

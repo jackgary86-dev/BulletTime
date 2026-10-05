@@ -10,6 +10,7 @@ import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
 import { siteForMode } from './data/sites';
 import { mountWitnessPanel } from './ui/witnessPanel';
+import { mountApproachPanel } from './ui/approachPanel';
 import { blockFrontWorld } from './sim/witness';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
@@ -200,7 +201,10 @@ async function bootstrap(): Promise<void> {
     if (!laneA) return null;
     // Comparing: both lanes fire fresh from t = 0 so they stay in step.
     const timeline = laneA.fire(plan, !!laneB);
-    results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
+    const hit = laneA.approachHit;
+    // A dive or bearing (#250) says which face it met and how obliquely.
+    const faceName = hit ? (hit.face === 'top' ? (laneA.setup.layers[0]?.medium.id === 'tank-hull' ? 'Turret roof' : 'Roof') : hit.face === 'side' ? 'Side wall' : 'Front face') : '';
+    results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : hit ? `${faceName}, ${Math.round(hit.obliquityDeg)}° from square on` : null);
     if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
     results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
     witnessPanel?.showResults(laneA.witnessResults.length ? laneA.witnessResults : null);
@@ -211,7 +215,8 @@ async function bootstrap(): Promise<void> {
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };
     }
-    director.setAim(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
+    director.setFrame(laneA.attackFrame.matrix);
+    director.setAim(laneA.approachHit ? laneA.impactWorld : new THREE.Vector3(TARGET_FRONT_X, laneA.lineY + plan.aimY, plan.aimZ));
     unlockAudio();
     playback.start(clock, laneA.lastFireStart);
     cueTrack.load(buildCues(timeline, physicsLayers(laneA.setup.layers), getBullet), laneA.lastFireStart);
@@ -239,7 +244,7 @@ async function bootstrap(): Promise<void> {
     syncWitness();
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
-    director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
+    director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
     clearShot();
   };
   const startTargetId = modeInfo.defaultTargetId ?? DEFAULT_MEDIUM_ID;
@@ -259,6 +264,17 @@ async function bootstrap(): Promise<void> {
         })
       : null;
   laneA = new Lane(renderer, camera, target, spec, undefined, site);
+  // Missile approach (#250): dive and bearing, in the missile panel.
+  const bulletHost = overlay.querySelector<HTMLElement>('.bullet-panel');
+  const approachPanel =
+    mode === 'missile' && bulletHost
+      ? mountApproachPanel(bulletHost, (approach) => {
+          if (!laneA) return;
+          laneA.setApproach(approach);
+          clearShot();
+          director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
+        })
+      : null;
   rebuildTarget(target);
   director.reset();
 
@@ -424,6 +440,11 @@ async function bootstrap(): Promise<void> {
     if (link.witness && laneA) {
       laneA.setWitnessBlocks(link.witness);
       syncWitness();
+    }
+    if (link.approach && laneA && approachPanel) {
+      approachPanel.set(link.approach);
+      laneA.setApproach(approachPanel.get());
+      director.setTarget(laneA.impactWorld, laneA.depth, laneA.faceSpan);
     }
     const timeline = fireShot(shotsPanel.plan());
     if (timeline) {
