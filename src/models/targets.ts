@@ -296,6 +296,8 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         roughness: 1,
         envMapIntensity: 2,
       });
+      // Copper, brass, lead and the other metals share the sheet look, tinted (#261).
+      if (spec.tint !== undefined) scale.color.setHex(spec.tint);
       if (spec.look === 'mildSteel') return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), scale), PLATE_BODY_NAME);
       const paint = steelPlateMaps('painted');
       const painted = new THREE.MeshStandardMaterial({

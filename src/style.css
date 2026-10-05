@@ -1220,6 +1220,28 @@ body {
   visibility: hidden !important;
 }
 
+.stock-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.stock-row[hidden] {
+  display: none;
+}
+
+.stock-chip {
+  min-width: 34px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-chip.active {
+  border-color: var(--accent, currentColor);
+  color: var(--fg);
+}
+
 .clean-frame-btn {
   display: flex;
   justify-content: space-between;

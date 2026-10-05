@@ -1,5 +1,6 @@
 import { MAX_IMPACT_ANGLE_DEG, MEDIA, getMedium, mediumListedIn } from '../data/media';
 import { DUMMY_PRESET_ID, DUMMY_REGIONS, getRegion, regionLayers, type DummyRegionId } from '../data/dummy';
+import { formatLength, formatThickness } from '../data/gauge';
 import { MAX_GAP_M, MAX_STACK_LAYERS, STACK_PRESETS, presetLayers, presetListedIn, type StackLayer } from '../data/stacks';
 
 export interface TargetSetup {
@@ -38,6 +39,7 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
     <select id="medium-select" aria-label="Layer material"></select>
     <label class="field-label" for="thickness-slider">Thickness <output class="thickness-value"></output></label>
     <input id="thickness-slider" type="range" />
+    <div class="stock-row" role="group" aria-label="Stock thicknesses"></div>
     <div class="gap-row">
       <label class="field-label" for="gap-slider">Air gap in front <output class="gap-value"></output></label>
       <input id="gap-slider" type="range" min="0" max="${MAX_GAP_M}" step="0.005" />
@@ -58,6 +60,7 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
   const chips = q<HTMLDivElement>('.stack-chips');
   const select = q<HTMLSelectElement>('#medium-select');
   const thicknessSlider = q<HTMLInputElement>('#thickness-slider');
+  const stockRow = q<HTMLDivElement>('.stock-row');
   const gapSlider = q<HTMLInputElement>('#gap-slider');
   const angleSlider = q<HTMLInputElement>('#angle-slider');
 
@@ -106,6 +109,7 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
       chip.type = 'button';
       chip.className = `chip${i === selected ? ' active' : ''}`;
       chip.textContent = `${i + 1} · ${shortName(l.medium.name)}`;
+      chip.title = `${l.medium.name}, ${formatThickness(l.medium, l.thickness)}`;
       chip.addEventListener('click', () => {
         selected = i;
         render();
@@ -135,10 +139,26 @@ export function mountStackEditor(root: HTMLElement, options: StackEditorOptions)
     thicknessSlider.max = String(max);
     thicknessSlider.step = String((max - min) / 200);
     thicknessSlider.value = String(layer.thickness);
-    q('.thickness-value').textContent = formatLength(layer.thickness);
+    q('.thickness-value').textContent = formatThickness(layer.medium, layer.thickness);
+    // The thicknesses the material is sold in, one click each (#261).
+    stockRow.innerHTML = '';
+    for (const stock of layer.medium.stockThicknessM ?? []) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `stock-chip${Math.abs(stock - layer.thickness) < 1e-9 ? ' active' : ''}`;
+      button.textContent = formatStock(stock);
+      button.title = formatThickness(layer.medium, stock);
+      button.addEventListener('click', () => {
+        setup.layers[selected].thickness = stock;
+        preset.value = '';
+        changed();
+      });
+      stockRow.append(button);
+    }
     // Objects of a fixed size (a bowling ball is always 21.6 cm) have nothing to adjust.
     const fixed = min === max;
     thicknessSlider.hidden = fixed;
+    stockRow.hidden = fixed || !layer.medium.stockThicknessM;
     q('label[for="thickness-slider"]').hidden = fixed;
     q('.gap-row').hidden = selected === 0;
     gapSlider.value = String(layer.gapM);
@@ -229,6 +249,8 @@ function shortName(name: string): string {
   return name.replace(/\s*\(.*\)$/, '').replace('Ballistic gelatin', 'Gel');
 }
 
-function formatLength(metres: number): string {
-  return metres < 0.03 ? `${(metres * 1000).toFixed(1)} mm` : `${(metres * 100).toFixed(1)} cm`;
+/** A stock thickness on its button: whole millimetres where it is one, else one decimal (0.8, 9.5, 12.7). */
+function formatStock(metres: number): string {
+  const mm = metres * 1000;
+  return Number.isInteger(Math.round(mm * 100) / 100) ? String(Math.round(mm)) : mm.toFixed(1).replace(/\.0$/, '');
 }
