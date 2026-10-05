@@ -159,6 +159,23 @@ export function drawSection(ctx: CanvasRenderingContext2D, shapes: SectionShapes
     ctx.restore();
   }
 
+  // A fragment spray's pits, cut into the face like the crater, glowing while a fragment is still digging in.
+  if (shapes.pits.length) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, width, height);
+    ctx.clip();
+    for (const pit of shapes.pits) {
+      path(ctx, pit.outline);
+      ctx.fillStyle = '#07080a';
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = style.overlay === 'energy' ? heatColor(pit.digging ? 1 : 0.55, 0.9) : 'rgba(255,255,255,0.35)';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // The bulge pushed out of the rear face.
   if (shapes.bulge.length) {
     path(ctx, shapes.bulge);

@@ -131,8 +131,10 @@ export function craterWall(frame: ArmorFrame, losM: number, through: boolean): P
 export function plateSolid(stage: StackStage, frame: ArmorFrame, radiusM: number): PlateSolid {
   const losM = stage.timeline.result.losThicknessM;
   const x0 = stage.startM;
-  const through = stage.timeline.result.perforated && frame.depth >= losM - 1e-9;
-  const wall = craterWall(frame, losM, through);
+  // A fragment spray's pits are scattered over the face, not round the axis: the turned solid shows only its blast dish (the section shows the pits).
+  const spray = stage.timeline.result.pits !== undefined;
+  const through = !spray && stage.timeline.result.perforated && frame.depth >= losM - 1e-9;
+  const wall = spray ? [] : craterWall(frame, losM, through);
   const mouth = wall.length ? Math.min(wall[0].r, radiusM * 0.95) : 0;
   const shift = (points: ProfilePoint[]) => points.map((p) => ({ r: Math.min(p.r, radiusM * 0.95), x: x0 + p.x }));
 
@@ -147,7 +149,7 @@ export function plateSolid(stage: StackStage, frame: ArmorFrame, radiusM: number
   // The rear face from the rim inward: to the hole once through, else over the bulge to the axis.
   const exitR = through && wall.length ? Math.min(wall[wall.length - 1].r, radiusM * 0.95) : 0;
   const bulgeH = !through ? Math.max(0, frame.rearBulge) : 0;
-  const bulgeHalf = bulgeH > 1e-6 ? Math.min(radiusM * 0.9, Math.max(frame.craterRadius * 4, bulgeH * 3)) : 0;
+  const bulgeHalf = bulgeH > 1e-6 ? (spray ? radiusM * 0.9 : Math.min(radiusM * 0.9, Math.max(frame.craterRadius * 4, bulgeH * 3))) : 0;
   const rear: ProfilePoint[] = [
     { r: radiusM, x: x0 + losM },
     { r: bulgeHalf > 0 ? bulgeHalf : exitR, x: x0 + losM },
