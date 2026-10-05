@@ -52,10 +52,19 @@ async function run(win, base) {
   }
 }
 
+/**
+ * SwiftShader (the Linux CI renderer) fails glValidateProgram on programs that compiled and
+ * linked fine, while the shader warm-up is still binding them; three.js logs that as
+ * "VALIDATE_STATUS false" with an empty info log. A real shader error always carries a log.
+ */
+function benignShaderWarning(message) {
+  return /VALIDATE_STATUS false/.test(message) && /Program Info Log:\s*$/.test(message);
+}
+
 module.exports = function smoke(win, base, app) {
   const errors = [];
   win.webContents.on('console-message', (event) => {
-    if (event.level === 'error') errors.push(event.message);
+    if (event.level === 'error' && !benignShaderWarning(event.message)) errors.push(event.message);
   });
   const finish = (code, message) => {
     if (message) console.error(`smoke: ${message}`);
