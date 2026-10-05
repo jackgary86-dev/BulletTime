@@ -113,6 +113,23 @@ Two special cases: a **rigid rod** when `Yp − Rt > ½ρt·v²` (digs without e
 
 **Validated against.** A thin RHA plate (about a calibre) spalls, plates over about a calibre and a half do not, cast iron spalls through more thickness than RHA, and a slope cuts the spall thickness. Trust: **Fair** (right behaviour, the 8 GPa is illustrative).
 
+## HE fragmentation (`heFrag.ts`, #170)
+
+**Model.** The inputs are the fragments as they reach the face: how many, their mass range and their speed range (`munitions.ts`). Nothing about the shell itself is modelled. The masses are spread evenly on a log scale and the speeds evenly over their range. Each fragment is a compact steel body `d = 1.1 · (m/ρ)^(1/3)` across, checked on its own with De Marre at fragment scale (the full-bore formula), divided by the plate's RHA factor:
+- **Perforate:** the line-of-sight thickness is under that figure. It keeps `v_r = √(v² − v_bl²)`.
+- **Embed:** otherwise it stops at the full-bore stopping depth. It embeds if that is deeper than its own size.
+- **Pit:** shallower than that, it pits the face and rebounds at about 15 % of its speed.
+
+The blast load dishes the plate by `12 mm · (calibre / 155 mm)² · (10 mm / T)² · (250 MPa / σ_y)`. The dish is dropped under 0.2 mm and capped at two thicknesses. On armor, the only sign of the blast is the elastic wave crossing the plate.
+
+**Sources.** De Marre's ballistic limit as in the full-bore section (Backman & Goldsmith 1978); the Lambert–Jonas residual-velocity form.
+
+**Lab heuristics.** De Marre is a large-shot formula, used here at fragment scale. The fragment shape factor, the rebound share and the blast dish scaling are lab heuristics. The section shows only the fragments that strike along the cut, chosen so no two pits overlap; the results count every fragment.
+
+**Limits.** No fragment-to-fragment interaction and no cumulative weakening of the face by many pits. Fragments arrive along the shot line. A spray does not carry on to a second plate in a stack. The 3D view shows the dish but not the scattered pits. Slopes are clamped at 70°.
+
+**Validated against.** Against 50 mm or more of RHA nothing gets through at any calibre in the lab's range and the face is pitted; thin mild steel (6 to 10 mm) is holed by some fragments, fewer as it thickens. Trust: **Illustrative** for absolute depths, **Fair** for the contrast with a concentrated penetrator.
+
 ## Ricochet and obliquity (`ricochet.ts`, #165)
 
 **Model.** Above a critical slope a kinetic round glances off. The critical slope is an empirical rule of thumb:
@@ -163,7 +180,7 @@ Generic textbook arrangements only: homogeneous plates with air gaps. Real or pr
 
 ## Not modelled
 
-HE and fragmentation rounds against plate (#170), 3D views, composite or reactive armor, shock heating and phase change, strain-rate and temperature-dependent material strength, and anything about how a munition is built.
+3D views of fragment pits, composite or reactive armor, shock heating and phase change, strain-rate and temperature-dependent material strength, and anything about how a munition is built.
 
 ## Keeping this page honest
 
