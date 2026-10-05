@@ -4,7 +4,8 @@ import { samplePrimary } from '../sim/sample';
 import { activeShot } from '../sim/session';
 import type { Timeline } from '../sim/types';
 
-export type CameraMode = 'auto' | 'side' | 'tracking' | 'closeup' | 'orbit';
+/** 'inside' looks from the back of a mock building's room toward the breach (#249); it has no button of its own. */
+export type CameraMode = 'auto' | 'side' | 'tracking' | 'closeup' | 'orbit' | 'inside';
 
 export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
   { mode: 'auto', label: 'Auto' },
@@ -18,7 +19,7 @@ export const CAMERA_MODES: { mode: CameraMode; label: string }[] = [
  * Natural frequency of the camera's spring toward each pose, per real second. Higher = snappier.
  * The spring is critically damped, so the camera glides in without overshooting (#75).
  */
-const EASE_RATE = { side: 5, tracking: 20, closeup: 6 } as const;
+const EASE_RATE = { side: 5, tracking: 20, closeup: 6, inside: 4 } as const;
 /** Where the intro move starts, relative to the default framing, in metres. */
 const INTRO_OFFSET = new THREE.Vector3(-0.9, 0.55, 1.1);
 const INTRO_LOOK_RISE = 0.12;
@@ -55,6 +56,8 @@ export class CameraDirector {
   private reach = 0.5;
   /** On the outdoor range (#231) targets stand on the ground centred on their own shot line, so the view frames the middle and stands off a little toward the firing line. */
   private outdoors = false;
+  /** Where the inside view stands and looks, when the target is a building (#249). */
+  private insideView: { from: THREE.Vector3; look: THREE.Vector3 } | null = null;
   private readonly look = new THREE.Vector3();
   private readonly pose: Pose = { position: new THREE.Vector3(), look: new THREE.Vector3(), ease: EASE_RATE.side };
   /** Velocities of the camera position and look point, in metres per real second. */
@@ -87,6 +90,11 @@ export class CameraDirector {
     this.aimPoint.copy(aim);
   }
 
+  /** The inside view of a building's room, or null when the target is not one (the inside mode then falls back to the side view). */
+  setInside(view: { from: THREE.Vector3; look: THREE.Vector3 } | null): void {
+    this.insideView = view ? { from: view.from.clone(), look: view.look.clone() } : null;
+  }
+
   /** Frames for the outdoor proving ground instead of the lab bench (#231). */
   setOutdoors(outdoors: boolean): void {
     this.outdoors = outdoors;
@@ -106,7 +114,17 @@ export class CameraDirector {
       // Start soft, so the glide away from a hand-placed view is gentle.
       this.stiffness = Math.min(this.stiffness, EASE_RATE.side);
     }
+    // Into a building's room: cut rather than glide, so the camera never flies through the wall.
+    const into = mode === 'inside' && this.mode !== 'inside' ? this.insideView : null;
     this.mode = mode;
+    if (into) {
+      this.camera.position.copy(into.from);
+      this.look.copy(into.look);
+      this.velocity.set(0, 0, 0);
+      this.lookVelocity.set(0, 0, 0);
+      this.camera.lookAt(this.look);
+      this.controls.target.copy(this.look);
+    }
     if (mode === 'orbit') this.controls.target.copy(this.look);
     this.onModeChange(mode);
   }
@@ -155,6 +173,13 @@ export class CameraDirector {
         break;
       case 'closeup':
         this.closeupPose(pose);
+        break;
+      case 'inside':
+        if (this.insideView) {
+          pose.position.copy(this.insideView.from);
+          pose.look.copy(this.insideView.look);
+          pose.ease = EASE_RATE.inside;
+        } else this.sidePose(pose);
         break;
       default:
         this.sidePose(pose);

@@ -75,6 +75,8 @@ What display work is left:
 
 - **#246, mock buildings:** `src/data/buildings.ts` (sizes, layer stacks) and `src/models/buildings.ts` (block house, two-storey concrete frame struck on an infill panel or a column, steel shed). Each building is a preset `building-<id>`: the struck wall, the room as an air gap, the far wall (a `dummyOnly` medium). The struck wall's support draws the rest of the building; `Lane.faceSpan` frames the whole building. `structure` (was `vehicle`) lists such parts for Missile despite small faces. Not done: picker thumbnails (the picker has none for any target).
 
+- **#249, witness gel blocks:** `src/sim/witness.ts` (pure) hit-tests every track in the room against each block (40 x 20 x 20 cm of `gel10` at block size), carries on pieces the engine stops following about 10 cm past the wall, adds seeded scab chunks where something perforated a concrete or brick struck wall, and shoots each piece into the gel with `simulate()` at the block's world position, so `fx/witnessBlocks.ts` can play the normal gel effects on the block meshes. Blast at a block uses `overpressureKPa`, times 0.02 for a detonation outside the wall. UI: `ui/witnessPanel.ts` in the target panel (plan, click to add or remove, results, View from inside → camera mode `inside`, a cut). Replay links take `preset=` and `witness=dist:across,...`. Not done: the main timeline's fragments still fly through a block (they are not stopped by it).
+
 ## Ticket state
 
 Epic #186 (3 versions x 4 modes). Everything for the four simulators is closed. Still open there:

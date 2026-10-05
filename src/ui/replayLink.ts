@@ -6,7 +6,11 @@
  *   /?mode=bullet&bullet=308-sp&medium=steel-mild&thickness=0.003&at=60us
  *
  * `at` is the time after the first impact: seconds (`0.0006`), microseconds (`60us`) or milliseconds (`1.2ms`).
+ * On the proving ground, `preset` picks a target preset (a mock building, #246) and `witness` stands gel witness
+ * blocks in its room (#249) as `distance:across` pairs in metres, e.g. `witness=0.3:0,1.5:-0.6`.
  */
+import type { WitnessBlock } from '../sim/witness';
+
 export interface ReplayLink {
   /** Seconds after the first impact. */
   atS: number;
@@ -14,6 +18,26 @@ export interface ReplayLink {
   medium?: string;
   /** Thickness of the first layer, metres. */
   thicknessM?: number;
+  /** A target preset id (#246). */
+  preset?: string;
+  /** Gel witness blocks in a building's room (#249). */
+  witness?: WitnessBlock[];
+}
+
+/** `0.3:0,1.5:-0.6` for these blocks. */
+export function formatWitness(blocks: readonly WitnessBlock[]): string {
+  return blocks.map((b) => `${+b.distM.toFixed(2)}:${+b.lateralM.toFixed(2)}`).join(',');
+}
+
+/** Blocks from `0.3:0,1.5:-0.6`; pairs that do not parse are dropped. */
+export function parseWitness(text: string | null): WitnessBlock[] | undefined {
+  if (!text) return undefined;
+  const blocks = text
+    .split(',')
+    .map((pair) => pair.split(':').map(Number))
+    .filter((p) => p.length === 2 && p.every(Number.isFinite))
+    .map(([distM, lateralM]) => ({ distM, lateralM }));
+  return blocks.length ? blocks : undefined;
 }
 
 const TIME = /^(\d+(?:\.\d+)?(?:e-?\d+)?)\s*(us|µs|ms|s)?$/i;
@@ -38,6 +62,8 @@ export function parseReplayLink(search: string): ReplayLink | null {
     bullet: params.get('bullet') || undefined,
     medium: params.get('medium') || undefined,
     thicknessM: params.get('thickness') && Number.isFinite(thickness) && thickness > 0 ? thickness : undefined,
+    preset: params.get('preset') || undefined,
+    witness: parseWitness(params.get('witness')),
   };
 }
 
@@ -58,6 +84,7 @@ export function applyReplayLink(root: ParentNode, link: ReplayLink): string[] {
     select.dispatchEvent(new Event('change', { bubbles: true }));
   };
   choose('#bullet-select', link.bullet);
+  choose('#preset-select', link.preset);
   choose('#medium-select', link.medium);
   // A material this mode does not offer keeps its own thickness out of the way too.
   if (link.medium !== undefined && ignored.includes(link.medium)) return ignored;

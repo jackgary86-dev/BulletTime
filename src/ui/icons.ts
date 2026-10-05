@@ -19,6 +19,8 @@ export const CAMERA_ICONS: Record<CameraMode, string> = {
   closeup: svg('<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 4 4"/><path d="M5 7h4M7 5v4"/>'),
   // Free orbit: an arrow round a point.
   orbit: svg('<path d="M13.5 8A5.5 5.5 0 1 1 11 3.4"/><path d="M11.5 1.5 11 3.4 13 4"/><circle cx="8" cy="8" r="1" fill="currentColor"/>'),
+  // Inside a room, looking at a hole in the wall (#249).
+  inside: svg('<path d="M2 13V3h12v10z"/><circle cx="8" cy="8" r="1.8"/>'),
 };
 
 export const LIGHTING_ICONS: Record<LightingMode, string> = {

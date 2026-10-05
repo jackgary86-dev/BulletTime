@@ -9,6 +9,8 @@ import { CameraDirector } from './scene/cameraDirector';
 import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
 import { siteForMode } from './data/sites';
+import { mountWitnessPanel } from './ui/witnessPanel';
+import { blockFrontWorld } from './sim/witness';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
@@ -119,6 +121,7 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  let witnessPanel: ReturnType<typeof mountWitnessPanel> | null = null;
   const clearShot = () => {
     for (const lane of lanes()) lane.clear();
     cueTrack.clear();
@@ -128,6 +131,7 @@ async function bootstrap(): Promise<void> {
     resultsB.hide();
     scrubber.hide();
     panel.setHasShot(false);
+    witnessPanel?.showResults(null);
   };
 
   /** Set while the first-launch shot plays (#241); the loop reveals the panels when it stops. */
@@ -199,6 +203,7 @@ async function bootstrap(): Promise<void> {
     results.setLabel(laneB ? `A · ${laneA.spec.name} ${laneA.spec.type}` : null);
     if (laneB) resultsB.setLabel(`B · ${laneB.spec.name} ${laneB.spec.type}`);
     results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
+    witnessPanel?.showResults(laneA.witnessResults.length ? laneA.witnessResults : null);
     let clock: Timeline = timeline;
     if (laneB) {
       const b = laneB.fire(plan, true);
@@ -216,9 +221,22 @@ async function bootstrap(): Promise<void> {
     return timeline;
   }
 
+  const syncWitness = () => {
+    if (!laneA || !witnessPanel) return;
+    const frame = laneA.witnessFrame;
+    witnessPanel.setBuilding(laneA.building ?? null, frame?.roomM ?? 1);
+    witnessPanel.setBlocks(laneA.witnessBlocks);
+    // The inside view stands at the back of the room, off the shot line and a little up, looking at the breach.
+    if (frame) {
+      const from = blockFrontWorld({ distM: frame.roomM - 0.4, lateralM: 0.9 }, frame);
+      const look = blockFrontWorld({ distM: 0, lateralM: 0 }, frame);
+      director.setInside({ from: new THREE.Vector3(from.x, from.y + 0.5, from.z), look: new THREE.Vector3(look.x, look.y, look.z) });
+    } else director.setInside(null);
+  };
   const rebuildTarget = (setup: TargetSetup) => {
     if (!laneA) return;
     laneA.setTarget(setup);
+    syncWitness();
     const face = faceLimits(setup);
     shotsPanel.setLimits(face.y, face.z);
     director.setTarget(new THREE.Vector3(TARGET_FRONT_X, laneA.lineY, 0), laneA.depth, laneA.faceSpan);
@@ -227,6 +245,19 @@ async function bootstrap(): Promise<void> {
   const startTargetId = modeInfo.defaultTargetId ?? DEFAULT_MEDIUM_ID;
   const target = mountStackEditor(overlay, { initialId: startTargetId, initialThicknessM: modeInfo.defaultTargetThicknessM, mode, onChange: rebuildTarget });
   await loader.progress(0.25, site === 'range' ? 'Building the proving ground' : 'Building the lab');
+  // Gel witness blocks inside a mock building (#249), in the target panel; only the proving ground has buildings.
+  const witnessHost = overlay.querySelector<HTMLElement>('.medium-panel');
+  witnessPanel =
+    site === 'range' && witnessHost
+      ? mountWitnessPanel(witnessHost, {
+          onChange: (blocks) => {
+            laneA?.setWitnessBlocks(blocks);
+            clearShot();
+            syncWitness();
+          },
+          onInsideView: () => director.setMode('inside'),
+        })
+      : null;
   laneA = new Lane(renderer, camera, target, spec, undefined, site);
   rebuildTarget(target);
   director.reset();
@@ -390,6 +421,10 @@ async function bootstrap(): Promise<void> {
   if (link && !laneB) {
     const ignored = applyReplayLink(overlay, link);
     if (ignored.length) showNotice(`${modeInfo.title} does not list ${ignored.join(', ')}, so the default setup is used.`);
+    if (link.witness && laneA) {
+      laneA.setWitnessBlocks(link.witness);
+      syncWitness();
+    }
     const timeline = fireShot(shotsPanel.plan());
     if (timeline) {
       playback.seek((timeline.shots[0]?.impactTime ?? 0) + link.atS);
