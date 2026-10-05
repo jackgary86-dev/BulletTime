@@ -46,7 +46,8 @@ export function mountBulletSelector(root: HTMLElement, options: BulletSelectorOp
   const standoffValue = panel.querySelector<HTMLOutputElement>('.standoff-value');
   const data = panel.querySelector<HTMLDListElement>('.bullet-data')!;
   const description = panel.querySelector<HTMLParagraphElement>('.bullet-description')!;
-  const preview = createBulletPreview(panel.querySelector<HTMLCanvasElement>('.bullet-preview')!);
+  const scaleNoteEl = panel.querySelector<HTMLParagraphElement>('.scale-note')!;
+  const preview = createBulletPreview(panel.querySelector<HTMLCanvasElement>('.bullet-preview')!, (note) => (scaleNoteEl.textContent = note));
 
   if (missile) {
     for (const a of AIRFRAMES) select.append(new Option(a.name, a.id));
