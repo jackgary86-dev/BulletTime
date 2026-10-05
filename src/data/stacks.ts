@@ -126,6 +126,13 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'rha-plate', thickness: 0.05 }, { medium: 'reinforced-concrete', gapM: 0.2 }],
     heavy: true,
   },
+  {
+    id: 'era-plate',
+    name: 'Reactive tile + RHA',
+    // The tile fires on a single shaped charge and spoils its jet; a tandem warhead clears it with the first charge.
+    layers: [{ medium: 'era-tile' }, { medium: 'rha', thickness: 0.5, gapM: 0.05 }],
+    heavy: true,
+  },
   // Mock test buildings (#246): the struck wall, the room as an air gap, then the far wall.
   ...Object.values(BUILDINGS).map((b) => ({
     id: `building-${b.id}`,
