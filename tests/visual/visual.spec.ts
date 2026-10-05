@@ -40,6 +40,8 @@ const SHOTS: { name: string; query: string }[] = [
   { name: 'bullet-12ga-slug-steel', query: 'mode=bullet&bullet=12ga-slug&medium=steel-mild&thickness=0.006&at=150us' },
   { name: 'artillery-default', query: 'mode=artillery&at=300us' },
   { name: 'missile-default', query: 'mode=missile&at=1ms' },
+  // Large steel plates on their proving-ground stand, spaced 300 mm (#232, #234).
+  { name: 'artillery-plate-spaced', query: 'mode=artillery&bullet=155mm-he&preset=plate-spaced&at=300us' },
   { name: 'explosion-default', query: 'mode=explosion&at=2ms' },
 ];
 

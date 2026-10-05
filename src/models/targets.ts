@@ -4,6 +4,7 @@ import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
+import { plateStandSpans } from './plateStandLayout';
 import { brickMaterial, concreteMaterial, shedSheetMaterial } from './buildings';
 import { hullPaint } from './tank';
 import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
@@ -52,6 +53,7 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number, shotY 
   group.rotation.y = THREE.MathUtils.degToRad(angleDeg);
 
   const offsets = stackOffsets(layers);
+  const standSpans = plateStandSpans(layers);
   layers.forEach(({ medium: spec, thickness, look }, i) => {
     const layer = new THREE.Group();
     layer.name = layerGroupName(i);
@@ -59,7 +61,9 @@ export function createTargetStack(layers: StackLayer[], angleDeg: number, shotY 
     const body = buildBody(spec, thickness, look ?? spec.look);
     body.position.x = thickness / 2;
     layer.add(body);
-    layer.add(createSupport(spec, thickness, shotY, look ?? spec.look));
+    // A plate bolted to the one before it rides in that plate's stand (#232).
+    const span = standSpans[i];
+    if (span !== null) layer.add(createSupport(spec, span, shotY, look ?? spec.look));
     group.add(layer);
   });
 
