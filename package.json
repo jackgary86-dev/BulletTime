@@ -16,6 +16,8 @@
     "test": "vitest run",
     "visual": "npm run build && playwright test",
     "visual:update": "npm run build && playwright test --update-snapshots",
+    "perf": "vitest run --config vitest.perf.config.ts && npm run build && playwright test --config playwright.perf.config.ts",
+    "perf:update": "npm run build && PERF_UPDATE=1 playwright test --config playwright.perf.config.ts",
     "build:desktop": "tsc --noEmit && vite build --mode desktop --outDir dist-desktop",
     "desktop": "npm run build:desktop && electron .",
     "dist": "npm run build:desktop && electron-builder",

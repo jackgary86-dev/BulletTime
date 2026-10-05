@@ -69,3 +69,29 @@ jobs:
           name: visual-diffs
           path: test-results/
           retention-days: 14
+
+  # Performance budgets (#244): every round into every material within the simulation
+  # budget, and the heaviest shots' frame times, relative to the idle lab on the same
+  # runner, within 25% of tests/perf/baseline.json. Accept an intended change with
+  # `npm run perf:update`.
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npx playwright install --with-deps chromium
+      - run: npm run perf
+      - if: always()
+        name: Frame times
+        run: |
+          echo "### Frame times" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat test-results/perf/frames.json >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
