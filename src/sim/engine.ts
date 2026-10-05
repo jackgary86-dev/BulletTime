@@ -497,6 +497,28 @@ export function stepIntoSkippedLayer(layers: readonly { offset: number; thicknes
   return best === null ? null : Math.min(1, (best + LAND_INSIDE_M) / along);
 }
 
+/** Furthest a body flies across air to reach a layer ahead before it counts as flown off, m (a steep path across a wide room). */
+const MAX_GAP_FLIGHT_M = 12;
+
+/**
+ * Distance along the body's path to the next layer face ahead of it, or null
+ * when no layer lies ahead (or the nearest is further than MAX_GAP_FLIGHT_M
+ * away along a glancing path). Layers are slabs across the shot line.
+ */
+function distanceToLayerAhead(ctx: Context, body: Body): number | null {
+  const cos = dot(body.dir, ctx.normal);
+  if (Math.abs(cos) < 1e-6) return null;
+  const depth = depthOf(ctx, body.pos);
+  let best: number | null = null;
+  for (const layer of ctx.setup.layers) {
+    const ahead = cos > 0 ? layer.offset - depth : depth - (layer.offset + layer.thickness);
+    if (ahead <= 0) continue;
+    const along = ahead / Math.abs(cos);
+    if (along <= MAX_GAP_FLIGHT_M && (best === null || along < best)) best = along;
+  }
+  return best;
+}
+
 function layerAt(ctx: Context, depth: number): number {
   const layers = ctx.setup.layers;
   for (let i = 0; i < layers.length; i++) {
@@ -656,7 +678,12 @@ function integrate(ctx: Context, body: Body): void {
       alive = false;
     } else if (!medium) {
       const pastStack = depthOf(ctx, body.pos) > ctx.stackDepth + P.exitRunM;
-      const travelledAway = body.pathSinceImpact > 1.2 || (body.kind === 'fragment' && body.travelled > P.fragmentRangeM + (body.extraRangeM ?? 0));
+      // Flown off (#281): only once nothing lies ahead. A jet or fragment crossing an air gap to the next plate, or a
+      // room to the far wall, keeps going however far it has already bored.
+      const flownOff = body.pathSinceImpact > 1.2 || (body.kind === 'fragment' && body.travelled > P.fragmentRangeM + (body.extraRangeM ?? 0));
+      // The step may already have carried it into the next layer, which counts as reaching it.
+      const reachedLayer = layerAt(ctx, depthOf(ctx, body.pos)) >= 0;
+      const travelledAway = flownOff && !reachedLayer && distanceToLayerAhead(ctx, body) === null;
       const hitFloor = body.pos.y < 0;
       const tooSlow = body.speed < P.restSpeed;
       const lingering = body.impacted && body.t - body.lastMaterialT > P.maxAirAfterExitS;
