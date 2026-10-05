@@ -8,6 +8,7 @@ import { samplePrimary } from './sim/sample';
 import { CameraDirector } from './scene/cameraDirector';
 import { getBullet, type BulletSpec, type SimulatorId } from './data/bullets';
 import { MODES, framingReach } from './data/modes';
+import { siteForMode } from './data/sites';
 import { DEFAULT_MEDIUM_ID } from './data/media';
 import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
@@ -81,6 +82,14 @@ async function bootstrap(): Promise<void> {
   const resultsB = mountShotResults(overlay, 'lane-b');
   const shotsPanel = mountShotsPanel(overlay);
   const director = new CameraDirector(camera, controls, (mode) => panel.setCameraMode(mode));
+  // Shells, missiles and charges are tested outdoors on the proving ground (#231): see further, orbit wider.
+  const site = siteForMode(mode);
+  if (site === 'range') {
+    director.setOutdoors(true);
+    camera.far = 400;
+    camera.updateProjectionMatrix();
+    controls.maxDistance = 45;
+  }
   let lighting: LightingMode = 'lab';
   let quality: QualityLevel = initialQuality();
   /** Renderer-wide parts of the quality setting; each lane applies the rest. */
@@ -217,8 +226,8 @@ async function bootstrap(): Promise<void> {
   };
   const startTargetId = modeInfo.defaultTargetId ?? DEFAULT_MEDIUM_ID;
   const target = mountStackEditor(overlay, { initialId: startTargetId, initialThicknessM: modeInfo.defaultTargetThicknessM, mode, onChange: rebuildTarget });
-  await loader.progress(0.25, 'Building the lab');
-  laneA = new Lane(renderer, camera, target, spec);
+  await loader.progress(0.25, site === 'range' ? 'Building the proving ground' : 'Building the lab');
+  laneA = new Lane(renderer, camera, target, spec, undefined, site);
   rebuildTarget(target);
   director.reset();
 
@@ -249,7 +258,7 @@ async function bootstrap(): Promise<void> {
   const compare = mountComparePanel(overlay, { bulletId: modeInfo.defaultId, mediumId: startTargetId, thicknessM: modeInfo.defaultTargetThicknessM, mode }, {
     onToggle: (on) => {
       if (on) {
-        laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene);
+        laneB = new Lane(renderer, camera, compare.setup, compare.spec, spareScene, site);
         laneB.setLightingMode(lighting);
         laneB.setQuality(QUALITY[quality]);
       } else if (laneB) {

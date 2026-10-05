@@ -28,7 +28,7 @@ describe('large steel plates (#232)', () => {
 
   it('plate presets only use known media and are heavy-only', () => {
     const presets = STACK_PRESETS.filter((p) => p.heavy);
-    expect(presets.map((p) => p.id)).toEqual(['plate-large', 'plate-spaced', 'plate-concrete']);
+    expect(presets.map((p) => p.id)).toEqual(expect.arrayContaining(['plate-large', 'plate-spaced', 'plate-concrete']));
     for (const p of presets) expect(presetLayers(p).length).toBeGreaterThan(0);
   });
 

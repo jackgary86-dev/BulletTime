@@ -226,6 +226,73 @@ export function concreteMaps(kind: 'cast' | 'block'): MaterialMaps {
 }
 
 /**
+ * A fired clay brick wall in running bond (#231): one tile is 0.45 m square,
+ * six courses of two bricks (215 x 65 mm, 10 mm mortar joints), each brick a
+ * slightly different red with a sandy face, set in recessed grey mortar.
+ */
+export const BRICK_TILE_M = 0.45;
+
+export function brickMaps(): MaterialMaps {
+  return cachedMaps('brick:wall', () => {
+    const size = 512;
+    const rand = seededRandom(47);
+    const [colour, cctx] = canvas(size, size);
+    const [rough, rctx] = canvas(size, size);
+    const [height, hctx] = canvas(size, size);
+    const pxPerM = size / BRICK_TILE_M;
+    const course = 0.075 * pxPerM;
+    const brickLen = 0.225 * pxPerM;
+    const joint = 0.01 * pxPerM;
+    // Mortar everywhere first: grey, rough and set back from the brick faces.
+    cctx.fillStyle = '#8f8a80';
+    cctx.fillRect(0, 0, size, size);
+    rctx.fillStyle = 'rgb(250, 250, 250)';
+    rctx.fillRect(0, 0, size, size);
+    hctx.fillStyle = 'rgb(40, 40, 40)';
+    hctx.fillRect(0, 0, size, size);
+    for (let row = 0; row < 6; row++) {
+      const y = row * course;
+      // Running bond: every other course shifts half a brick.
+      const shift = row % 2 ? brickLen / 2 : 0;
+      for (let k = -1; k < 3; k++) {
+        const x = k * brickLen + shift;
+        const r = 132 + rand() * 50;
+        const g = 52 + rand() * 26;
+        const b = 36 + rand() * 18;
+        for (const ox of [-size, 0, size]) {
+          const bx = x + ox + joint / 2;
+          const by = y + joint / 2;
+          const bw = brickLen - joint;
+          const bh = course - joint;
+          cctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          cctx.fillRect(bx, by, bw, bh);
+          rctx.fillStyle = 'rgb(205, 205, 205)';
+          rctx.fillRect(bx, by, bw, bh);
+          hctx.fillStyle = 'rgb(200, 200, 200)';
+          hctx.fillRect(bx, by, bw, bh);
+        }
+      }
+    }
+    // Sandy speckle and the odd dark fleck over everything, wrapped by the tile.
+    for (let i = 0; i < 26000; i++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const v = rand() > 0.5 ? 255 : 0;
+      const a = 0.06 + rand() * 0.1;
+      cctx.fillStyle = `rgba(${v}, ${v}, ${v}, ${a})`;
+      cctx.fillRect(x, y, 1.2, 1.2);
+      hctx.fillStyle = `rgba(${v}, ${v}, ${v}, ${a})`;
+      hctx.fillRect(x, y, 1.2, 1.2);
+    }
+    return {
+      map: toTexture(colour),
+      roughnessMap: toTexture(rough, false),
+      normalMap: toTexture(normalMapFromHeight(height, 1.6), false),
+    };
+  });
+}
+
+/**
  * Woven polypropylene sandbag cloth (#59): flat tan tapes over and under,
  * with a few loose fibres and grime, as colour and normal maps.
  */

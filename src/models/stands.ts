@@ -47,6 +47,7 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'drywall':
       return createFrame(spec, t, shotY, standSteel, true);
     case 'concrete':
+    case 'brickWall':
     case 'sandbag':
       return bottom > 0.03 ? createRisers(spec, t, shotY, bottom) : createMat(spec, t, shotY);
     case 'cinderBlock':

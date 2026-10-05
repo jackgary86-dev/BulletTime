@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { TARGET_FOCUS } from './camera';
 import { createLabEnvironment } from './labEnvironment';
 import { createLabSet } from './labSet';
+import { createRangeStudio } from './rangeSet';
+import type { SiteId } from '../data/sites';
 import { createSoftbox, type Softbox, type SoftboxSpec } from './softbox';
 
 /** Background tone of the high-speed camera lab. */
@@ -32,7 +34,9 @@ const HIGHSPEED_BACKGROUND = new THREE.Color(0xc9ccd0);
  * spot inside the key, reflections baked from the room itself, and a
  * measurement grid board behind the target.
  */
-export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Studio {
+export function createStudio(scene: THREE.Scene, renderer: THREE.WebGLRenderer, site: SiteId = 'lab'): Studio {
+  // Shells, missiles and charges go outdoors to the proving ground (#231).
+  if (site === 'range') return createRangeStudio(scene, renderer);
   scene.background = BACKGROUND;
   // Far enough that the lab walls read, close enough that the room falls into shadow.
   scene.fog = new THREE.Fog(BACKGROUND, 4, 14);
