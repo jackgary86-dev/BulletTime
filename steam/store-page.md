@@ -39,7 +39,7 @@ Simulation, Physics, Sandbox, Educational, Singleplayer, Realistic, Relaxing, Ca
 
 ## Screenshots (at least 5, 1920x1080)
 
-`npm run screenshots:steam` takes all six into `steam/screenshots/` (add `-- --only 2,3` to retake some). The PNGs are about 2 MB each, so they are git-ignored; run the command to regenerate them. The scenes are in `electron/screenshots.cjs`; adjust a scene's `t` (how far through the shot to scrub) if the physics changes, and retake them before the store page goes live. The Steamworks upload still needs your own pick of the final set.
+`npm run screenshots:steam` takes all seven into `steam/screenshots/` (add `-- --only 2,3` to retake some). The PNGs are about 2 MB each, so they are git-ignored; run the command to regenerate them. The scenes are in `electron/screenshots.cjs`; adjust a scene's `t` (how far through the shot to scrub) if the physics changes, and retake them before the store page goes live. The Steamworks upload still needs your own pick of the final set.
 
 1. The launcher with all four simulators.
 2. A 9 mm hollow point in gel, side camera, mid-cavity.
@@ -47,6 +47,7 @@ Simulation, Physics, Sandbox, Educational, Singleplayer, Realistic, Relaxing, Ca
 4. A shaped-charge missile boring through armour plate, with the results chart.
 5. A demolition block going off in front of a plywood panel, shock distortion visible.
 6. Compare mode: two setups side by side.
+7. A missile in flight with its rocket exhaust plume and heat haze, side camera.
 
 ## Trailer
 

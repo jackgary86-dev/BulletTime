@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShockwavePass } from './shockwavePass';
+import { HeatHazePass } from './heatHazePass';
 import { GradePass } from './gradePass';
 
 /** Multisample count for the post-processing buffers. */
@@ -20,6 +21,8 @@ export interface PostFx {
   depthOfField: BokehPass;
   /** The muzzle blast's refracting shell (#65); enabled only while it is in the air. */
   shockwave: ShockwavePass;
+  /** The refracting hot air behind a missile's motor (#247); enabled only while one burns. */
+  heatHaze: HeatHazePass;
   /** The final colour grade, vignette, grain and lens fringing (#73). */
   grade: GradePass;
   /** Sets the depth-of-field focus distance in metres from the camera. */
@@ -68,6 +71,9 @@ export function createPostFx(
   const shockwave = new ShockwavePass(camera);
   composer.addPass(shockwave);
 
+  const heatHaze = new HeatHazePass(camera);
+  composer.addPass(heatHaze);
+
   composer.addPass(new OutputPass());
 
   const grade = new GradePass();
@@ -81,6 +87,7 @@ export function createPostFx(
     bloom,
     depthOfField,
     shockwave,
+    heatHaze,
     grade,
     setFocus(distance) {
       focusUniform.value = distance;

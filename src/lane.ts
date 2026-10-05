@@ -22,6 +22,7 @@ import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
 import { createPostFx, type PostFx } from './scene/postfx';
 import { QUALITY, type QualitySettings } from './scene/quality';
 import { createStudio, type LightingMode, type Studio } from './scene/studio';
+import { wallClockS } from './scene/still';
 import { simulate } from './sim/engine';
 import { seededRandom } from './sim/random';
 import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
@@ -345,6 +346,16 @@ export class Lane {
     shockwave.center.copy(shock.center).applyMatrix4(this.attackFrame.matrix);
     shockwave.radius = shock.radius;
     shockwave.strength = shock.strength;
+    const { heatHaze } = this.postFx;
+    const haze = this.shot.haze;
+    heatHaze.enabled = !!timeline && haze.active;
+    if (heatHaze.enabled) {
+      heatHaze.nozzle.copy(haze.nozzle).applyMatrix4(this.attackFrame.matrix);
+      heatHaze.tip.copy(haze.tip).applyMatrix4(this.attackFrame.matrix);
+      heatHaze.radius = haze.radius;
+      heatHaze.strength = 1;
+      heatHaze.time = wallClockS();
+    }
     this.postFx.grade.setFlash(current && t !== null ? flashExposure(t - current.start, shutterS) : 0);
   }
 }

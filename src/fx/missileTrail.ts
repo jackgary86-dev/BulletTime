@@ -211,6 +211,12 @@ export function motorLight(length: number, diameter: number, now: number): Motor
   };
 }
 
+/** The column of hot air behind a motor: from the nozzle, `length` m back along the missile's axis, `radius` m wide at its start. */
+export function hazeColumn(length: number, diameter: number): { length: number; radius: number } {
+  const flame = Math.max(MIN_FLAME_M, length * FLAME_LENGTHS);
+  return { length: flame * 2.4, radius: Math.max(0.05, diameter * 3) };
+}
+
 /** Plume layers a quality level draws: 1 is the core and flame cards, 2 adds the outer plume, 3 adds the halo. */
 export type PlumeLayers = 1 | 2 | 3;
 

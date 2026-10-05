@@ -28,14 +28,16 @@ export interface QualitySettings {
   plumeLayers: 1 | 2 | 3;
   /** Whether a missile's motor lights the ground and smoke (#247). */
   motorLight: boolean;
+  /** Whether the hot air behind a missile's motor refracts the scene (#247). */
+  heatHaze: boolean;
 }
 
 export const QUALITY: Record<QualityLevel, QualitySettings> = {
-  low: { pixelRatio: 1, particleDensity: 0.35, particleCap: 0.35, bloom: false, ambientOcclusion: false, depthOfField: false, shadowMapSize: 0, transmissionScale: 0.5, fineSimulation: false, plumeLayers: 1, motorLight: false },
-  medium: { pixelRatio: 1.5, particleDensity: 0.7, particleCap: 0.7, bloom: true, ambientOcclusion: true, depthOfField: false, shadowMapSize: 1024, transmissionScale: 0.75, fineSimulation: false, plumeLayers: 2, motorLight: true },
-  high: { pixelRatio: 2, particleDensity: 1, particleCap: 1, bloom: true, ambientOcclusion: true, depthOfField: true, shadowMapSize: 2048, transmissionScale: 1, fineSimulation: false, plumeLayers: 3, motorLight: true },
+  low: { pixelRatio: 1, particleDensity: 0.35, particleCap: 0.35, bloom: false, ambientOcclusion: false, depthOfField: false, shadowMapSize: 0, transmissionScale: 0.5, fineSimulation: false, plumeLayers: 1, motorLight: false, heatHaze: false },
+  medium: { pixelRatio: 1.5, particleDensity: 0.7, particleCap: 0.7, bloom: true, ambientOcclusion: true, depthOfField: false, shadowMapSize: 1024, transmissionScale: 0.75, fineSimulation: false, plumeLayers: 2, motorLight: true, heatHaze: true },
+  high: { pixelRatio: 2, particleDensity: 1, particleCap: 1, bloom: true, ambientOcclusion: true, depthOfField: true, shadowMapSize: 2048, transmissionScale: 1, fineSimulation: false, plumeLayers: 3, motorLight: true, heatHaze: true },
   // Full device pixel ratio, 4K shadows, 1.6× particles with doubled caps, and 0.25 µs physics.
-  ultra: { pixelRatio: 4, particleDensity: 1.6, particleCap: 2, bloom: true, ambientOcclusion: true, depthOfField: true, shadowMapSize: 4096, transmissionScale: 1, fineSimulation: true, plumeLayers: 3, motorLight: true },
+  ultra: { pixelRatio: 4, particleDensity: 1.6, particleCap: 2, bloom: true, ambientOcclusion: true, depthOfField: true, shadowMapSize: 4096, transmissionScale: 1, fineSimulation: true, plumeLayers: 3, motorLight: true, heatHaze: true },
 };
 
 export const QUALITY_LEVELS: { level: QualityLevel; label: string }[] = [

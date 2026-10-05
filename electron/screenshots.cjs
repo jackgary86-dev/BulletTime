@@ -1,5 +1,5 @@
 // Store screenshots (#207): `npm run screenshots:steam` opens the built app at 1920x1080 and
-// captures the six scenes listed in steam/store-page.md into steam/screenshots/.
+// captures the seven scenes listed in steam/store-page.md into steam/screenshots/.
 // Enabled with BULLETTIME_SHOTS=<output folder>; BULLETTIME_SHOTS_ONLY=a,b limits the scenes.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -17,6 +17,7 @@ const SCENES = [
   { name: '4-missile-shaped-armour', mode: 'missile', medium: 'rha', slow: '1/10,000', t: 0.35 },
   { name: '5-demolition-block-plywood', mode: 'explosion', round: 'charge-block', medium: 'plywood', slow: '1/1,000', t: 0.33 },
   { name: '6-compare', mode: 'bullet', compare: true, round: '9mm-jhp', roundB: '556-m193', medium: 'gel10', slow: '1/10,000', t: 0.3 },
+  { name: '7-missile-plume', mode: 'missile', medium: 'rha', slow: '1/1,000', t: 0.006 },
 ];
 
 async function js(win, code) {
