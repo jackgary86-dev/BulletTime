@@ -46,11 +46,17 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'gong':
       return createHanger(spec, t, shotY, look === 'gong');
     case 'glass':
+    case 'polycarbonate':
       return createFrame(spec, t, shotY, aluminium, false);
+    case 'fibreglass':
+    case 'kevlar':
+      return createFrame(spec, t, shotY, standSteel, false);
     case 'pine':
     case 'oak':
     case 'drywall':
     case 'paperStack':
+    case 'mdf':
+    case 'osb':
       return createFrame(spec, t, shotY, standSteel, true);
     case 'phoneBack':
     case 'phoneCell':
@@ -61,6 +67,8 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'sandbag':
       return bottom > 0.03 ? createRisers(spec, t, shotY, bottom) : createMat(spec, t, shotY);
     case 'cinderBlock':
+    case 'cementBoard':
+    case 'ceramicTile':
       return createMat(spec, t, shotY);
     case 'earthBerm':
       // A berm sits on the ground and needs no holder.
