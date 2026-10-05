@@ -1,0 +1,11 @@
+{
+  "bullet-12ga-00buck-gel": {
+    "p95Ratio": 1.58
+  },
+  "explosion-default": {
+    "p95Ratio": 1.04
+  },
+  "armor-four-plate-stack-3d": {
+    "p95Ratio": 0.79
+  }
+}

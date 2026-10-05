@@ -36,6 +36,8 @@ Visual regression (#243): `npm run visual` builds the site, serves it with `vite
 
 First launch (#241, `src/ui/firstShot.ts`): a fresh profile with a plain address skips the launcher and opens the Bullet lab on a fixed shot (`FIRST_SHOT`, a .308 soft point into 10% gel), fired on its own with every panel hidden (`first-shot` on the body); the panels and a "Pick a simulator" button come in when it lands, or on a click or key. It plays once (`bullettime.firstShotSeen`) unless "Open with a shot" is ticked in About. Any address with `mode`, `at`, `still`, `clean` or `launcher` skips it; the desktop smoke test and store screenshots load `?launcher`.
 
+Performance budgets (#244): `npm run perf` runs `src/sim/simBudget.perf.ts` (every round into every material under 500 ms, the sweep under 150 s; about a minute, so not in `npm test`) and tests/perf/frames.spec.ts, which times 24 frames of the idle lab and the heaviest shots (12 ga buckshot into gel, the Explosion default, a four-plate Armor lab stack in 3D) in software WebGL at Low quality. Each shot's 95th-percentile frame time is divided by the idle lab's median on the same machine, and that ratio may not grow by more than 25% over tests/perf/baseline.json; `npm run perf:update` records a new baseline. The `perf` job in quality.yml writes the frame times to the job summary.
+
 URL shortcuts: `?mode=bullet|artillery|missile|explosion|armor` skips the launcher; `?ultra` raises quality.
 
 CI: `deploy.yml` (test, build, Pages), `quality.yml` (type check, tests, `npm audit`, gzipped-bundle budget of 600 KB), `release.yml` (installers on `v*` tags, with a launcher smoke test). Dependabot is on.
