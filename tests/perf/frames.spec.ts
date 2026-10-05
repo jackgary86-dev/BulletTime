@@ -6,8 +6,11 @@ import { expect, test, type Page } from '@playwright/test';
  * Low quality and records the median and 95th-percentile frame time over
  * `FRAMES` frames. Software rendering is far slower than any GPU and runners
  * differ in speed, so each shot is measured against the idle lab in the same
- * run (its frame time divided by the idle lab's median), and that ratio may
- * not regress by more than `MAX_REGRESSION` against tests/perf/baseline.json.
+ * run (its frame time divided by the idle lab's median) and against a fixed
+ * script workload (#283). A shot fails when both ratios regress by more than
+ * `MAX_REGRESSION` against tests/perf/baseline.json: the runner alone moves a
+ * shot against one yardstick (more cores speed up the software rasteriser,
+ * not the main thread), a real slowdown moves it against both.
  * `npm run perf:update` (PERF_UPDATE=1) records a new baseline on purpose.
  *
  * Low, not Medium: in software WebGL, Medium's full-screen ambient occlusion
@@ -25,13 +28,66 @@ interface FrameStats {
   p95Ms: number;
 }
 
-/** A shot's 95th-percentile frame time, in multiples of the idle lab's median frame on the same machine. */
+/**
+ * A shot's 95th-percentile frame time against two yardsticks on the same
+ * machine (#283): the idle lab's median frame (raster-bound) and a fixed
+ * single-thread script workload (main-thread bound). Runners differ in how
+ * many cores SwiftShader gets against how fast one thread is, so a shot can
+ * move against one yardstick with the runner alone; a real slowdown moves it
+ * against both.
+ */
 interface Relative extends FrameStats {
   p95Ratio: number;
+  p95CpuRatio: number;
+}
+
+interface Baseline {
+  p95Ratio: number;
+  /** Missing in baselines recorded before #283: the raster ratio alone decides. */
+  p95CpuRatio?: number;
 }
 
 const IDLE = 'idle-lab';
 const results: Record<string, FrameStats> = {};
+/** Median time of the fixed script workload, ms. */
+let cpuMs = 0;
+
+/**
+ * Times a fixed single-thread workload in the page, like a particle step: a
+ * few hundred thousand points advanced and bounced, in typed arrays. The
+ * median of several runs, after a warm-up.
+ */
+async function measureCpu(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const n = 200_000;
+    const pos = new Float32Array(n * 3);
+    const vel = new Float32Array(n * 3);
+    for (let i = 0; i < n * 3; i++) {
+      pos[i] = (i % 97) / 97;
+      vel[i] = ((i % 31) - 15) / 15;
+    }
+    const step = () => {
+      for (let k = 0; k < 10; k++) {
+        for (let i = 0; i < n * 3; i += 3) {
+          vel[i + 1] -= 0.0098;
+          pos[i] += vel[i] * 0.001;
+          pos[i + 1] += vel[i + 1] * 0.001;
+          pos[i + 2] += vel[i + 2] * 0.001 * Math.sin(pos[i]);
+          if (pos[i + 1] < 0) vel[i + 1] = -vel[i + 1] * 0.5;
+        }
+      }
+    };
+    step();
+    const times: number[] = [];
+    for (let r = 0; r < 7; r++) {
+      const t0 = performance.now();
+      step();
+      times.push(performance.now() - t0);
+    }
+    times.sort((a, b) => a - b);
+    return times[3];
+  });
+}
 
 /** Times `FRAMES` animation frames in the page. */
 async function measure(page: Page): Promise<FrameStats> {
@@ -68,6 +124,7 @@ async function open(page: Page, query: string): Promise<void> {
 test(IDLE, async ({ page }) => {
   await open(page, 'mode=bullet&still');
   results[IDLE] = await measure(page);
+  cpuMs = await measureCpu(page);
 });
 
 /** Simulator shots: parked just before first contact by a replay link, then played through the impact. */
@@ -97,19 +154,37 @@ test.afterAll(() => {
   expect(idle, 'the idle lab was not measured').toBeTruthy();
   const relative: Record<string, Relative> = {};
   for (const [name, r] of Object.entries(results)) {
-    if (name !== IDLE) relative[name] = { ...r, p95Ratio: Math.round((r.p95Ms / Math.max(1, idle.medianMs)) * 100) / 100 };
+    if (name !== IDLE) {
+      relative[name] = {
+        ...r,
+        p95Ratio: Math.round((r.p95Ms / Math.max(1, idle.medianMs)) * 100) / 100,
+        p95CpuRatio: Math.round((r.p95Ms / Math.max(1, cpuMs)) * 100) / 100,
+      };
+    }
   }
   mkdirSync('test-results/perf', { recursive: true });
-  writeFileSync(RESULTS, `${JSON.stringify({ idle, shots: relative }, null, 2)}\n`);
-  console.log(`frame times: idle median ${idle.medianMs} ms; ${Object.entries(relative).map(([n, r]) => `${n} p95 ${r.p95Ms} ms (${r.p95Ratio}x idle)`).join('; ')}`);
+  writeFileSync(RESULTS, `${JSON.stringify({ idle, cpuMs: Math.round(cpuMs), shots: relative }, null, 2)}\n`);
+  console.log(
+    `frame times: idle median ${idle.medianMs} ms, script yardstick ${Math.round(cpuMs)} ms; ${Object.entries(relative)
+      .map(([n, r]) => `${n} p95 ${r.p95Ms} ms (${r.p95Ratio}x idle, ${r.p95CpuRatio}x script)`)
+      .join('; ')}`,
+  );
   if (process.env.PERF_UPDATE) {
-    writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(relative).map(([n, r]) => [n, { p95Ratio: r.p95Ratio }])), null, 2)}\n`);
+    writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(relative).map(([n, r]) => [n, { p95Ratio: r.p95Ratio, p95CpuRatio: r.p95CpuRatio }])), null, 2)}\n`);
     return;
   }
   expect(existsSync(BASELINE), `${BASELINE} is missing: run npm run perf:update`).toBe(true);
-  const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, { p95Ratio: number }>;
+  const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, Baseline>;
+  const limit = 1 + MAX_REGRESSION;
+  // A regression must show against both yardsticks: the runner alone moves a shot against one of them (#283).
   const regressions = Object.entries(relative)
-    .filter(([name, r]) => baseline[name] && r.p95Ratio > baseline[name].p95Ratio * (1 + MAX_REGRESSION))
-    .map(([name, r]) => `${name}: 95th percentile ${r.p95Ratio}x the idle lab, against ${baseline[name].p95Ratio}x`);
+    .filter(([name, r]) => {
+      const b = baseline[name];
+      if (!b) return false;
+      const raster = r.p95Ratio > b.p95Ratio * limit;
+      const cpu = b.p95CpuRatio === undefined || r.p95CpuRatio > b.p95CpuRatio * limit;
+      return raster && cpu;
+    })
+    .map(([name, r]) => `${name}: 95th percentile ${r.p95Ratio}x the idle lab and ${r.p95CpuRatio}x the script yardstick, against ${baseline[name].p95Ratio}x and ${baseline[name].p95CpuRatio}x`);
   expect(regressions, regressions.join('\n')).toEqual([]);
 });
