@@ -3,13 +3,15 @@ import { PLATE_MATERIALS, getPlateMaterial, DEFAULT_PLATE_MATERIAL_ID, type Plat
 import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactState, type MunitionFamilyId } from '../armor/munitions';
 import { OVERLAYS, drawSection, type OverlayId } from '../armor/sectionDraw';
 import { dimensionLine, fragmentShapes, roomShapes } from '../armor/section';
-import { MAX_LAYERS, STACK_PRESETS, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
+import { MAX_LAYERS, STACK_PRESETS, arrangementExtras, simulateStack, type PlateLayer, type StackTimeline } from '../armor/stack';
 import { activeStage, extendedFrame, stackDimensions, stackLayout, stackShapes } from '../armor/stackView';
 import { mountView3d, type View3d } from '../armor/view3d';
 import { armorClockSource, playSeconds, playbackAt } from '../armor/playback';
 import { energyBalance } from '../armor/fields';
 import { buildOverlay, niceScaleLength, scaleLabel } from '../armor/fieldOverlay';
 import { familyDiagram } from './armorDiagrams';
+import { LESSONS, type LessonSetup } from '../armor/lessons';
+import { EXPORT_SIZE, exportCaption, exportFileName } from '../armor/exportFrame';
 import { PlayClock } from '../sim/playClock';
 import { loadImpactBeat } from './beatSetting';
 
@@ -65,6 +67,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     <header class="armor-head">
       <h1>BulletTime <span>Armor lab</span></h1>
       <p>A teaching cross-section of how munitions defeat metal plate. Simplified models, not engineering data.</p>
+      <button type="button" class="armor-classroom-toggle" aria-pressed="false">Classroom</button>
       <button type="button" class="armor-back">Simulators</button>
     </header>
     <section class="armor-controls panel">
@@ -103,9 +106,21 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
         <button type="button" class="armor-play" aria-label="Play or pause">Pause</button>
         <input class="armor-scrub" type="range" min="0" max="1000" value="0" aria-label="Time" />
         <select class="armor-speed" aria-label="Playback speed"></select>
+        <button type="button" class="armor-export" title="Save the cross-section at this moment as a PNG, with its labels, for slides">Save PNG</button>
       </div>
     </section>
     <aside class="armor-side">
+      <section class="panel armor-classroom" hidden>
+        <h2>Classroom <output class="armor-lesson-count"></output></h2>
+        <h3 class="armor-lesson-title"></h3>
+        <p class="armor-lesson-caption"></p>
+        <div class="armor-lesson-setups" role="group" aria-label="Setups to compare"></div>
+        <p class="armor-lesson-question"></p>
+        <div class="armor-lesson-nav">
+          <button type="button" class="armor-lesson-back">Back</button>
+          <button type="button" class="armor-lesson-next">Next</button>
+        </div>
+      </section>
       <section class="panel armor-results"></section>
       <section class="panel armor-explainer"></section>
     </aside>
@@ -282,11 +297,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   const applyArrangement = (id: string) => {
     const preset = STACK_PRESETS.find((p) => p.id === id);
     if (!preset) return;
-    const built = preset.build(getPlateMaterial(mainRef.materialId), mainRef.thicknessMm / 1000, {
-      spaced: getPlateMaterial('mild-steel'),
-      soft: getPlateMaterial('mild-steel'),
-      hard: getPlateMaterial('rha'),
-    });
+    const built = preset.build(getPlateMaterial(mainRef.materialId), mainRef.thicknessMm / 1000, arrangementExtras());
     materialSel.value = built[0].material.id;
     thickness.value = String(Math.round(built[0].thicknessM * 1000));
     rows = built.slice(1).map((l) => ({ materialId: l.material.id, thicknessMm: Math.round(l.thicknessM * 1000), gapMm: Math.round(l.gapBeforeM * 1000) }));
@@ -347,6 +358,13 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       syncHud(pb);
       return;
     }
+    drawSection2d(ctx, w, h, pb);
+    syncHud(pb);
+  };
+
+  /** Paints the cut-away section of the whole stack at a moment into a 2D context of w × h (CSS) pixels. */
+  const drawSection2d = (target: CanvasRenderingContext2D, w: number, h: number, pb: ReturnType<typeof playbackAt>) => {
+    if (!stack) return;
     const layout = stackLayout(stack, w, h);
     const parts = stackShapes(stack, pb.t, pb.fragmentT, layout);
     const multi = stack.stages.length > 1;
@@ -361,7 +379,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       // The left box of a later plate is the gap in front of it: keep its wall off the plate before.
       if (room && i > 0) room = { ...room, leftX: Math.max(room.leftX, layout.stages[i - 1].rearX) };
       drawSection(
-        ctx,
+        target,
         parts[i].shapes,
         { plateColor: st.layer.material.color, penetratorMaterial: impact.material, overlay, jet: impact.family === 'heat', continued: i > 0 },
         {
@@ -376,7 +394,40 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
         },
       );
     });
-    syncHud(pb);
+  };
+
+  /** Saves the section at this moment as a PNG, its caption burnt in below, whichever view is showing. */
+  const exportPng = () => {
+    if (!stack) return;
+    const pb = playbackAt(stack, playhead());
+    const { width, height, band } = EXPORT_SIZE;
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height + band;
+    const g = out.getContext('2d');
+    if (!g) return;
+    drawSection2d(g, width, height, pb);
+    const reached = stack.events.filter((e) => e.t <= pb.fragmentT);
+    const [line1, line2] = exportCaption(stack, pb.fragmentT, reached.length ? reached[reached.length - 1].label : '');
+    g.fillStyle = '#0a0b0e';
+    g.fillRect(0, height, width, band);
+    g.fillStyle = '#e8eaed';
+    g.font = '600 26px system-ui, sans-serif';
+    g.fillText(line1, 24, height + 34, width - 48);
+    g.fillStyle = '#9aa1ab';
+    g.font = '22px system-ui, sans-serif';
+    g.fillText(line2, 24, height + 66, width - 48);
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportFileName(stack!, pb.fragmentT);
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
   };
 
   /** The time, depth and speed readouts, the caption and the event list, for either view. */
@@ -532,25 +583,74 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   fire();
   raf = requestAnimationFrame(step);
 
+  const applyPreset = (p: ArmorPreset): ArmorTimeline | null => {
+    if (p.family) familySel.value = p.family;
+    if (p.family) velocity.value = '';
+    if (p.calibreMm !== undefined) calibre.value = String(p.calibreMm);
+    if (p.velocity !== undefined) velocity.value = String(p.velocity);
+    if (p.material) materialSel.value = p.material;
+    if (p.thicknessMm !== undefined) thickness.value = String(p.thicknessMm);
+    if (p.material || p.thicknessMm !== undefined) mainRef = { materialId: materialSel.value as PlateMaterialId, thicknessMm: Number(thickness.value) };
+    if (p.obliquityDeg !== undefined) obliquity.value = String(p.obliquityDeg);
+    if (p.overlay) {
+      overlay = p.overlay;
+      syncOverlays();
+    }
+    syncControls();
+    if (p.arrangement) applyArrangement(p.arrangement);
+    return fire();
+  };
+
+  // Classroom mode (#173): six guided comparisons; a setup only sets the controls and fires, so the lab stays live.
+  const classroom = q('.armor-classroom');
+  const classroomToggle = q<HTMLButtonElement>('.armor-classroom-toggle');
+  const setupsBox = q('.armor-lesson-setups');
+  let lessonIndex = 0;
+  const showSetup = (i: number) => {
+    const s: LessonSetup = LESSONS[lessonIndex].setups[i];
+    setupsBox.querySelectorAll('button').forEach((b, k) => b.classList.toggle('active', k === i));
+    applyPreset({ family: s.family, calibreMm: s.calibreMm, material: s.material, thicknessMm: s.thicknessMm, obliquityDeg: s.obliquityDeg, arrangement: s.arrangement, overlay: s.overlay ?? 'energy' });
+  };
+  const showLesson = (i: number) => {
+    lessonIndex = Math.max(0, Math.min(LESSONS.length - 1, i));
+    const l = LESSONS[lessonIndex];
+    q('.armor-lesson-count').textContent = `${lessonIndex + 1} / ${LESSONS.length}`;
+    q('.armor-lesson-title').textContent = l.title;
+    q('.armor-lesson-caption').textContent = l.caption;
+    q('.armor-lesson-question').textContent = `Ask: ${l.question}`;
+    setupsBox.innerHTML = '';
+    l.setups.forEach((s, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = `${k === 0 ? 'A' : 'B'}: ${s.label}`;
+      b.addEventListener('click', () => showSetup(k));
+      setupsBox.append(b);
+    });
+    q<HTMLButtonElement>('.armor-lesson-back').disabled = lessonIndex === 0;
+    q<HTMLButtonElement>('.armor-lesson-next').disabled = lessonIndex === LESSONS.length - 1;
+    showSetup(0);
+  };
+  const setClassroom = (on: boolean) => {
+    classroom.hidden = !on;
+    classroomToggle.setAttribute('aria-pressed', String(on));
+    classroomToggle.classList.toggle('active', on);
+    if (on) showLesson(lessonIndex);
+  };
+  classroomToggle.addEventListener('click', () => setClassroom(classroom.hidden));
+  q('.armor-lesson-back').addEventListener('click', () => showLesson(lessonIndex - 1));
+  q('.armor-lesson-next').addEventListener('click', () => showLesson(lessonIndex + 1));
+  q('.armor-export').addEventListener('click', exportPng);
+  // A link can open a lesson directly: ?mode=armor&lesson=3 (1 to 6), and &setup=b for its second setup.
+  const lessonParam = Number(new URLSearchParams(location.search).get('lesson'));
+  if (Number.isInteger(lessonParam) && lessonParam >= 1 && lessonParam <= LESSONS.length) {
+    lessonIndex = lessonParam - 1;
+    setClassroom(true);
+    if (new URLSearchParams(location.search).get('setup')?.toLowerCase() === 'b') showSetup(1);
+  }
+
   return {
     fire,
-    preset(p) {
-      if (p.family) familySel.value = p.family;
-      if (p.family) velocity.value = '';
-      if (p.calibreMm !== undefined) calibre.value = String(p.calibreMm);
-      if (p.velocity !== undefined) velocity.value = String(p.velocity);
-      if (p.material) materialSel.value = p.material;
-      if (p.thicknessMm !== undefined) thickness.value = String(p.thicknessMm);
-      if (p.material || p.thicknessMm !== undefined) mainRef = { materialId: materialSel.value as PlateMaterialId, thicknessMm: Number(thickness.value) };
-      if (p.obliquityDeg !== undefined) obliquity.value = String(p.obliquityDeg);
-      if (p.overlay) {
-        overlay = p.overlay;
-        syncOverlays();
-      }
-      syncControls();
-      if (p.arrangement) applyArrangement(p.arrangement);
-      return fire();
-    },
+    preset: applyPreset,
     dispose() {
       cancelAnimationFrame(raf);
       view3d?.dispose();
