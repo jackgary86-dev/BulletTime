@@ -226,6 +226,18 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
   let last = performance.now();
   let raf = 0;
 
+  /**
+   * A new family starts at its own default speed. Setting the range input to '' does not do this: the browser snaps it
+   * to the middle of the old family's range and then clamps it into the new one (an APFSDS rod's 1,600 m/s became a
+   * full-bore shot's top speed of 1,050).
+   */
+  const resetVelocity = (id: MunitionFamilyId) => {
+    const family = getFamily(id);
+    velocity.min = String(family.velocity.min);
+    velocity.max = String(family.velocity.max);
+    velocity.value = String(family.velocity.default);
+  };
+
   const syncControls = () => {
     const family = getFamily(familySel.value as MunitionFamilyId);
     velocity.min = String(family.velocity.min);
@@ -537,7 +549,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     custom();
   });
   familySel.addEventListener('input', () => {
-    velocity.value = '';
+    resetVelocity(familySel.value as MunitionFamilyId);
     syncControls();
   });
   q('.armor-fire').addEventListener('click', fire);
@@ -589,7 +601,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
 
   const applyPreset = (p: ArmorPreset): ArmorTimeline | null => {
     if (p.family) familySel.value = p.family;
-    if (p.family) velocity.value = '';
+    if (p.family) resetVelocity(p.family);
     if (p.calibreMm !== undefined) calibre.value = String(p.calibreMm);
     if (p.velocity !== undefined) velocity.value = String(p.velocity);
     if (p.material) materialSel.value = p.material;
