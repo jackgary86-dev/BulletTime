@@ -20,8 +20,9 @@ export default defineConfig({
   expect: {
     // One software-rendered frame of a large blast can take over a minute.
     timeout: 180_000,
-    // A changed effect moves thousands of pixels; SwiftShader noise on a different CPU moves a handful.
-    toHaveScreenshot: { maxDiffPixelRatio: 0.01, threshold: 0.2, animations: 'disabled' },
+    // A clean run differs from its reference by 0 pixels; tripling the gel cavity's vent ratio moves 760
+    // (under 0.1% of the frame), so the limit is a pixel count, not a share, with room for CPU noise.
+    toHaveScreenshot: { maxDiffPixels: 200, threshold: 0.2, animations: 'disabled' },
   },
   fullyParallel: false,
   workers: 1,
