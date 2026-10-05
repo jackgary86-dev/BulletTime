@@ -88,7 +88,8 @@ function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3
 
 /** The ring of dust the blast wave kicks up off the floor, rolling outward. */
 function groundRing(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3, yieldKg: number, kind: string, seed: number): void {
-  if (kind === 'incendiary') return;
+  // In a frame turned onto a missile's path (#250) the floor is not below: no ground ring there.
+  if (kind === 'incendiary' || particles.freeFlight) return;
   const radius = fireballRadius(yieldKg, kind);
   const floor = new THREE.Vector3(origin.x, FLOOR_Y + 0.01, origin.z);
   particles.add({

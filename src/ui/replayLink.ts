@@ -7,8 +7,10 @@
  *
  * `at` is the time after the first impact: seconds (`0.0006`), microseconds (`60us`) or milliseconds (`1.2ms`).
  * On the proving ground, `preset` picks a target preset (a mock building, #246) and `witness` stands gel witness
- * blocks in its room (#249) as `distance:across` pairs in metres, e.g. `witness=0.3:0,1.5:-0.6`.
+ * blocks in its room (#249) as `distance:across` pairs in metres, e.g. `witness=0.3:0,1.5:-0.6`. In the Missile lab,
+ * `dive` and `bearing` (degrees) set the approach (#250).
  */
+import type { Approach } from '../sim/approach';
 import type { WitnessBlock } from '../sim/witness';
 
 export interface ReplayLink {
@@ -22,11 +24,26 @@ export interface ReplayLink {
   preset?: string;
   /** Gel witness blocks in a building's room (#249). */
   witness?: WitnessBlock[];
+  /** The missile's dive and bearing (#250). */
+  approach?: Approach;
 }
 
 /** `0.3:0,1.5:-0.6` for these blocks. */
 export function formatWitness(blocks: readonly WitnessBlock[]): string {
   return blocks.map((b) => `${+b.distM.toFixed(2)}:${+b.lateralM.toFixed(2)}`).join(',');
+}
+
+/** The approach from `dive` and `bearing` (degrees); undefined when neither is a number. */
+export function parseApproach(dive: string | null, bearing: string | null): Approach | undefined {
+  const d = dive === null ? NaN : Number(dive);
+  const b = bearing === null ? NaN : Number(bearing);
+  if (!Number.isFinite(d) && !Number.isFinite(b)) return undefined;
+  return { diveDeg: Number.isFinite(d) ? d : 0, bearingDeg: Number.isFinite(b) ? b : 0 };
+}
+
+/** `dive=70&bearing=-15` for an approach. */
+export function formatApproach(a: Approach): string {
+  return `dive=${a.diveDeg}&bearing=${a.bearingDeg}`;
 }
 
 /** Blocks from `0.3:0,1.5:-0.6`; pairs that do not parse are dropped. */
@@ -64,6 +81,7 @@ export function parseReplayLink(search: string): ReplayLink | null {
     thicknessM: params.get('thickness') && Number.isFinite(thickness) && thickness > 0 ? thickness : undefined,
     preset: params.get('preset') || undefined,
     witness: parseWitness(params.get('witness')),
+    approach: parseApproach(params.get('dive'), params.get('bearing')),
   };
 }
 

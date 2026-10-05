@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWitness, parseReplayLink, parseReplayTime, parseWitness } from './replayLink';
+import { formatApproach, formatWitness, parseReplayLink, parseReplayTime, parseWitness } from './replayLink';
 
 describe('replay deep link (#230)', () => {
   it.each([
@@ -47,3 +47,14 @@ describe('replay link: building preset and witness blocks (#249)', () => {
     expect(parseReplayLink('?at=1ms')!.witness).toBeUndefined();
   });
 });
+
+describe('replay link: missile approach (#250)', () => {
+  it('carries the dive and bearing, and round-trips them', () => {
+    const link = parseReplayLink('?mode=missile&preset=building-block-house&dive=70&bearing=-15&at=1ms')!;
+    expect(link.approach).toEqual({ diveDeg: 70, bearingDeg: -15 });
+    expect(parseReplayLink(`?${formatApproach(link.approach!)}&at=1ms`)!.approach).toEqual(link.approach);
+    expect(parseReplayLink('?at=1ms')!.approach).toBeUndefined();
+    expect(parseReplayLink('?dive=45&at=1ms')!.approach).toEqual({ diveDeg: 45, bearingDeg: 0 });
+  });
+});
+

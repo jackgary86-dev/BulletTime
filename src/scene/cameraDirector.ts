@@ -56,6 +56,10 @@ export class CameraDirector {
   private reach = 0.5;
   /** On the outdoor range (#231) targets stand on the ground centred on their own shot line, so the view frames the middle and stands off a little toward the firing line. */
   private outdoors = false;
+  /** The shot's drawing frame (#250): the timeline is in the engine's frame, turned onto the real path by this. */
+  private readonly frame = new THREE.Matrix4();
+  private readonly framePos = new THREE.Vector3();
+  private readonly frameDir = new THREE.Vector3();
   /** Where the inside view stands and looks, when the target is a building (#249). */
   private insideView: { from: THREE.Vector3; look: THREE.Vector3 } | null = null;
   private readonly look = new THREE.Vector3();
@@ -88,6 +92,11 @@ export class CameraDirector {
   /** Where the next round is aimed. Only the close-up follows it. */
   setAim(aim: THREE.Vector3): void {
     this.aimPoint.copy(aim);
+  }
+
+  /** The frame the shot is drawn in (identity for a level run), so the tracking shot follows the round where it really flies. */
+  setFrame(frame: THREE.Matrix4): void {
+    this.frame.copy(frame);
   }
 
   /** The inside view of a building's room, or null when the target is not one (the inside mode then falls back to the side view). */
@@ -224,10 +233,11 @@ export class CameraDirector {
     if (t === null || !timeline) return false;
     const frame = samplePrimary(timeline, t);
     if (!frame) return false;
-    const p = frame.pos;
+    const p = this.framePos.set(frame.pos.x, frame.pos.y, frame.pos.z).applyMatrix4(this.frame);
+    const d = this.frameDir.set(frame.dir.x, frame.dir.y, frame.dir.z).transformDirection(this.frame);
     // Low, slightly behind and to the side of the bullet, looking just ahead of its nose.
-    pose.position.set(p.x - 0.16, p.y + 0.04, p.z + 0.2);
-    pose.look.set(p.x + frame.dir.x * 0.08, p.y + frame.dir.y * 0.08, p.z + frame.dir.z * 0.08);
+    pose.position.set(p.x - 0.16 * d.x, p.y + 0.04 - 0.16 * d.y, p.z + 0.2 - 0.16 * d.z);
+    pose.look.set(p.x + d.x * 0.08, p.y + d.y * 0.08, p.z + d.z * 0.08);
     pose.ease = EASE_RATE.tracking;
     return true;
   }
