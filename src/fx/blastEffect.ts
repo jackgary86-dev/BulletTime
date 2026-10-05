@@ -88,7 +88,11 @@ function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3
     // The burnt fuel rolls up into a dark, rising smoke head.
     particles.add({ ...base, look: 'dust', t0: e.t + 4e-3, duration: 4e-3, axis: new THREE.Vector3(0, 1, 0), spread: 0.9, count: 45, speed: [radius * 15, radius * 50], size: [radius * 0.5, radius], life: [14e-3, 30e-3], drag: 120, color: 0x2e2b28, colorJitter: 0.15, grow: 2.5, seed: seed + 4 });
   }
-  // No lingering grey smoke card: against a face it read as a big dark splat pasted on the material.
+  // Smoke: dark and slow, hanging after the flame has gone. A charge in mid-air keeps it; a shell or warhead
+  // bursting on a face does not, where the card read as a big dark splat pasted on the material.
+  if (e.pressureKPa !== undefined) {
+    particles.add({ ...base, look: 'dust', t0: e.t + 400e-6, duration: 1.5e-3, count: 50, speed: [radius * 30, radius * 120], size: [radius * 0.4, radius * 0.9], life: [8e-3, 20e-3], drag: 300, color: 0x3a3733, colorJitter: 0.2, grow: 2.2, seed: seed + 1 });
+  }
   if (kind !== 'thermobaric') {
     // Sparks and hot bits thrown out by the burst.
     particles.add({ ...base, look: 'spark', duration: 100e-6, count: kind === 'incendiary' ? 160 : 100, speed: [radius * 150, radius * 900], size: [0.003, 0.008], life: [4e-3, 12e-3], drag: 90, color: 0xffc070, stretch: 3, seed: seed + 2 });
