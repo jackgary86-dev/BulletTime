@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { MediumLook, MediumSpec } from '../data/media';
+import { buildingForFront } from '../data/buildings';
+import { createBuilding } from './buildings';
 import { createTank } from './tank';
 import { woodTexture } from './textures';
 
@@ -55,6 +57,14 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
       return createMat(spec, t, shotY);
     case 'tankHull':
       return createTank(spec, t, shotY);
+    case 'blockHouse':
+    case 'frameInfill':
+    case 'frameColumn':
+    case 'shedSheet': {
+      // A building's struck wall builds the building; its far wall is just a wall.
+      const building = buildingForFront(spec.id);
+      return building ? createBuilding(building, shotY) : new THREE.Group();
+    }
     default:
       return bottom > 0.03 ? createCart(spec, t, shotY, bottom) : createMat(spec, t, shotY);
   }

@@ -4,6 +4,7 @@ import { bloodColor, onReducedGoreChange, reducedGore } from '../data/content';
 import { ORGANIC_LAYOUTS } from '../data/organic';
 import { stackOffsets, type StackLayer } from '../data/stacks';
 import { createSupport, SHARED_STAND_MATERIALS } from './stands';
+import { brickMaterial, concreteMaterial, shedSheetMaterial } from './buildings';
 import { hullPaint } from './tank';
 import { bowlingBallTexture, watermelonTexture, concreteMaps, brickMaps, BRICK_TILE_M, drywallPaperMaps, gelSurfaceMaps, paintFlakeNormalMap, woodMaps, wovenBagMaps, steelPlateMaps, waterRippleNormalMap } from './textures';
 
@@ -273,6 +274,19 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
     case 'tankHull':
       // The tank's near hull side, painted olive; the rest of the vehicle is its support.
       return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), hullPaint()), PLATE_BODY_NAME);
+
+    case 'blockHouse':
+    case 'frameColumn':
+      return new THREE.Mesh(tileUvs(new THREE.BoxGeometry(t, h, w), 0.5), concreteMaterial());
+
+    case 'frameInfill':
+      return new THREE.Mesh(tileUvs(new THREE.BoxGeometry(t, h, w), BRICK_TILE_M), brickMaterial());
+
+    case 'shedSheet': {
+      // Corrugated sheet, its ribs about 100 mm apart.
+      const geometry = tileUvs(new THREE.BoxGeometry(Math.max(t, 0.002), h, w), 0.4);
+      return new THREE.Mesh(geometry, shedSheetMaterial());
+    }
 
     case 'cinderBlock': {
       // Front and back shells joined by webs set in from the top and bottom, so the

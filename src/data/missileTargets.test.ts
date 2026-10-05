@@ -11,8 +11,8 @@ describe('Missile target list (#245)', () => {
 
   it('has no entry under 2 m across, so no gel, wood, glass or small plate', () => {
     expect(list.length).toBeGreaterThan(0);
-    // A vehicle (#231) is listed for its size, though the struck plate is a band of its side.
-    for (const m of list.filter((x) => !x.vehicle)) expect(Math.min(m.heightM, m.widthM), m.id).toBeGreaterThanOrEqual(MISSILE_MIN_FACE_M);
+    // A vehicle or building (#231, #246) is listed for its size, though the struck plate is a band of its side.
+    for (const m of list.filter((x) => !x.structure)) expect(Math.min(m.heightM, m.widthM), m.id).toBeGreaterThanOrEqual(MISSILE_MIN_FACE_M);
     const ids = list.map((m) => m.id);
     for (const small of ['gel10', 'pine', 'glass', 'drywall', 'rha', 'steel-mild']) expect(ids).not.toContain(small);
     expect(ids).toEqual(expect.arrayContaining(['rha-plate', 'mild-plate', 'ar500-plate', 'cast-iron-plate']));

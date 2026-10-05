@@ -12,6 +12,8 @@ import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
 import { siteShotY, type SiteId } from './data/sites';
+import { buildingForFront } from './data/buildings';
+import type { MediumSpec } from './data/media';
 import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
 import { createPostFx, type PostFx } from './scene/postfx';
@@ -85,7 +87,12 @@ export class Lane {
 
   /** Largest face dimension in the target, in metres, for framing. */
   get faceSpan(): number {
-    return Math.max(0.3, ...this.setup.layers.map((l) => Math.max(l.medium.heightM, l.medium.widthM)));
+    // A building's struck wall is one panel of it: frame the whole building (#246).
+    const span = (m: MediumSpec) => {
+      const b = buildingForFront(m.id);
+      return b ? Math.max(b.heightM, b.widthM) : Math.max(m.heightM, m.widthM);
+    };
+    return Math.max(0.3, ...this.setup.layers.map((l) => span(l.medium)));
   }
 
   get depth(): number {
