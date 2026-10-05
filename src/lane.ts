@@ -11,6 +11,7 @@ import { TargetEffects } from './fx/targetEffects';
 import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
 import { createTargetStack, disposeTarget, SHOT_Y, TARGET_FRONT_X } from './models/targets';
+import { siteShotY, type SiteId } from './data/sites';
 import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
 import { createPostFx, type PostFx } from './scene/postfx';
@@ -63,17 +64,23 @@ export class Lane {
     public setup: TargetSetup,
     public spec: BulletSpec,
     scene: THREE.Scene = new THREE.Scene(),
+    /** Where the shots happen (#231): the indoor lab bench, or the outdoor proving ground. */
+    readonly site: SiteId = 'lab',
   ) {
     this.scene = scene;
-    this.studio = createStudio(this.scene, renderer);
+    this.studio = createStudio(this.scene, renderer, site);
     this.postFx = createPostFx(renderer, this.scene, camera);
-    this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y, 0));
     this.scene.add(this.muzzle.group, this.shot.group, this.effects.group);
     this.setTarget(setup);
   }
 
   get lineY(): number {
-    return shotLineY(this.setup);
+    return shotLineY(this.setup, this.baseY);
+  }
+
+  /** Height of the target's centre above the ground: the bench line, or on the range half the tallest layer (#231). */
+  get baseY(): number {
+    return this.setup.dummy ? SHOT_Y : siteShotY(this.site, this.setup.layers.map((l) => l.medium));
   }
 
   /** Largest face dimension in the target, in metres, for framing. */
@@ -91,7 +98,8 @@ export class Lane {
       this.scene.remove(this.targetGroup);
       disposeTarget(this.targetGroup);
     }
-    this.targetGroup = setup.dummy ? createDummy(setup.dummy) : createTargetStack(setup.layers, setup.angleDeg);
+    this.targetGroup = setup.dummy ? createDummy(setup.dummy) : createTargetStack(setup.layers, setup.angleDeg, this.baseY);
+    this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, this.baseY, 0));
     this.scene.add(this.targetGroup);
     this.studio.fitContactShadow(this.targetGroup);
     this.clear();
@@ -167,8 +175,8 @@ export class Lane {
         damage: priorDamage(this.session),
         resolution: this.quality.fineSimulation ? ULTRA_RESOLUTION : STANDARD_RESOLUTION,
       });
-      // Stored relative to the bench shot line, so the muzzle can follow it.
-      part.shots[0].aim = { y: lineY - SHOT_Y + y, z };
+      // Stored relative to the target's centre line, so the muzzle can follow it.
+      part.shots[0].aim = { y: lineY - this.baseY + y, z };
       this.session = appendShot(this.session, part, offset);
       offset = plan.mode === 'burst' ? fireStart + ((i + 1) * 60) / plan.rpm : offset + part.duration + GROUP_GAP_S;
     });
@@ -176,7 +184,7 @@ export class Lane {
     this.lastFireStart = fireStart;
     this.shot.load(timeline, this.setup.layers[0]?.medium.hardness);
     if (this.targetGroup) this.effects.load(timeline, this.targetGroup, layers, angleDeg);
-    if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim));
+    if (hasMuzzle(this.spec)) for (const shot of timeline.shots) this.effects.particles.add(muzzleSmoke(shot.start, shot.aim, this.baseY));
     addVapourTrails(timeline, this.effects.particles);
     // Let the dust settle before the shot ends, so the final frame shows the holes and craters.
     timeline.duration = Math.max(timeline.duration, Math.min(this.effects.endTime, timeline.duration + EFFECT_TAIL_S));
@@ -210,7 +218,7 @@ export class Lane {
     // The muzzle flash belongs to whichever shot is playing, at that shot's aim point.
     const current = timeline && t !== null ? activeShot(timeline, t) : null;
     const flash = current && hasMuzzle(getBullet(current.bulletId)) ? current : null;
-    if (flash) this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, SHOT_Y + flash.aim.y, flash.aim.z));
+    if (flash) this.muzzle.setPosition(new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M, this.baseY + flash.aim.y, flash.aim.z));
     this.muzzle.update(flash && t !== null ? t - flash.start : null, camera);
     const { shockwave } = this.postFx;
     // A detonation's blast front takes over from the muzzle shell while it is passing.
@@ -245,12 +253,12 @@ function blastShock(events: Timeline['events'], t: number): { center: THREE.Vect
 }
 
 /** The grey puff of powder smoke that rolls out of the barrel behind the flash (#63, #65). */
-function muzzleSmoke(start: number, aim: { y: number; z: number }): BurstSpec {
+function muzzleSmoke(start: number, aim: { y: number; z: number }, baseY: number): BurstSpec {
   return {
     look: 'dust',
     t0: start + 60e-6,
     duration: 600e-6,
-    origin: new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M + 0.01, SHOT_Y + aim.y, aim.z),
+    origin: new THREE.Vector3(TARGET_FRONT_X - STAND_OFF_M + 0.01, baseY + aim.y, aim.z),
     originJitter: 0.008,
     axis: new THREE.Vector3(1, 0, 0),
     spread: 0.7,
@@ -266,9 +274,9 @@ function muzzleSmoke(start: number, aim: { y: number; z: number }): BurstSpec {
   };
 }
 
-/** Height of the shot line: the usual bench height, or the dummy region being shot. */
-export function shotLineY(setup: TargetSetup): number {
-  return setup.dummy ? getRegion(setup.dummy).shotY : SHOT_Y;
+/** Height of the shot line: the target's centre (`baseY`, the bench height by default), or the dummy region being shot. */
+export function shotLineY(setup: TargetSetup, baseY = SHOT_Y): number {
+  return setup.dummy ? getRegion(setup.dummy).shotY : baseY;
 }
 
 /** Half-height and half-width that every layer covers, so an aimed shot hits the whole stack. */

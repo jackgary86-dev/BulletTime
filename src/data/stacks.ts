@@ -97,6 +97,20 @@ export const STACK_PRESETS: StackPreset[] = [
     layers: [{ medium: 'ar500-plate', thickness: 0.025 }, { medium: 'rha-plate', thickness: 0.1, gapM: 0.3 }],
     heavy: true,
   },
+  // Full-size walls on the proving ground (#231).
+  { id: 'bunker', name: 'Bunker wall', layers: [{ medium: 'bunker-wall' }], heavy: true },
+  {
+    id: 'bunker-berm',
+    name: 'Bunker wall backed by earth',
+    layers: [{ medium: 'bunker-wall', thickness: 0.4 }, { medium: 'earth-berm-full', gapM: 0.05 }],
+    heavy: true,
+  },
+  {
+    id: 'brick-cavity',
+    name: 'Cavity brick wall',
+    layers: [{ medium: 'brick-wall-full', thickness: 0.1 }, { medium: 'brick-wall-full', thickness: 0.1, gapM: 0.05 }],
+    heavy: true,
+  },
   {
     id: 'plate-concrete',
     name: 'Plate in front of concrete',

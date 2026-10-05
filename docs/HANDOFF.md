@@ -69,6 +69,8 @@ What display work is left:
 - The explainer diagrams for HESH and HE fragments exist but those families have no model yet; the lab shows a notice ("not modelled yet") until #164 and #170 land.
 - Un-modelled families throw from `simulateArmor`; the screen catches that and shows the message.
 
+- **#231, proving ground:** Artillery, Missile and Explosion are set outdoors (`src/data/sites.ts` picks the site per mode; `src/scene/rangeSet.ts` builds the gravel range, concrete pad, berm, tree line, sky and sun, in the same `Studio` slot as the lab). On the range a target stands on the ground: its centre line is half the tallest layer, never below 0.6 m (`siteShotY`), threaded through `createTargetStack(..., shotY)`, `Lane.baseY` and the glass cracks. Shot aims are stored relative to `Lane.baseY`. New heavy targets: `bunker-wall`, `brick-wall-full` (procedural `brickMaps`, look `brickWall`), `earth-berm-full`, and presets `bunker`, `bunker-berm`, `brick-cavity`. `CameraDirector.setOutdoors` gives a three-quarter side view; the camera far plane and orbit distance grow on the range. Not done yet: the procedural tank target (second PR for #231).
+
 ## Ticket state
 
 Epic #186 (3 versions x 4 modes). Everything for the four simulators is closed. Still open there:

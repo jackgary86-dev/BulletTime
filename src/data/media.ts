@@ -31,6 +31,8 @@ export type MediumLook =
   | 'drywall'
   | 'concrete'
   | 'cinderBlock'
+  /** A full-size fired brick wall in running bond, for the proving ground (#231). */
+  | 'brickWall'
   | 'mildSteel'
   /** Car door skins (#60): mild steel physics, painted outer and primed inner panel. */
   | 'carDoorOuter'
@@ -717,6 +719,63 @@ export const MEDIA: MediumSpec[] = [
     hardness: 0.1,
     yawNeckScale: 0.3,
     allowsExpansion: false,
+  },
+  // Full-size walls for the proving ground (#231): they stand on the ground at full height.
+  {
+    id: 'bunker-wall',
+    name: 'Bunker wall (full size)',
+    description: 'A 5 m by 3 m reinforced concrete bunker wall. Shells crater and spall it; only the largest go through.',
+    behaviour: 'concrete',
+    look: 'concrete',
+    density: 2400,
+    thickness: { min: 0.2, max: 2, default: 0.6 },
+    heightM: 3,
+    widthM: 5,
+    angleAdjustable: true,
+    dragCoefficient: 0.9,
+    resistancePa: 750e6,
+    hardness: 0.75,
+    ricochetAngleDeg: 66,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'brick-wall-full',
+    name: 'Brick wall (full size)',
+    description: 'A 5 m by 3 m fired brick wall, one or two bricks thick. Breaches with a spray of brick and mortar.',
+    behaviour: 'concrete',
+    look: 'brickWall',
+    density: 1900,
+    thickness: { min: 0.1, max: 0.45, default: 0.23 },
+    heightM: 3,
+    widthM: 5,
+    angleAdjustable: true,
+    dragCoefficient: 1.0,
+    resistancePa: 120e6,
+    hardness: 0.55,
+    ricochetAngleDeg: 70,
+    yawNeckScale: 0.1,
+    allowsExpansion: false,
+    heavy: true,
+  },
+  {
+    id: 'earth-berm-full',
+    name: 'Earth berm (full size)',
+    description: 'A 6 m wide, 2.5 m high bank of packed earth. Soaks up a shell over a long path and throws up a column of soil.',
+    behaviour: 'sand',
+    look: 'sandbag',
+    density: 1800,
+    thickness: { min: 0.5, max: 4, default: 2 },
+    heightM: 2.5,
+    widthM: 6,
+    angleAdjustable: false,
+    dragCoefficient: 1.1,
+    resistancePa: 25e6,
+    hardness: 0.1,
+    yawNeckScale: 0.3,
+    allowsExpansion: false,
+    heavy: true,
   },
   {
     id: 'sandbag',
