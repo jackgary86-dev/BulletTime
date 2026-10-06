@@ -42,6 +42,8 @@ export interface HoleSpec {
     /** Height ÷ width of the pit, on top of the hole's own stretch (spall and scab are not round). */
     stretch?: number;
   };
+  /** A soft-edged scorch or soot cloud: a noisy radial fade rather than a hard shape (a shell's blast on steel). */
+  scorch?: { radius: number; color: THREE.ColorRepresentation; opacity: number };
   /** Thin cracks radiating from the hole (concrete). */
   cracks?: {
     count: number;
@@ -124,6 +126,26 @@ export class HoleMarks {
         }),
       );
       object.add(crater);
+    }
+
+    if (spec.scorch) {
+      const sc = spec.scorch;
+      const scorch = new THREE.Mesh(
+        new THREE.PlaneGeometry(sc.radius * 2, sc.radius * 2 * stretch),
+        new THREE.MeshStandardMaterial({
+          color: sc.color,
+          alphaMap: scorchTexture(),
+          opacity: sc.opacity,
+          transparent: true,
+          roughness: 1,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        }),
+      );
+      // A quarter turn per seed, so two scorches on one wall do not share the same blotches.
+      scorch.rotation.z = rand() * Math.PI * 2;
+      object.add(scorch);
     }
 
     if (spec.cracks) {
@@ -269,4 +291,38 @@ export class HoleMarks {
       }
     }
   }
+}
+
+let scorchMap: THREE.CanvasTexture | null = null;
+
+/** White at the centre fading to nothing at the edge, broken up with noise so it reads as soot, not a gradient. */
+function scorchTexture(): THREE.CanvasTexture {
+  if (scorchMap) return scorchMap;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const fade = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  fade.addColorStop(0, 'rgba(255,255,255,1)');
+  fade.addColorStop(0.45, 'rgba(255,255,255,0.8)');
+  fade.addColorStop(0.75, 'rgba(255,255,255,0.35)');
+  fade.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, size, size);
+  // Soot is patchy: lots of small bites out of the cloud, a few bright flecks in it.
+  const rand = seededRandom(7);
+  for (let i = 0; i < 900; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 1 + rand() * 9;
+    ctx.fillStyle = rand() < 0.8 ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.18)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  scorchMap = new THREE.CanvasTexture(canvas);
+  return scorchMap;
 }

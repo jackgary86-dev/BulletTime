@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { getBullet } from '../data/bullets';
 import { createBulletModel, disposeBulletModel, type BulletModel } from '../models/bullet';
 import { BULLET_MATERIALS } from '../models/materials';
-import { bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
+import { bodyCrumples, bodyVisible, crumpleDuration, crumpleProgress } from '../sim/crumple';
 import { sampleTrack } from '../sim/sample';
 import type { Keyframe, Timeline } from '../sim/types';
 import { createMissileTrail, hazeColumn, motorLight, type MissileTrail } from './missileTrail';
@@ -103,7 +103,7 @@ export class ShotRenderer {
         // Powered missiles carry a rocket plume and a smoke trail; a kinetic penetrator coasts.
         const trail = spec.shape === 'missile' ? this.spareTrails.pop() ?? createMissileTrail() : undefined;
         if (trail) this.group.add(trail.group);
-        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, trail, crumples: !!spec.blast || spec.shape === 'missile', air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
+        this.bullets.push({ model, trackId: shot.primaryId, wake, streak, trail, crumples: bodyCrumples(spec), air: airIntervals(timeline.tracks[shot.primaryId], timeline.events) });
       }
     }
   }
