@@ -61,6 +61,14 @@ export type MediumLook =
   | 'paperStack'
   /** The water inside a jug, with its neck, cap and handle (#240). */
   | 'waterJug'
+  // Sheet materials with a look of their own (#261)
+  | 'polycarbonate'
+  | 'mdf'
+  | 'osb'
+  | 'cementBoard'
+  | 'fibreglass'
+  | 'kevlar'
+  | 'ceramicTile'
   // Showpiece objects (#156)
   | 'bowlingBall'
   | 'steelBall'
@@ -770,7 +778,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Polycarbonate sheet',
     description: 'Tough clear plastic, the bullet-resistant kind in layers. Stretches and tears rather than shattering.',
     behaviour: 'plastic',
-    look: 'glass',
+    look: 'polycarbonate',
     density: 1200,
     thickness: { min: 0.002, max: 0.025, default: 0.006 },
     stockThicknessM: [0.003, 0.006, 0.012, 0.019, 0.025],
@@ -789,7 +797,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'MDF board',
     description: 'Fine wood fibre and resin. Dense and uniform, with no grain: it crumbles into dust and splinters.',
     behaviour: 'wood',
-    look: 'pine',
+    look: 'mdf',
     density: 750,
     thickness: { min: 0.006, max: 0.036, default: 0.018 },
     stockThicknessM: [0.006, 0.012, 0.018, 0.025],
@@ -808,7 +816,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'OSB board',
     description: 'Strands of wood glued in layers, as sheathing on a house. Weaker than plywood and ragged at the exit.',
     behaviour: 'wood',
-    look: 'oak',
+    look: 'osb',
     density: 650,
     thickness: { min: 0.006, max: 0.028, default: 0.011 },
     stockThicknessM: [0.0095, 0.011, 0.018],
@@ -827,7 +835,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Cement board',
     description: 'Cement and glass fibre sheet behind tile. Harder than drywall: it cracks and throws grey dust.',
     behaviour: 'drywall',
-    look: 'cinderBlock',
+    look: 'cementBoard',
     density: 1300,
     thickness: { min: 0.006, max: 0.02, default: 0.0127 },
     stockThicknessM: [0.006, 0.0127],
@@ -846,7 +854,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Fibreglass sheet',
     description: 'Glass cloth in resin, as in boat hulls and panels. It splits and fuzzes at the exit.',
     behaviour: 'plastic',
-    look: 'plasticJug',
+    look: 'fibreglass',
     density: 1800,
     thickness: { min: 0.002, max: 0.012, default: 0.006 },
     stockThicknessM: [0.002, 0.003, 0.006, 0.01],
@@ -865,7 +873,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Kevlar panel (soft armour)',
     description: 'Layers of woven aramid. Each layer catches the bullet and spreads its energy: a pistol round stops, a rifle round does not.',
     behaviour: 'plastic',
-    look: 'phoneCell',
+    look: 'kevlar',
     density: 1200,
     thickness: { min: 0.002, max: 0.03, default: 0.008 },
     stockThicknessM: [0.004, 0.008, 0.012, 0.016, 0.024],
@@ -884,7 +892,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Ceramic tile',
     description: 'Fired clay glaze on a hard body. Brittle: it breaks into sharp pieces round the hit.',
     behaviour: 'glass',
-    look: 'cinderBlock',
+    look: 'ceramicTile',
     density: 2300,
     thickness: { min: 0.006, max: 0.02, default: 0.009 },
     stockThicknessM: [0.006, 0.009, 0.012],

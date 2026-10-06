@@ -116,6 +116,12 @@ describe('replay links in the material checklist (#261)', () => {
     }
   });
 
+  it('parks the new sheet rows in the close-up camera, where a thin sheet fills the frame', () => {
+    const rows = checklist.split('\n').filter((line) => /medium=(steel-stainless|polycarbonate|mdf|osb|cement-board|fibreglass|kevlar|ceramic-tile)&thickness=/.test(line));
+    expect(rows.length).toBeGreaterThanOrEqual(8);
+    for (const row of rows) expect(row, row.slice(0, 40)).toContain('view=closeup');
+  });
+
   it('only names materials that exist, at thicknesses they allow', () => {
     expect(links.length).toBeGreaterThan(20);
     for (const { id, thickness } of links) {

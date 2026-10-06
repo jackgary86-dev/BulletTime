@@ -393,6 +393,56 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
         new THREE.MeshPhysicalMaterial({ color: 0xf1f3ef, roughness: 0.35, transmission: 0.55, thickness: t * 4, ior: 1.5, attenuationColor: new THREE.Color(0xdfe6e2), attenuationDistance: 0.02 }),
       );
 
+    case 'polycarbonate': {
+      // Clear sheet with a faint blue-grey tint and bright, slightly green cut edges.
+      const sheet = new THREE.MeshPhysicalMaterial({ color: 0xdbe6ee, roughness: 0.08, transparent: true, opacity: 0.32, clearcoat: 1, depthWrite: false, ior: 1.58 });
+      const edge = new THREE.MeshPhysicalMaterial({ color: 0xcfe3e6, roughness: 0.2, transparent: true, opacity: 0.7 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [sheet, sheet, edge, edge, edge, edge]);
+    }
+
+    case 'mdf': {
+      // Smooth, fine-grained brown fibreboard.
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('mdf', 128, 128, (c) => speckle(c, '#9c7b56', ['#8f6f4c', '#a98862', '#957452'], 1400, 2), 3), roughness: 0.9 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0x7e6243, roughness: 1 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
+    }
+
+    case 'osb': {
+      // Pressed wood strands in flat tan flakes.
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('osb', 256, 256, drawStrands, 2), roughness: 0.85 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xa88245, roughness: 1 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
+    }
+
+    case 'cementBoard': {
+      // Pale grey cement with the faint square of the glass mesh on the face.
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('cement', 128, 128, drawCementMesh, 2), roughness: 1 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xb9b8b2, roughness: 1 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
+    }
+
+    case 'fibreglass': {
+      // Translucent green-white laminate with the weave showing through.
+      const face = new THREE.MeshPhysicalMaterial({ map: cachedTexture('fibreglass', 128, 128, (c) => drawWeave(c, '#cfe3d5', '#b9d3c1', 8), 5), roughness: 0.4, transmission: 0.3, thickness: t, ior: 1.55 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xaecab6, roughness: 0.6 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
+    }
+
+    case 'kevlar': {
+      // Golden aramid fabric, a tight weave.
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('kevlar', 128, 128, (c) => drawWeave(c, '#d8b83e', '#b8982e', 4), 6), roughness: 0.75 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xa88a2c, roughness: 0.9 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
+    }
+
+    case 'ceramicTile': {
+      // A glazed white tile: glossy face, unglazed terracotta body on the back and edges.
+      const glaze = new THREE.MeshPhysicalMaterial({ color: 0xf4f4f0, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
+      const back = new THREE.MeshStandardMaterial({ color: 0xb8714a, roughness: 0.95 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xc98a62, roughness: 0.95 });
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [back, glaze, edge, edge, edge, edge]);
+    }
+
     case 'phoneBack':
       // Brushed aluminium back; named so the plate dishing works on it like on any thin metal.
       return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: 0xbfc4ca, roughness: 0.32, metalness: 1 })), PLATE_BODY_NAME);
@@ -772,4 +822,73 @@ function pageEdgeMaterial(): THREE.MeshStandardMaterial {
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
   map.repeat.set(1, 4);
   return new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
+}
+
+const textureCache = new Map<string, THREE.CanvasTexture>();
+
+/** A canvas texture drawn once and shared by every target that uses it (disposeTarget keeps shared textures). */
+function cachedTexture(key: string, width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void, repeat = 1): THREE.CanvasTexture {
+  let texture = textureCache.get(key);
+  if (!texture) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    draw(canvas.getContext('2d')!);
+    texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(repeat, repeat);
+    textureCache.set(key, texture);
+  }
+  return texture;
+}
+
+/** A flat colour sprinkled with small dots of other colours: fine fibre or aggregate. */
+function speckle(ctx: CanvasRenderingContext2D, base: string, dots: string[], count: number, size: number): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < count; i++) {
+    ctx.fillStyle = dots[i % dots.length];
+    ctx.fillRect((i * 73) % 128, (i * 151 + (i >> 3) * 17) % 128, size, size);
+  }
+}
+
+/** OSB: overlapping flat strands, each a slightly different tan, at mixed angles. */
+function drawStrands(ctx: CanvasRenderingContext2D): void {
+  ctx.fillStyle = '#b8914f';
+  ctx.fillRect(0, 0, 256, 256);
+  const tans = ['#c9a566', '#a98348', '#d2b27a', '#b58d4d', '#9c7740'];
+  for (let i = 0; i < 160; i++) {
+    ctx.save();
+    ctx.translate((i * 97) % 256, (i * 61 + (i >> 2) * 29) % 256);
+    ctx.rotate(((i * 37) % 180) * (Math.PI / 180));
+    ctx.fillStyle = tans[i % tans.length];
+    ctx.fillRect(-18, -4, 36 + (i % 3) * 8, 8);
+    ctx.restore();
+  }
+}
+
+/** Cement board: pale grey, grainy, with the faint square of the glass mesh. */
+function drawCementMesh(ctx: CanvasRenderingContext2D): void {
+  speckle(ctx, '#bdbcb6', ['#aeada7', '#cbcac4', '#a3a29c'], 900, 2);
+  ctx.strokeStyle = 'rgba(120, 130, 120, 0.35)';
+  ctx.lineWidth = 1;
+  for (let p = 0; p <= 128; p += 16) {
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, 128);
+    ctx.moveTo(0, p);
+    ctx.lineTo(128, p);
+    ctx.stroke();
+  }
+}
+
+/** A plain weave: over-under squares of two shades. */
+function drawWeave(ctx: CanvasRenderingContext2D, light: string, dark: string, cell: number): void {
+  for (let y = 0; y < 128; y += cell) {
+    for (let x = 0; x < 128; x += cell) {
+      ctx.fillStyle = ((x / cell + y / cell) & 1) === 0 ? light : dark;
+      ctx.fillRect(x, y, cell, cell);
+    }
+  }
 }

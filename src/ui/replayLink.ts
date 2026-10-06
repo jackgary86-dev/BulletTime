@@ -8,7 +8,8 @@
  * `at` is the time after the first impact: seconds (`0.0006`), microseconds (`60us`) or milliseconds (`1.2ms`).
  * On the proving ground, `preset` picks a target preset (a mock building, #246) and `witness` stands gel witness
  * blocks in its room (#249) as `distance:across` pairs in metres, e.g. `witness=0.3:0,1.5:-0.6`. In the Missile lab,
- * `dive` and `bearing` (degrees) set the approach (#250).
+ * `dive` and `bearing` (degrees) set the approach (#250). `view=closeup` (or `side`) picks the camera, so a thin
+ * sheet fills the frame instead of being a few pixels across (#261).
  */
 import type { Approach } from '../sim/approach';
 import type { WitnessBlock } from '../sim/witness';
@@ -26,6 +27,16 @@ export interface ReplayLink {
   witness?: WitnessBlock[];
   /** The missile's dive and bearing (#250). */
   approach?: Approach;
+  /** The camera the replay is parked in (#261): the default side view or the close-up. */
+  view?: ReplayView;
+}
+
+export type ReplayView = 'side' | 'closeup';
+const VIEWS: readonly ReplayView[] = ['side', 'closeup'];
+
+/** The camera named by `view`, or undefined when it is missing or not one a replay can park in. */
+export function parseView(text: string | null): ReplayView | undefined {
+  return VIEWS.find((v) => v === text);
 }
 
 /** `0.3:0,1.5:-0.6` for these blocks. */
@@ -82,6 +93,7 @@ export function parseReplayLink(search: string): ReplayLink | null {
     preset: params.get('preset') || undefined,
     witness: parseWitness(params.get('witness')),
     approach: parseApproach(params.get('dive'), params.get('bearing')),
+    view: parseView(params.get('view')),
   };
 }
 

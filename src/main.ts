@@ -462,6 +462,8 @@ async function bootstrap(): Promise<void> {
   }
   // A replay link may change the target and round after start-up, which re-frames the view: snap to it in still mode.
   if (isStill()) director.reset();
+  // A replay link's camera (#261): a close-up for thin sheets that are a few pixels across from the side.
+  if (link?.view && !laneB) director.resetTo(link.view);
   // Tells a screenshot run (#243) the scene is built and any replay link is parked.
   document.body.dataset.ready = 'true';
 }

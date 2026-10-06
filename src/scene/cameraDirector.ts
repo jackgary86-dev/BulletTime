@@ -140,8 +140,14 @@ export class CameraDirector {
 
   /** Back to the default framing, snapping rather than easing. */
   reset(): void {
-    this.setMode('side');
-    this.sidePose(this.pose);
+    this.resetTo('side');
+  }
+
+  /** Jumps straight to a mode's framing (the side view or the close-up), for a replay link's `view` (#261). */
+  resetTo(mode: CameraMode): void {
+    this.setMode(mode);
+    if (mode === 'closeup') this.closeupPose(this.pose);
+    else this.sidePose(this.pose);
     this.camera.position.copy(this.pose.position);
     this.look.copy(this.pose.look);
     this.camera.lookAt(this.look);

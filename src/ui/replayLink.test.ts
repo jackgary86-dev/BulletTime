@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatApproach, formatWitness, parseReplayLink, parseReplayTime, parseWitness } from './replayLink';
+import { formatApproach, formatWitness, parseReplayLink, parseReplayTime, parseView, parseWitness } from './replayLink';
 
 describe('replay deep link (#230)', () => {
   it.each([
@@ -58,3 +58,12 @@ describe('replay link: missile approach (#250)', () => {
   });
 });
 
+describe('replay link: camera view (#261)', () => {
+  it('accepts the side view and the close-up, and ignores anything else', () => {
+    expect(parseView('closeup')).toBe('closeup');
+    expect(parseView('side')).toBe('side');
+    for (const bad of [null, '', 'orbit', 'CLOSEUP', 'inside']) expect(parseView(bad)).toBeUndefined();
+    expect(parseReplayLink('?at=1ms&view=closeup')?.view).toBe('closeup');
+    expect(parseReplayLink('?at=1ms')?.view).toBeUndefined();
+  });
+});

@@ -29,6 +29,13 @@ const LOOKS: Record<string, Look> = {
   plasticJug: { hole: 0x101418, raw: 0xf2f2ec, face: 0xe8ecea },
   paperStack: { hole: 0x24211c, raw: 0xf4f1e8, face: 0xe6e0d0 },
   phoneCell: { hole: 0x0c0c0e, raw: 0x9a9ea6, face: 0x2a2d33 },
+  // Sheet materials with a look of their own (#261): the hole, the cut edge and the crushed face.
+  polycarbonate: { hole: 0x0d1114, raw: 0xdce8ee, face: 0xc3d3db },
+  mdf: { hole: 0x1a120b, raw: 0xb99a72, face: 0x8c7150 },
+  osb: { hole: 0x160e07, raw: 0xcaa569, face: 0xb08a50 },
+  cementBoard: { hole: 0x1c1c1b, raw: 0xd2d1cc, face: 0xa8a7a1 },
+  fibreglass: { hole: 0x0f1411, raw: 0xe2eee0, face: 0xc7dac6 },
+  kevlar: { hole: 0x0c0b08, raw: 0xe2c64c, face: 0xc7a73a },
 };
 
 export function loadPanelEffect(
