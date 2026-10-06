@@ -465,6 +465,8 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
       );
       water.position.y = -h * 0.07;
       water.name = WATER_BODY_NAME;
+      // A closed container: the water effect throws a hydraulic burst out of it, not the crown of an open tank (#240).
+      water.userData.closed = true;
       jug.add(water);
       const plastic = new THREE.MeshPhysicalMaterial({ color: 0xf1f3ef, roughness: 0.35, transmission: 0.55, thickness: 0.004, ior: 1.5 });
       const top = h * 0.5;

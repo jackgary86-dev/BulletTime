@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { jugSpray } from './jugSpray';
 import { reducedGore } from '../data/content';
 import { isPrimary } from '../sim/session';
 import type { CavitySample, ShotEvent, Timeline } from '../sim/types';
@@ -125,7 +126,7 @@ export class GelEffect {
     const local = (e: ShotEvent) => ({ y: e.pos.y - this.blockCentre.y, z: e.pos.z - this.blockCentre.z });
     for (const e of primaryEvents(timeline, layer, 'entry')) this.entries.push({ t: e.t, ...local(e) });
     for (const e of primaryEvents(timeline, layer, 'exit')) this.exits.push({ t: e.t, speed: e.speed, ...local(e) });
-    if (style === 'water') this.addWaterDebris(timeline, layer, samples);
+    if (style === 'water') this.addWaterDebris(timeline, layer, samples, !!block.userData.closed);
     else this.addDebris(timeline, layer);
     this.updateSettleT();
   }
@@ -357,9 +358,13 @@ export class GelEffect {
     mesh.visible = visible;
   }
 
-  private addWaterDebris(timeline: Timeline, layer: number, samples: CavitySample[]): void {
+  private addWaterDebris(timeline: Timeline, layer: number, samples: CavitySample[], closed = false): void {
     const waterColour = 0x8fb4c8;
+    const exits = primaryEvents(timeline, layer, 'exit');
     for (const impact of primaryEvents(timeline, layer, 'entry')) {
+      // A closed jug sprays harder than an open tank: scale the crown and jet with the round (jugSpray.ts, #240).
+      const spray = closed ? jugSpray(impact.speed, exits[0]?.speed ?? null) : null;
+      const scale = spray?.entryScale ?? 1;
       // A crown of spray thrown back off the tank wall round the hole, drawn out into streaks and sheets.
       this.particles.add({
         look: 'droplet',
@@ -370,7 +375,7 @@ export class GelEffect {
         axis: new THREE.Vector3(-1, 0, 0),
         spread: 1.25,
         innerSpread: 0.75,
-        count: 180,
+        count: Math.round(180 * scale),
         speed: [4, 10 + impact.speed * 0.03],
         size: [0.0007, 0.002],
         life: [3e-3, 9e-3],
@@ -387,7 +392,7 @@ export class GelEffect {
         origin: new THREE.Vector3(impact.pos.x - 0.004, impact.pos.y, impact.pos.z),
         axis: new THREE.Vector3(-1, 0.1, 0),
         spread: 0.35,
-        count: 140,
+        count: Math.round(140 * scale),
         speed: [3, 12 + impact.speed * 0.02],
         size: [0.001, 0.0028],
         life: [3e-3, 9e-3],
@@ -397,12 +402,75 @@ export class GelEffect {
         stretch: 1.8,
       });
     }
+    if (closed) {
+      // The hydraulic ram (#240): the pressure wave blows water out of the exit hole in a hard cone, a mist hangs,
+      // and a fast round throws the cap off the top. The open-tank surface heave below does not apply to a closed jug.
+      const first = primaryEvents(timeline, layer, 'entry')[0];
+      const spray = first ? jugSpray(first.speed, exits[0]?.speed ?? null) : null;
+      const out = exits[0] ?? first;
+      if (spray && out) {
+        const outX = exits[0] ? out.pos.x + 0.004 : out.pos.x + this.half.x * 2;
+        this.particles.add({
+          look: 'droplet',
+          t0: out.t + 80e-6,
+          duration: 2.2e-3,
+          origin: new THREE.Vector3(outX, out.pos.y, out.pos.z),
+          originJitter: 0.012,
+          axis: new THREE.Vector3(1, 0.05, 0),
+          spread: spray.exitSpread,
+          innerSpread: 0.1,
+          count: spray.exitCount,
+          speed: spray.exitSpeed,
+          size: [0.0012, 0.0045],
+          life: [5e-3, 14e-3],
+          drag: 40,
+          gravity: 9.8,
+          color: waterColour,
+          stretch: 3.2,
+        });
+        this.particles.add({
+          look: 'vapour',
+          t0: out.t + 200e-6,
+          duration: 3e-3,
+          origin: new THREE.Vector3(outX, out.pos.y, out.pos.z),
+          originJitter: 0.03,
+          axis: new THREE.Vector3(1, 0.1, 0),
+          spread: 1.0,
+          count: spray.mist,
+          speed: [1, 8],
+          size: [0.01, 0.035],
+          life: [8e-3, 22e-3],
+          drag: 30,
+          gravity: -0.5,
+          color: 0xdbe9ef,
+          colorJitter: 0.1,
+          grow: 2.5,
+        });
+        if (spray.capPops) {
+          this.particles.add({
+            look: 'chunk',
+            t0: out.t + 150e-6,
+            duration: 1e-6,
+            origin: new THREE.Vector3(this.blockCentre.x, this.blockCentre.y + this.half.y + 0.07, this.blockCentre.z),
+            axis: new THREE.Vector3(0.1, 1, 0),
+            spread: 0.35,
+            count: 1,
+            speed: [5, 9],
+            size: [0.028, 0.034],
+            life: [60e-3, 90e-3],
+            drag: 1,
+            gravity: 9.8,
+            color: 0x2a6fd6,
+          });
+        }
+      }
+    }
     // The surface heaves above the cavity and throws up a sheet of spray.
     const surfaceY = this.blockCentre.y + this.half.y;
     let peak = samples[0];
     for (const s of samples) if (s.radius > peak.radius) peak = s;
     const reach = peak.radius - (surfaceY - peak.pos.y) * 0.5;
-    if (reach > 0) {
+    if (reach > 0 && !closed) {
       this.particles.add({
         look: 'droplet',
         t0: peak.t + RISE_BASE_S + RISE_PER_M_S * peak.radius * 0.6,
