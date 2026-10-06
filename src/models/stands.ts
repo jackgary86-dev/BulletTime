@@ -46,6 +46,7 @@ export function createSupport(spec: MediumSpec, t: number, shotY: number, look: 
     case 'gong':
       return createHanger(spec, t, shotY, look === 'gong');
     case 'glass':
+    case 'phoneScreen':
     case 'polycarbonate':
       return createFrame(spec, t, shotY, aluminium, false);
     case 'fibreglass':

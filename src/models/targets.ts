@@ -443,6 +443,15 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [back, glaze, edge, edge, edge, edge]);
     }
 
+    case 'phoneScreen': {
+      // A phone display (#240): glossy black glass with a dim lit panel under it, in a bright aluminium bezel.
+      const screen = new THREE.MeshPhysicalMaterial({ color: 0x07090c, roughness: 0.04, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03, emissive: 0x16283a, emissiveIntensity: 0.9 });
+      const rear = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.4 });
+      const bezel = new THREE.MeshStandardMaterial({ color: 0xb8bdc4, roughness: 0.3, metalness: 1 });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z; the shot arrives on -x.
+      return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [rear, screen, bezel, bezel, bezel, bezel]);
+    }
+
     case 'phoneBack':
       // Brushed aluminium back; named so the plate dishing works on it like on any thin metal.
       return named(new THREE.Mesh(new THREE.BoxGeometry(t, h, w), new THREE.MeshStandardMaterial({ color: 0xbfc4ca, roughness: 0.32, metalness: 1 })), PLATE_BODY_NAME);
