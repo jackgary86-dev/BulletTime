@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '../sim/random';
-import { createGpuMesh, gpuParticleBoost, type GpuKind, type GpuLookMesh } from './gpuParticles';
+import { createGpuMesh, gpuParticleBoost, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
 
 /**
  * Deterministic, scrubbable particle bursts. Every particle is fully described
@@ -14,13 +14,23 @@ export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'sp
 /** Looks drawn as soft, camera-facing cloud cards. */
 const CLOUD: ReadonlySet<ParticleLook> = new Set(['dust', 'vapour']);
 
-/** Looks the GPU path can fly (see gpuParticles.ts), and how each is drawn. */
+/** How the GPU path (see gpuParticles.ts) flies each look: all of them. */
 const GPU_LOOKS: ReadonlyMap<ParticleLook, GpuKind> = new Map<ParticleLook, GpuKind>([
   ['chunk', 'solid'],
   ['grain', 'solid'],
+  ['flake', 'solid'],
+  ['shard', 'solid'],
+  ['splinter', 'splinter'],
   ['dust', 'cloud'],
   ['vapour', 'cloud'],
+  ['blob', 'bit'],
+  ['droplet', 'droplet'],
+  ['spark', 'spark'],
+  ['chain', 'chain'],
 ]);
+
+/** The looks that cast a shadow. */
+const CASTS_SHADOW: ReadonlySet<ParticleLook> = new Set(['chunk', 'splinter', 'grain', 'flake']);
 
 /** Height of the lab floor; debris that reaches it stops there instead of falling through. */
 export const FLOOR_Y = 0;
@@ -191,7 +201,7 @@ export class ParticleSystem {
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
       const gpuKind = this.gpuBoost > 0 ? GPU_LOOKS.get(look) : undefined;
       if (gpuKind) {
-        const gpu = createGpuMesh(gpuKind, config.geometry, config.material, config.cap * MAX_CAP_SCALE * this.gpuBoost, SOLID.has(look), MAX_BLUR);
+        const gpu = createGpuMesh(gpuKind, config.geometry, config.material, config.cap * MAX_CAP_SCALE * this.gpuBoost, CASTS_SHADOW.has(look), gpuConstants());
         this.gpuMeshes.set(look, gpu);
         this.meshes.set(look, gpu.mesh);
         this.particles.set(look, []);
@@ -202,7 +212,7 @@ export class ParticleSystem {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
-      mesh.castShadow = look === 'chunk' || look === 'splinter' || look === 'grain' || look === 'flake';
+      mesh.castShadow = CASTS_SHADOW.has(look);
       // Instance colours need an initialised buffer before the first draw.
       mesh.setColorAt(0, new THREE.Color(1, 1, 1));
       this.meshes.set(look, mesh);
@@ -238,13 +248,13 @@ export class ParticleSystem {
     const list = this.particles.get(spec.look)!;
     const gpu = this.gpuMeshes.get(spec.look);
     const have = gpu ? gpu.count : list.length;
-    const cap = Math.floor((this.meshes.get(spec.look)!.instanceMatrix.count / MAX_CAP_SCALE) * this.capScale);
+    const cap = Math.floor(((gpu ? gpu.capacity : this.meshes.get(spec.look)!.instanceMatrix.count) / MAX_CAP_SCALE) * this.capScale);
     const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + have * 7919);
     const count = Math.max(0, Math.min(Math.round(spec.count * this.density * (gpu ? this.gpuBoost : 1)), cap - have));
     this.shownT = NaN;
     if (gpu) {
       // No object per particle: the burst is written straight into the instance buffers.
-      gpu.spawn(spec, rand, count, { solid: SOLID.has(spec.look), freeFlight: this.freeFlight, floorY: FLOOR_Y });
+      gpu.spawn(spec, rand, count, spawnOptions(spec.look, this.freeFlight));
       return;
     }
     const base = new THREE.Color(spec.color);
@@ -429,6 +439,26 @@ const SPARK_RAMP = [
   { k: 0.75, c: new THREE.Color(0.6, 0.1, 0.02) },
   { k: 1, c: new THREE.Color(0.12, 0.02, 0) },
 ];
+
+/** What the GPU path needs to know about a look to spawn it as the CPU path would. */
+export function spawnOptions(look: ParticleLook, freeFlight: boolean): SpawnOptions {
+  const droplet = look === 'droplet';
+  const lands = SOLID.has(look) || look === 'spark' || droplet;
+  return {
+    shape: SOLID.has(look) || droplet,
+    floor: !freeFlight && lands,
+    droplet,
+    splatLifeS: SPLAT_LIFE_S,
+    board: !freeFlight && droplet ? BOARD : null,
+    floorY: FLOOR_Y,
+    freeFlight,
+  };
+}
+
+/** The numbers the GPU shaders share with this file. */
+function gpuConstants(): GpuConstants {
+  return { maxBlur: MAX_BLUR, splatSpread: SPLAT_SPREAD, sparkExposure: SPARK_EXPOSURE_S, sparkRamp: SPARK_RAMP };
+}
 
 function sparkColor(q: Particle, lifeK: number): THREE.Color {
   // Each spark cools at its own rate: small, fast ones go dark first.

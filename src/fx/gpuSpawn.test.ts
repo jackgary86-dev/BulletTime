@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { seededRandom } from '../sim/random';
 import { writeBurst, type SpawnBuffers } from './gpuParticles';
-import { FLOOR_Y, ParticleSystem, type BurstSpec, type ParticleLook } from './particles';
+import { ParticleSystem, spawnOptions, type BurstSpec, type ParticleLook } from './particles';
 
 /** The CPU path's per-particle state, as ParticleSystem keeps it. */
 interface CpuParticle {
@@ -21,6 +21,7 @@ interface CpuParticle {
   aspect: THREE.Vector3;
   landAge: number;
   landPos: THREE.Vector3 | null;
+  landNormal: 'y' | 'z';
   color: THREE.Color;
 }
 
@@ -39,8 +40,6 @@ function buffers(n: number): SpawnBuffers {
   const f = (k: number) => new Float32Array(n * k);
   return { P: f(4), V: f(4), A: f(4), AX: f(4), ST: f(4), AS: f(4), LA: f(4), C: f(3) };
 }
-
-const SOLID_LOOKS: ReadonlySet<ParticleLook> = new Set(['chunk', 'splinter', 'shard', 'grain', 'flake']);
 
 const spec = (look: ParticleLook, over: Partial<BurstSpec>): BurstSpec => ({
   look,
@@ -66,6 +65,18 @@ const cases: [string, BurstSpec, boolean][] = [
   ['dust cloud cards', spec('dust', { grow: 3, gravity: 0.2, drag: 4, life: [0.01, 0.04] }), false],
   ['vapour', spec('vapour', { grow: 4, drag: 20 }), false],
   ['chunks in free flight', spec('chunk', { gravity: 9.8 }), true],
+  ['splinters that land, stretched along their length', spec('splinter', { gravity: 9.8, stretch: 5 }), false],
+  ['flakes that land', spec('flake', { gravity: 9.8 }), false],
+  ['shards that land', spec('shard', { gravity: 9.8, drag: 0.5 }), false],
+  ['blobs, which stay aloft', spec('blob', { gravity: 9.8, grow: 1.5 }), false],
+  ['chain grains', spec('chain', { drag: 0, speed: [0.01, 0.05], life: [0.01, 0.03] }), false],
+  [
+    'drops that land on the floor and spatter on the board',
+    spec('droplet', { origin: new THREE.Vector3(0.1, 0.2, 0), axis: new THREE.Vector3(0, -0.1, -1), spread: 0.6, speed: [3, 10], size: [0.002, 0.006], life: [0.3, 1.2], drag: 2, gravity: 9.8, stretch: 1.5 }),
+    false,
+  ],
+  ['sparks that skip off the floor', spec('spark', { gravity: 9.8, drag: 8, speed: [5, 30], life: [0.3, 0.8], stretch: 3, colorJitter: 0.2 }), false],
+  ['drops in free flight', spec('droplet', { origin: new THREE.Vector3(0.1, 0.2, 0), axis: new THREE.Vector3(0, 0, -1), gravity: 9.8 }), true],
 ];
 
 describe('GPU spawn writes what the CPU path builds', () => {
@@ -78,7 +89,7 @@ describe('GPU spawn writes what the CPU path builds', () => {
       expect(cpu.length).toBe(burst.count);
 
       const buf = buffers(burst.count);
-      const latest = writeBurst(buf, 0, burst, seededRandom(burst.seed!), burst.count, { solid: SOLID_LOOKS.has(burst.look), freeFlight, floorY: FLOOR_Y });
+      const latest = writeBurst(buf, 0, burst, seededRandom(burst.seed!), burst.count, spawnOptions(burst.look, freeFlight));
 
       // Float32 storage: compare to a few parts per million.
       const same = (got: number, want: number, what: string, i: number) => {
@@ -110,7 +121,9 @@ describe('GPU spawn writes what the CPU path builds', () => {
         same(at(buf.ST, 2), q.start.z, 'start.z', i);
         same(at(buf.ST, 3), q.start.w, 'start.w', i);
         same(at(buf.AS, 0), q.aspect.x, 'aspect.x', i);
-        same(at(buf.AS, 1), q.aspect.y, 'aspect.y', i);
+        // A drop's second shape factor is unused once it splats, so the GPU path keeps which surface it hit there instead.
+        if (burst.look === 'droplet') same(at(buf.AS, 1), q.landNormal === 'z' ? 1 : 0, 'surface', i);
+        else same(at(buf.AS, 1), q.aspect.y, 'aspect.y', i);
         same(at(buf.AS, 2), q.aspect.z, 'aspect.z', i);
         same(at(buf.AS, 3), q.stretch, 'stretch', i);
         same(at(buf.LA, 3), q.grow, 'grow', i);
@@ -130,8 +143,9 @@ describe('GPU spawn writes what the CPU path builds', () => {
       });
       same(latest, end, 'latest end', 0);
       // The landing cases must actually exercise the floor search, and free flight must never land.
-      if (name.includes('land')) expect(landed).toBeGreaterThan(20);
-      if (freeFlight || burst.look === 'dust' || burst.look === 'vapour') expect(landed).toBe(0);
+      if (name.includes('land') || name.includes('skip')) expect(landed).toBeGreaterThan(20);
+      if (name.includes('board')) expect(cpu.filter((q) => q.landNormal === 'z' && q.landPos).length).toBeGreaterThan(5);
+      if (freeFlight || ['dust', 'vapour', 'blob', 'chain'].includes(burst.look)) expect(landed).toBe(0);
     });
   }
 });
