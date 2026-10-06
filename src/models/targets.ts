@@ -384,35 +384,35 @@ function buildBody(spec: MediumSpec, t: number, look: MediumLook): THREE.Object3
 
     case 'mdf': {
       // Smooth, fine-grained brown fibreboard.
-      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('mdf', 128, 128, (c) => speckle(c, '#9c7b56', ['#8f6f4c', '#a98862', '#957452'], 1400, 2)), roughness: 0.9 });
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('mdf', 128, 128, (c) => speckle(c, '#9c7b56', ['#8f6f4c', '#a98862', '#957452'], 1400, 2), 3), roughness: 0.9 });
       const edge = new THREE.MeshStandardMaterial({ color: 0x7e6243, roughness: 1 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
     }
 
     case 'osb': {
       // Pressed wood strands in flat tan flakes.
-      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('osb', 256, 256, drawStrands), roughness: 0.85 });
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('osb', 256, 256, drawStrands, 2), roughness: 0.85 });
       const edge = new THREE.MeshStandardMaterial({ color: 0xa88245, roughness: 1 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
     }
 
     case 'cementBoard': {
       // Pale grey cement with the faint square of the glass mesh on the face.
-      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('cement', 128, 128, drawCementMesh), roughness: 1 });
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('cement', 128, 128, drawCementMesh, 2), roughness: 1 });
       const edge = new THREE.MeshStandardMaterial({ color: 0xb9b8b2, roughness: 1 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
     }
 
     case 'fibreglass': {
       // Translucent green-white laminate with the weave showing through.
-      const face = new THREE.MeshPhysicalMaterial({ map: cachedTexture('fibreglass', 128, 128, (c) => drawWeave(c, '#cfe3d5', '#b9d3c1', 8)), roughness: 0.4, transmission: 0.3, thickness: t, ior: 1.55 });
+      const face = new THREE.MeshPhysicalMaterial({ map: cachedTexture('fibreglass', 128, 128, (c) => drawWeave(c, '#cfe3d5', '#b9d3c1', 8), 5), roughness: 0.4, transmission: 0.3, thickness: t, ior: 1.55 });
       const edge = new THREE.MeshStandardMaterial({ color: 0xaecab6, roughness: 0.6 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
     }
 
     case 'kevlar': {
       // Golden aramid fabric, a tight weave.
-      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('kevlar', 128, 128, (c) => drawWeave(c, '#d8b83e', '#b8982e', 4)), roughness: 0.75 });
+      const face = new THREE.MeshStandardMaterial({ map: cachedTexture('kevlar', 128, 128, (c) => drawWeave(c, '#d8b83e', '#b8982e', 4), 6), roughness: 0.75 });
       const edge = new THREE.MeshStandardMaterial({ color: 0xa88a2c, roughness: 0.9 });
       return new THREE.Mesh(new THREE.BoxGeometry(t, h, w), [face, face, edge, edge, edge, edge]);
     }
@@ -809,7 +809,7 @@ function pageEdgeMaterial(): THREE.MeshStandardMaterial {
 const textureCache = new Map<string, THREE.CanvasTexture>();
 
 /** A canvas texture drawn once and shared by every target that uses it (disposeTarget keeps shared textures). */
-function cachedTexture(key: string, width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+function cachedTexture(key: string, width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void, repeat = 1): THREE.CanvasTexture {
   let texture = textureCache.get(key);
   if (!texture) {
     const canvas = document.createElement('canvas');
@@ -819,6 +819,7 @@ function cachedTexture(key: string, width: number, height: number, draw: (ctx: C
     texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(repeat, repeat);
     textureCache.set(key, texture);
   }
   return texture;
