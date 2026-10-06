@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '../sim/random';
+import { createGpuMesh, gpuParticleBoost, type GpuKind, type GpuLookMesh } from './gpuParticles';
 
 /**
  * Deterministic, scrubbable particle bursts. Every particle is fully described
@@ -12,6 +13,14 @@ export type ParticleLook = 'chunk' | 'droplet' | 'blob' | 'dust' | 'spark' | 'sp
 
 /** Looks drawn as soft, camera-facing cloud cards. */
 const CLOUD: ReadonlySet<ParticleLook> = new Set(['dust', 'vapour']);
+
+/** Looks the GPU path can fly (see gpuParticles.ts), and how each is drawn. */
+const GPU_LOOKS: ReadonlyMap<ParticleLook, GpuKind> = new Map<ParticleLook, GpuKind>([
+  ['chunk', 'solid'],
+  ['grain', 'solid'],
+  ['dust', 'cloud'],
+  ['vapour', 'cloud'],
+]);
 
 /** Height of the lab floor; debris that reaches it stops there instead of falling through. */
 export const FLOOR_Y = 0;
@@ -155,6 +164,9 @@ export class ParticleSystem {
   readonly group = new THREE.Group();
   private readonly meshes = new Map<ParticleLook, THREE.InstancedMesh>();
   private readonly particles = new Map<ParticleLook, Particle[]>();
+  /** Prototype (?gpuparticles=N): these looks are flown by the vertex shader, with N times the usual count and cap. */
+  private readonly gpuMeshes = new Map<ParticleLook, GpuLookMesh>();
+  private readonly gpuBoost = gpuParticleBoost();
   /** Multiplies every burst's particle count (the quality setting, #16). */
   density = 1;
   /** Multiplies each look's particle cap, up to MAX_CAP_SCALE (the quality setting, #16; Ultra goes above 1, #38). */
@@ -177,6 +189,15 @@ export class ParticleSystem {
     this.flashLight.name = 'impact-flash';
     this.group.add(this.flashLight);
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
+      const gpuKind = this.gpuBoost > 0 ? GPU_LOOKS.get(look) : undefined;
+      if (gpuKind) {
+        const gpu = createGpuMesh(gpuKind, config.geometry, config.material, config.cap * MAX_CAP_SCALE * this.gpuBoost, SOLID.has(look), MAX_BLUR);
+        this.gpuMeshes.set(look, gpu);
+        this.meshes.set(look, gpu.mesh);
+        this.particles.set(look, []);
+        this.group.add(gpu.mesh);
+        continue;
+      }
       const mesh = new THREE.InstancedMesh(config.geometry, config.material, config.cap * MAX_CAP_SCALE);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
@@ -194,6 +215,7 @@ export class ParticleSystem {
   get endTime(): number {
     let end = 0;
     for (const list of this.particles.values()) for (const q of list) end = Math.max(end, q.t0 + q.life);
+    for (const gpu of this.gpuMeshes.values()) end = Math.max(end, gpu.endTime);
     return end;
   }
 
@@ -208,15 +230,23 @@ export class ParticleSystem {
     this.flashLight.intensity = 0;
     for (const list of this.particles.values()) list.length = 0;
     for (const mesh of this.meshes.values()) mesh.count = 0;
+    for (const gpu of this.gpuMeshes.values()) gpu.clear();
     this.shownT = NaN;
   }
 
   add(spec: BurstSpec): void {
     const list = this.particles.get(spec.look)!;
+    const gpu = this.gpuMeshes.get(spec.look);
+    const have = gpu ? gpu.count : list.length;
     const cap = Math.floor((this.meshes.get(spec.look)!.instanceMatrix.count / MAX_CAP_SCALE) * this.capScale);
-    const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + list.length * 7919);
-    const count = Math.max(0, Math.min(Math.round(spec.count * this.density), cap - list.length));
+    const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + have * 7919);
+    const count = Math.max(0, Math.min(Math.round(spec.count * this.density * (gpu ? this.gpuBoost : 1)), cap - have));
     this.shownT = NaN;
+    if (gpu) {
+      // No object per particle: the burst is written straight into the instance buffers.
+      gpu.spawn(spec, rand, count, { solid: SOLID.has(spec.look), freeFlight: this.freeFlight, floorY: FLOOR_Y });
+      return;
+    }
     const base = new THREE.Color(spec.color);
     const axis = spec.axis.clone().normalize();
     const helper = Math.abs(axis.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
@@ -296,6 +326,12 @@ export class ParticleSystem {
     this.flashLight.intensity = best;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
+      const gpu = this.gpuMeshes.get(look);
+      if (gpu) {
+        gpu.flush();
+        gpu.setTime(t, shutterS);
+        continue;
+      }
       const fade = CLOUD.has(look) ? (mesh.geometry.getAttribute('instanceFade') as THREE.InstancedBufferAttribute) : null;
       let n = 0;
       for (const q of list) {
