@@ -4,7 +4,7 @@
 // CI can run it on every platform (under xvfb on Linux). Enabled with BULLETTIME_SMOKE=1.
 const MODES = ['bullet', 'artillery', 'missile', 'explosion'];
 // Four simulators, each waited on until its start-up has finished (shader warm-up included).
-const TIMEOUT_MS = 360_000;
+const TIMEOUT_MS = process.env.BULLETTIME_SMOKE_ULTRA === '1' ? 900_000 : 360_000;
 
 /** Runs `fn` in the page until it returns a truthy value, or fails after `ms`. */
 async function waitFor(win, label, expression, ms = 30_000) {
@@ -51,6 +51,29 @@ async function run(win, base) {
     await waitFor(win, `${mode} to report a shot`, `!/No shots yet/.test(document.body.innerText)`);
     console.log(`smoke: ${mode} fired`);
   }
+
+  // 3. Ultra quality and saved settings (#184), only with BULLETTIME_SMOKE_ULTRA=1: Ultra renders at four times
+  // the pixels, which the software renderer on CI runners cannot do in time. The first lab picks Ultra in the
+  // menu; every later lab must come up already on Ultra, which is the saved setting read back from storage.
+  if (process.env.BULLETTIME_SMOKE_ULTRA === '1') {
+    const quality = `document.querySelector('#quality-select')`;
+    for (const [i, mode] of MODES.entries()) {
+      await win.loadURL(`${base}/index.html?mode=${mode}`);
+      await waitFor(win, `${mode} to be ready at Ultra`, `!!${buttonByText('Fire')} && !!document.querySelector('canvas') && document.body.dataset.ready === 'true'`, 180_000);
+      if (i === 0) {
+        const offered = await win.webContents.executeJavaScript(`[...${quality}.options].some((o) => o.value === 'ultra')`);
+        if (!offered) throw new Error('the desktop app does not offer Ultra quality');
+        await win.webContents.executeJavaScript(`(() => { const s = ${quality}; s.value = 'ultra'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      } else {
+        const saved = await win.webContents.executeJavaScript(`${quality}.value`);
+        if (saved !== 'ultra') throw new Error(`${mode} did not start on the saved Ultra quality (it shows "${saved}")`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await win.webContents.executeJavaScript(`${buttonByText('Fire')}.click()`);
+      await waitFor(win, `${mode} to report a shot at Ultra`, `!/No shots yet/.test(document.body.innerText)`, 120_000);
+      console.log(`smoke: ${mode} fired at Ultra${i === 0 ? '' : ' (saved setting)'}`);
+    }
+  }
 }
 
 /**
@@ -64,6 +87,13 @@ function benignShaderWarning(message) {
 
 module.exports = function smoke(win, base, app) {
   const errors = [];
+  // Offline operation (#184): every request must stay inside the app. Anything aimed at the network is
+  // refused here, so the run proves the app works with no connection, and is reported as a failure.
+  win.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    const external = /^(https?|wss?|ftp):/i.test(details.url);
+    if (external) errors.push(`network request: ${details.url}`);
+    callback({ cancel: external });
+  });
   win.webContents.on('console-message', (event) => {
     if (event.level === 'error' && !benignShaderWarning(event.message)) errors.push(event.message);
   });

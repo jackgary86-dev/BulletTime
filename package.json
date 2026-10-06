@@ -23,6 +23,7 @@
     "desktop": "npm run build:desktop && electron .",
     "dist": "npm run build:desktop && electron-builder",
     "smoke": "node scripts/smoke-desktop.mjs",
+    "smoke:ultra": "node scripts/smoke-desktop.mjs --ultra",
     "screenshots:steam": "node scripts/steam-screenshots.mjs",
     "dist:steam": "node scripts/build-steam.mjs"
   },
