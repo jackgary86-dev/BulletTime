@@ -55,6 +55,8 @@ export type MediumLook =
   | 'plasticJug'
   /** A phone's battery pouch: dark laminate (#240). */
   | 'phoneCell'
+  /** A phone's display glass: dark and glossy over a dim lit screen, in an aluminium bezel (#240). */
+  | 'phoneScreen'
   /** A phone's aluminium back (#240). */
   | 'phoneBack'
   /** A phone book: a block of paper pages in a cover (#240). */
@@ -1534,7 +1536,7 @@ export const MEDIA: MediumSpec[] = [
     name: 'Phone display glass',
     description: 'Chemically strengthened cover glass, 0.7 mm.',
     behaviour: 'glass',
-    look: 'glass',
+    look: 'phoneScreen',
     density: 2450,
     thickness: { min: 0.0005, max: 0.002, default: 0.0007 },
     heightM: 0.15,

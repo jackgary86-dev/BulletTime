@@ -3,6 +3,7 @@ import type { MediumSpec } from '../data/media';
 import { sampleTrack } from '../sim/sample';
 import type { Timeline } from '../sim/types';
 import { MAX_FRAGMENT_HOLES, breachRadiusM, fragmentHoleRadiusM } from './breach';
+import { piercePlan } from './phonePierce';
 import type { HoleMarks } from './holes';
 import type { ParticleSystem } from './particles';
 
@@ -49,6 +50,8 @@ export function loadPanelEffect(
   const look = LOOKS[medium.look] ?? LOOKS.pine;
   // A phone book is a wood-class stop in the physics but tears like paper: flakes and pale dust, no splinters.
   const paper = medium.look === 'paperStack';
+  // A phone's battery pouch: it flashes and sparks as it is pierced (#240).
+  const cell = medium.look === 'phoneCell';
   const wood = medium.behaviour === 'wood' && !paper;
   const events = timeline.events.filter((e) => e.layer === layer);
   let seed = 1;
@@ -91,6 +94,17 @@ export function loadPanelEffect(
     const normal = toVec(e.normal ?? { x: e.type === 'exit' ? 1 : -1, y: 0, z: 0 });
     const origin = toVec(e.pos);
 
+    if (cell && (e.type === 'impact' || e.type === 'enter')) {
+      // The foil shorts as the round goes through: a white-hot flash and a burst of sparks (#240).
+      const plan = piercePlan(energy);
+      particles.addFlash(e.t, origin.clone().addScaledVector(normal, 0.02), plan.flashCd * weight, plan.flashDecayS, 0xfff2d6);
+      particles.add({ ...burst('chunk', e.t, origin, normal, 1.0, plan.sparks * weight, plan.sparkSpeed, [0.002, 0.005], 0xffd9a0, { stretch: 3 }), look: 'spark' as const, drag: 70, life: [3e-3, 9e-3] as [number, number] });
+    }
+    if (cell && e.type === 'exit') {
+      // A puff of pale electrolyte vapour out of the back.
+      const plan = piercePlan(energy);
+      particles.add({ ...dust(e.t, origin, normal, 0.8, plan.vapour * weight, 0xe8ecef, 0.05), look: 'vapour' as const, life: [15e-3, 40e-3] as [number, number], speed: [1, 6] as [number, number], grow: 2.5 });
+    }
     if (e.type === 'impact' || e.type === 'enter') {
       holes.add({
         t: e.t,
