@@ -33,3 +33,12 @@ export function crumpledLength(lengthM: number, progress: number): number {
 export function bodyVisible(sinceContactS: number, durationS: number): boolean {
   return sinceContactS < durationS + CLEAR_AFTER_S;
 }
+
+/**
+ * Whether a round's body stays on show and folds after the burst (#248): a missile does, and so does any head that
+ * forms a jet (the body crushes behind it). A fragmentation shell's casing bursts into the fragments the physics
+ * already throws, so it must not be left lying whole on the face.
+ */
+export function bodyCrumples(spec: { shape?: string; blast?: { jet?: unknown } }): boolean {
+  return spec.shape === 'missile' || !!spec.blast?.jet;
+}

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MediumSpec } from '../data/media';
 import { sampleTrack } from '../sim/sample';
 import type { Timeline } from '../sim/types';
+import { MAX_FRAGMENT_HOLES, breachRadiusM, fragmentHoleRadiusM } from './breach';
 import type { HoleMarks } from './holes';
 import type { ParticleSystem } from './particles';
 
@@ -51,10 +52,36 @@ export function loadPanelEffect(
   const wood = medium.behaviour === 'wood' && !paper;
   const events = timeline.events.filter((e) => e.layer === layer);
   let seed = 1;
+  let fragmentHoles = 0;
 
   for (const e of events) {
     const track = timeline.tracks.find((tr) => tr.id === e.trackId);
-    if (!track || track.kind === 'fragment') continue;
+    if (!track) continue;
+    if (track.kind === 'fragment') {
+      // Shell fragments perforate a panel they strike: a small torn hole each, up to a cap (#240).
+      if ((e.type === 'impact' || e.type === 'enter') && fragmentHoles < MAX_FRAGMENT_HOLES) {
+        fragmentHoles++;
+        holes.add({ t: e.t, pos: e.pos, normal: toVec(e.normal ?? { x: -1, y: 0, z: 0 }), radius: fragmentHoleRadiusM(track.baseDiameter), ragged: 0.6, color: look.hole, seed: 5000 + fragmentHoles });
+      }
+      continue;
+    }
+    // A shell or warhead bursting on this panel blows a ragged hole through it, sized by the yield (#240).
+    if (e.type === 'detonate' && e.pressureKPa === undefined) {
+      const radius = breachRadiusM(e.yieldKg ?? 0, medium.behaviour, Math.min(medium.heightM, medium.widthM));
+      if (radius > 0) {
+        holes.add({
+          t: e.t,
+          pos: e.pos,
+          normal: toVec(e.normal ?? { x: -1, y: 0, z: 0 }),
+          radius,
+          ragged: 0.9,
+          color: look.hole,
+          rim: { count: 18, length: [radius * 0.3, radius * 0.7], width: radius * 0.35, color: look.raw, lift: 0.8 },
+          seed: seed++,
+        });
+      }
+      continue;
+    }
     // Pellets and later bursts get lighter effects so buckshot stays readable.
     const weight = track.kind === 'pellet' ? 0.25 : 1;
     const frame = sampleTrack(track, e.t);

@@ -9,6 +9,7 @@ import type { MediumSpec } from '../data/media';
 import { concreteFootprint } from './concreteDamage';
 import { planDishes } from './plateDishMath';
 import { scaleBurst, shellScale } from './shellScale';
+import { SCAR_LAYERS, scarRadiusM } from './blastScar';
 
 /**
  * Concrete, cinder block and steel plate: craters, cracks, dents, sparks, lead
@@ -53,7 +54,9 @@ export function loadHardEffect(timeline: Timeline, layers: TargetLayer[], partic
       const shed = e.type === 'exit' ? timeline.tracks.filter((tr) => tr.kind === 'fragment' && Math.abs(tr.spawnT - e.t) < 1e-5).length : 0;
       // The back face is bulged by the time the plate gives way (#221): the exit hole sits on top of the bulge.
       const dish = e.type === 'exit' ? dishes.find((x) => x.layer === e.layer && x.trackId === e.trackId) : undefined;
-      steelEvent(ctx, e, medium.look === 'ar500', perforated, shed, dish?.depthM ?? 0, particles, holes, seed++, !!medium.brittle);
+      // A shell that bursts on the face (a detonation on this layer by this round) leaves a scorched blast scar (#240).
+      const burst = timeline.events.find((x) => x.type === 'detonate' && x.pressureKPa === undefined && x.layer === e.layer && x.trackId === e.trackId);
+      steelEvent(ctx, e, medium.look === 'ar500', perforated, shed, dish?.depthM ?? 0, particles, holes, seed++, !!medium.brittle, burst?.yieldKg ?? 0);
     }
   }
 }
@@ -178,6 +181,8 @@ function steelEvent(
   holes: HoleMarks,
   seed: number,
   brittle = false,
+  /** TNT-equivalent yield of a shell that burst on this face (kg), 0 for a plain strike (#240). */
+  blastKg = 0,
 ): void {
   const { diameter: d, k, weight: w, normal, origin } = c;
   // Particle sizes are tuned for bullets: chips, sparks and the flash grow with the round (#234).
@@ -187,50 +192,78 @@ function steelEvent(
     addFlash: (t: number, pos: THREE.Vector3, intensity: number, decay: number) => system.addFlash(t, pos, intensity * s, decay),
   };
   if (e.type === 'impact' || e.type === 'enter') {
-    if (painted) {
-      // The hit blasts the paint off in a ragged disc of bare steel, with lead sprayed in rays across it.
+    const scar = scarRadiusM(blastKg, d);
+    if (scar > 0) {
+      // A shell burst on the face (#240): layered soot, scoured steel and a bright pitted centre, sized by the yield.
+      SCAR_LAYERS.forEach((layer, n) => {
+        holes.add({
+          t: e.t,
+          // Each layer rides a hair above the last, so they stack in order instead of fighting for the same plane.
+          pos: { x: e.pos.x + normal.x * 0.0004 * n, y: e.pos.y + normal.y * 0.0004 * n, z: e.pos.z + normal.z * 0.0004 * n },
+          normal,
+          radius: scar * layer.radius * 0.5,
+          ragged: 0.4,
+          color: layer.color,
+          noOpening: true,
+          noHalo: true,
+          crater: layer.soft ? undefined : { radius: scar * layer.radius, color: layer.color, roughness: layer.roughness, metalness: layer.metalness, irregularity: layer.irregularity },
+          scorch: layer.soft ? { radius: scar * layer.radius, color: layer.color, opacity: 0.92 } : undefined,
+          // Soot is thrown outward in streaks, and fine bright scratches mark the shrapnel's first strike.
+          streaks: n === 0 ? { count: 26, length: [scar * 1.4, scar * 3.4], width: scar * 0.09, color: 0x1b1a19 } : n === 1 ? { count: 16, length: [scar * 0.9, scar * 2.2], width: scar * 0.03, color: 0xd5d9de } : undefined,
+          glow: n === SCAR_LAYERS.length - 1 && perforated ? { radius: scar * 1.2, cool: GLOW_COOL_S } : undefined,
+          seed: seed + 700 + n,
+        });
+      });
+      if (painted) {
+        // The blasted paint leaves as a cloud of curled flakes, a lot of them for a shell.
+        particles.add({ ...bits('chunk', e.t, origin, normal, 1.2, 120 * w * (0.4 + k), [6, 40 + 30 * k], [0.0015, 0.004], STEEL.paint), look: 'flake', drag: 80 });
+      }
+    } else {
+      if (painted) {
+        // The hit blasts the paint off in a ragged disc of bare steel, with lead sprayed in rays across it.
+        holes.add({
+          t: e.t,
+          pos: e.pos,
+          normal,
+          radius: d,
+          ragged: 0.5,
+          color: STEEL.bare,
+          noOpening: true,
+          noHalo: true,
+          crater: { radius: d * (2.6 + 2 * k), color: STEEL.bare, roughness: 0.5, metalness: 0.35, irregularity: 0.7 },
+          streaks: { count: 18, length: [d * 2, d * (4 + 4 * k)], width: d * 0.35, color: STEEL.lead },
+          seed: seed + 900,
+        });
+        // The blasted paint leaves as a cloud of curled flakes.
+        particles.add({ ...bits('chunk', e.t, origin, normal, 1.2, 50 * w * (0.4 + k), [6, 30 + 30 * k], [0.0015, 0.004], STEEL.paint), look: 'flake', drag: 80 });
+      }
+      // A grey lead splatter with a bright, polished dent at its centre; the opening only appears if the plate is perforated.
       holes.add({
         t: e.t,
         pos: e.pos,
         normal,
         radius: d,
-        ragged: 0.5,
-        color: STEEL.bare,
+        ragged: 0.3,
+        color: STEEL.lead,
         noOpening: true,
         noHalo: true,
-        crater: { radius: d * (2.6 + 2 * k), color: STEEL.bare, roughness: 0.5, metalness: 0.35, irregularity: 0.7 },
-        streaks: { count: 18, length: [d * 2, d * (4 + 4 * k)], width: d * 0.35, color: STEEL.lead },
-        seed: seed + 900,
+        crater: { radius: d * (1.2 + 0.8 * k), color: STEEL.lead, roughness: 0.8, metalness: 0.1, irregularity: 0.3 },
+        seed: seed + 500,
       });
-      // The blasted paint leaves as a cloud of curled flakes.
-      particles.add({ ...bits('chunk', e.t, origin, normal, 1.2, 50 * w * (0.4 + k), [6, 30 + 30 * k], [0.0015, 0.004], STEEL.paint), look: 'flake', drag: 80 });
+      holes.add({
+        t: e.t,
+        pos: e.pos,
+        normal,
+        radius: d * 0.5,
+        ragged: 0.2,
+        color: STEEL.hole,
+        noOpening: true,
+        noHalo: true,
+        crater: { radius: d * (0.5 + 0.3 * k), color: STEEL.bright, roughness: 0.3, metalness: 0.6, irregularity: 0.15 },
+        glow: perforated ? { radius: d * 1.3, cool: GLOW_COOL_S } : undefined,
+        seed,
+      });
     }
-    // A grey lead splatter with a bright, polished dent at its centre; the opening only appears if the plate is perforated.
-    holes.add({
-      t: e.t,
-      pos: e.pos,
-      normal,
-      radius: d,
-      ragged: 0.3,
-      color: STEEL.lead,
-      noOpening: true,
-      noHalo: true,
-      crater: { radius: d * (1.2 + 0.8 * k), color: STEEL.lead, roughness: 0.8, metalness: 0.1, irregularity: 0.3 },
-      seed: seed + 500,
-    });
-    holes.add({
-      t: e.t,
-      pos: e.pos,
-      normal,
-      radius: d * 0.5,
-      ragged: 0.2,
-      color: STEEL.hole,
-      noOpening: true,
-      noHalo: true,
-      crater: { radius: d * (0.5 + 0.3 * k), color: STEEL.bright, roughness: 0.3, metalness: 0.6, irregularity: 0.15 },
-      glow: perforated ? { radius: d * 1.3, cool: GLOW_COOL_S } : undefined,
-      seed,
-    });
     if (brittle) {
       // Cast iron (#296) cracks rather than dents: dark cracks run out from the hit and angular chunks fly off the face.
       holes.add({
