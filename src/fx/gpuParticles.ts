@@ -92,6 +92,31 @@ const travelOf = (drag: number, age: number) => (drag > 0 ? (1 - Math.exp(-drag 
 const heightAt = (y0: number, vy: number, drag: number, gravity: number, age: number) => y0 + vy * travelOf(drag, age) - 0.5 * gravity * age * age;
 
 /**
+ * The age at which p0 + v (1 - e^(-k t)) / k - g t² / 2 comes down to `level`, given it starts above it and is at or
+ * below it by `tMax`. That height crosses a level once (it only ever falls after a rise, or falls throughout), so a
+ * Newton step kept inside a shrinking bracket finds it in a handful of steps where bisection needs 24. The CPU path
+ * bisects 24 times and returns the top of its bracket, so the two agree to about tMax / 2^24.
+ */
+function crossing(p0: number, v: number, drag: number, gravity: number, level: number, tMax: number): number {
+  let lo = 0;
+  let hi = tMax;
+  let t = 0.5 * tMax;
+  for (let i = 0; i < 40; i++) {
+    const decay = drag > 0 ? Math.exp(-drag * t) : 1;
+    const h = p0 + v * (drag > 0 ? (1 - decay) / drag : t) - 0.5 * gravity * t * t - level;
+    if (h <= 0) hi = t;
+    else lo = t;
+    const slope = v * decay - gravity * t;
+    let next = slope !== 0 ? t - h / slope : NaN;
+    // A Newton step that leaves the bracket (or goes nowhere) becomes a bisection step.
+    if (!(next > lo && next < hi)) next = 0.5 * (lo + hi);
+    if (Math.abs(next - t) <= 1e-12 + 1e-10 * t) return next;
+    t = next;
+  }
+  return hi;
+}
+
+/**
  * Writes `count` particles of a burst into the buffers from index `start`, and returns the latest time any of them
  * dies. This is the CPU path's `ParticleSystem.add` as plain arithmetic: no objects per particle, and the same
  * random numbers in the same order, so a burst is identical either way (gpuSpawn.test.ts holds them together).
@@ -209,18 +234,8 @@ export function writeBurst(buf: SpawnBuffers, start: number, spec: BurstSpec, ra
     if (opts.floor) {
       const rest = opts.floorY + size * 0.3;
       if (heightAt(py, vy, drag, gravity, life) <= rest) {
-        // Height is monotonic once falling, and the bits start above the floor, so bisect.
-        let hit = 0;
-        if (heightAt(py, vy, drag, gravity, 0) > rest) {
-          let lo = 0;
-          let hi = life;
-          for (let k = 0; k < 24; k++) {
-            const mid = (lo + hi) / 2;
-            if (heightAt(py, vy, drag, gravity, mid) <= rest) hi = mid;
-            else lo = mid;
-          }
-          hit = hi;
-        }
+        // A bit that starts at or below the floor is already down; otherwise find where it comes to it.
+        const hit = heightAt(py, vy, drag, gravity, 0) > rest ? crossing(py, vy, drag, gravity, rest, life) : 0;
         const travel = travelOf(drag, hit);
         landAge = hit;
         lx = px + vx * travel;
@@ -235,17 +250,12 @@ export function writeBurst(buf: SpawnBuffers, start: number, spec: BurstSpec, ra
       const reach = Math.min(life, landAge);
       const endTravel = travelOf(drag, reach);
       if (pz + vz * endTravel <= face && Math.abs(px + vx * endTravel - board.x) < board.halfWidth && heightAt(py, vy, drag, gravity, reach) < board.top && pz > face) {
-        let lo = 0;
-        let hi = reach;
-        for (let k = 0; k < 24; k++) {
-          const mid = (lo + hi) / 2;
-          if (pz + vz * travelOf(drag, mid) <= face) hi = mid;
-          else lo = mid;
-        }
-        const travel = travelOf(drag, hi);
-        landAge = hi;
+        // Distance along z has no gravity term, so it is the same crossing with g = 0.
+        const hit = crossing(pz, vz, drag, 0, face, reach);
+        const travel = travelOf(drag, hit);
+        landAge = hit;
         lx = px + vx * travel;
-        ly = heightAt(py, vy, drag, gravity, hi);
+        ly = heightAt(py, vy, drag, gravity, hit);
         lz = face;
         onBoard = 1;
       }
