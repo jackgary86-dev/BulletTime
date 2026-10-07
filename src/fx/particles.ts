@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '../sim/random';
-import { createGpuMesh, gpuParticleBoost, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
+import { boostFor, createGpuMesh, gpuParticleBoosts, type GpuBoosts, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
 
 /**
  * Deterministic, scrubbable particle bursts. Every particle is fully described
@@ -174,9 +174,10 @@ export class ParticleSystem {
   readonly group = new THREE.Group();
   private readonly meshes = new Map<ParticleLook, THREE.InstancedMesh>();
   private readonly particles = new Map<ParticleLook, Particle[]>();
-  /** Prototype (?gpuparticles=N): these looks are flown by the vertex shader, with N times the usual count and cap. */
+  /** Prototype (?gpuparticles=N, ?gpuboost=look:n): these looks are flown by the vertex shader, with more particles. */
   private readonly gpuMeshes = new Map<ParticleLook, GpuLookMesh>();
-  private readonly gpuBoost = gpuParticleBoost();
+  /** How many times the usual count and cap each look on the GPU path gets. */
+  private readonly lookBoost = new Map<ParticleLook, number>();
   /** Multiplies every burst's particle count (the quality setting, #16). */
   density = 1;
   /** Multiplies each look's particle cap, up to MAX_CAP_SCALE (the quality setting, #16; Ultra goes above 1, #38). */
@@ -194,15 +195,18 @@ export class ParticleSystem {
   /** Always in the scene (dark when idle), so lighting a flash never recompiles the materials. */
   readonly flashLight = new THREE.PointLight(0xffb060, 0, 0.8, 2);
 
-  constructor() {
+  constructor(gpuBoosts: GpuBoosts = gpuParticleBoosts()) {
     this.group.name = 'particles';
     this.flashLight.name = 'impact-flash';
     this.group.add(this.flashLight);
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
-      const gpuKind = this.gpuBoost > 0 ? GPU_LOOKS.get(look) : undefined;
+      const boost = boostFor(gpuBoosts, look);
+      const gpuKind = boost > 0 ? GPU_LOOKS.get(look) : undefined;
       if (gpuKind) {
-        const gpu = createGpuMesh(gpuKind, config.geometry, config.material, config.cap * MAX_CAP_SCALE * this.gpuBoost, CASTS_SHADOW.has(look), gpuConstants());
+        const capacity = Math.max(1, Math.round(config.cap * MAX_CAP_SCALE * boost));
+        const gpu = createGpuMesh(gpuKind, config.geometry, config.material, capacity, CASTS_SHADOW.has(look), gpuConstants());
         this.gpuMeshes.set(look, gpu);
+        this.lookBoost.set(look, boost);
         this.meshes.set(look, gpu.mesh);
         this.particles.set(look, []);
         this.group.add(gpu.mesh);
@@ -250,7 +254,7 @@ export class ParticleSystem {
     const have = gpu ? gpu.count : list.length;
     const cap = Math.floor(((gpu ? gpu.capacity : this.meshes.get(spec.look)!.instanceMatrix.count) / MAX_CAP_SCALE) * this.capScale);
     const rand = seededRandom(spec.seed ?? Math.floor(spec.t0 * 1e7) + have * 7919);
-    const count = Math.max(0, Math.min(Math.round(spec.count * this.density * (gpu ? this.gpuBoost : 1)), cap - have));
+    const count = Math.max(0, Math.min(Math.round(spec.count * this.density * (this.lookBoost.get(spec.look) ?? 1)), cap - have));
     this.shownT = NaN;
     if (gpu) {
       // No object per particle: the burst is written straight into the instance buffers.

@@ -16,14 +16,48 @@ import type { BurstSpec } from './particles';
 /** Largest boost accepted, which keeps the instance buffers of all the looks near 250 MB together. */
 const MAX_BOOST = 50;
 
-/** The `?gpuparticles=N` multiplier (`?gpuchunks=N` also works), or 0 when the GPU path is off. */
-export function gpuParticleBoost(): number {
-  if (typeof window === 'undefined') return 0;
-  const params = new URLSearchParams(window.location.search);
+/**
+ * How many times the usual count and cap each look gets on the GPU path: `all` for every look, `per` for the ones that
+ * differ. A look at 0 stays on the CPU path, so with `all` at 0 only the looks named in `per` move to the GPU.
+ */
+export interface GpuBoosts {
+  all: number;
+  per: ReadonlyMap<string, number>;
+}
+
+export const NO_GPU: GpuBoosts = { all: 0, per: new Map() };
+
+/**
+ * Reads the query string: `?gpuparticles=N` (`?gpuchunks=N` also works) sets every look, and
+ * `?gpuboost=vapour:1,chunk:30` sets individual looks (a boost may be fractional, and 0 keeps that look on the CPU).
+ * A bare `?gpuparticles` means 1.
+ */
+export function parseGpuBoosts(search: string): GpuBoosts {
+  const params = new URLSearchParams(search);
+  const clamp = (n: number) => Math.min(MAX_BOOST, n);
+  let all = 0;
   const raw = params.get('gpuparticles') ?? params.get('gpuchunks');
-  if (raw === null) return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.min(MAX_BOOST, n) : 1;
+  if (raw !== null) {
+    const n = Number(raw);
+    all = Number.isFinite(n) && n > 0 ? clamp(n) : 1;
+  }
+  const per = new Map<string, number>();
+  for (const entry of (params.get('gpuboost') ?? '').split(',')) {
+    const [look, value] = entry.split(':');
+    const n = Number(value);
+    if (look?.trim() && value !== undefined && value.trim() !== '' && Number.isFinite(n) && n >= 0) per.set(look.trim(), clamp(n));
+  }
+  return { all, per };
+}
+
+/** The boost for one look. */
+export function boostFor(boosts: GpuBoosts, look: string): number {
+  return boosts.per.get(look) ?? boosts.all;
+}
+
+/** The boosts the page was opened with, or none outside a browser. */
+export function gpuParticleBoosts(): GpuBoosts {
+  return typeof window === 'undefined' ? NO_GPU : parseGpuBoosts(window.location.search);
 }
 
 /**
