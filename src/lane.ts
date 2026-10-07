@@ -7,6 +7,7 @@ import { getBullet, type BulletSpec } from './data/bullets';
 import { MuzzleEffect } from './fx/muzzle';
 import { ShotRenderer } from './fx/shotRenderer';
 import type { BurstSpec } from './fx/particles';
+import { gpuBoostsFromSettings } from './fx/gpuParticles';
 import { TargetEffects } from './fx/targetEffects';
 import { addVapourTrails } from './fx/wake';
 import { createDummy } from './models/dummy';
@@ -209,6 +210,7 @@ export class Lane {
     this.shot.setQuality(quality);
     this.effects.particles.density = quality.particleDensity;
     this.effects.particles.capScale = quality.particleCap;
+    this.effects.particles.setGpuBoosts(gpuBoostsFromSettings(quality.gpuParticles));
     this.studio.setShadowMapSize(Math.max(quality.shadowMapSize, 256));
     this.applyPostFx();
     // Shadow on/off changes the shaders every lit material needs.
