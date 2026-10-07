@@ -254,6 +254,59 @@ export function pressureGPaAt(ctx: FieldContext, x: number, y: number): number {
   return (direct - reflected) / 1e9;
 }
 
+export interface FieldPeaks {
+  /** Hottest metal anywhere in the section over the whole impact, °C. */
+  temperatureC: number;
+  /** Whether that hottest metal is molten (the interface of a jet or a rod). */
+  molten: boolean;
+  /** Largest von Mises stress over yield, over the whole impact. */
+  stressRatio: number;
+  /** The same stress in GPa: the ratio times the plate's yield strength. */
+  stressGPa: number;
+}
+
+/** How many instants of the impact, how many points along the shot line and how many across it, `peakFields` samples. */
+const PEAK_TIMES = 48;
+const PEAK_DEPTHS = 28;
+const PEAK_RADII = [0, 0.5, 1, 2];
+
+const peakCache = new WeakMap<ArmorTimeline, FieldPeaks>();
+
+/**
+ * The largest temperature and stress the model puts in the plate over the whole impact (#157): the numbers the
+ * results panel quotes, taken from the same functions that draw the overlays, so a reader can match a reading on
+ * the legend with the figure in the panel. Sampled, not exact: it looks at the shot line and the crater wall.
+ */
+export function peakFields(timeline: ArmorTimeline): FieldPeaks {
+  const cached = peakCache.get(timeline);
+  if (cached) return cached;
+  let temperatureC = AMBIENT_C;
+  let molten = false;
+  let stressRatio = 0;
+  const reach = Math.max(timeline.result.losThicknessM, 1e-3);
+  for (let i = 0; i <= PEAK_TIMES; i++) {
+    const ctx = fieldContext(timeline, (timeline.duration * i) / PEAK_TIMES);
+    const rc = zoneRadius(ctx.frame);
+    // Along the shot line to a little past the crater bottom; for a stress wave, the whole thickness.
+    const xMax = isStressWave(timeline) ? reach : Math.min(reach, ctx.frame.depth + 3 * rc);
+    for (let j = 0; j <= PEAK_DEPTHS; j++) {
+      const x = (xMax * j) / PEAK_DEPTHS;
+      for (const k of PEAK_RADII) {
+        const y = k * rc + (isStressWave(timeline) ? reach * 0.02 * k : 0);
+        const sample = temperatureAt(ctx, x, y);
+        if (sample.valueC > temperatureC) {
+          temperatureC = sample.valueC;
+          molten = sample.molten;
+        }
+        stressRatio = Math.max(stressRatio, stressRatioAt(ctx, x, y));
+      }
+    }
+  }
+  const peaks = { temperatureC, molten, stressRatio, stressGPa: (stressRatio * timeline.shot.material.yieldPa) / 1e9 };
+  peakCache.set(timeline, peaks);
+  return peaks;
+}
+
 export interface EnergyBalance {
   /** Time since impact, s. */
   t: number;

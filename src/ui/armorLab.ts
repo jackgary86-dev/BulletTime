@@ -1,3 +1,5 @@
+import { peakFields } from '../armor/fields';
+import { peakStressText, peakTemperatureText } from '../armor/peakText';
 import type { ArmorTimeline } from '../armor/model';
 import { PLATE_MATERIALS, getPlateMaterial, DEFAULT_PLATE_MATERIAL_ID, type PlateMaterialId } from '../armor/materials';
 import { MAX_CALIBRE_MM, MIN_CALIBRE_MM, MUNITION_FAMILIES, getFamily, impactState, type MunitionFamilyId } from '../armor/munitions';
@@ -484,6 +486,7 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
     }
     const timeline = stack.stages[0].timeline;
     const r = timeline.result;
+    const peaks = peakFields(timeline);
     const rows: [string, string][] = [
       ['Mechanism', r.mechanism],
       ['Outcome', r.perforated ? 'Perforated' : r.ricochet ? 'Glanced off' : 'Stopped'],
@@ -493,6 +496,8 @@ export function mountArmorLab(root: HTMLElement): ArmorLabHandle {
       ['Impact energy', joules(r.impactEnergyJ)],
       ['Absorbed by the plate', joules(r.energy.plateWorkJ)],
       ['In ejected metal', joules(r.energy.ejectaJ)],
+      ['Peak temperature', peakTemperatureText(peaks)],
+      ['Peak stress', peakStressText(peaks, timeline.shot.impact.family)],
       [r.ricochet ? 'Carried away by the ricochet' : 'Carried through', joules(r.residualEnergyJ)],
     ];
     if (r.shattered) rows.push(['Penetrator', `Shattered into ${r.fragments} pieces`]);
