@@ -10,6 +10,7 @@ import {
   fieldGrid,
   fieldScale,
   noseStressRatio,
+  peakFields,
   pressureGPaAt,
   stressRatioAt,
   temperatureAt,
@@ -430,5 +431,35 @@ describe('field grid (#166)', () => {
     expect(g.molten).toHaveLength(200);
     // The shot line is the middle: a row either side of it matches by symmetry.
     for (let i = 0; i < 20; i++) expect(g.values[4 * 20 + i]).toBeCloseTo(g.values[5 * 20 + i], 4);
+  });
+});
+
+describe('peak temperature and stress for the results panel (#157)', () => {
+  it.each(SHOTS)('%s: the peaks are in range and agree with the field scales', (_name, timeline) => {
+    const peaks = peakFields(timeline);
+    const temp = fieldScale('temperature', timeline);
+    expect(peaks.temperatureC).toBeGreaterThanOrEqual(AMBIENT_C);
+    expect(peaks.temperatureC).toBeLessThanOrEqual(temp.max + 1e-6);
+    expect(peaks.stressRatio).toBeGreaterThanOrEqual(0);
+    expect(peaks.stressRatio).toBeLessThanOrEqual(Math.max(noseStressRatio(timeline.shot.material), 1e9));
+    expect(peaks.stressGPa).toBeCloseTo((peaks.stressRatio * timeline.shot.material.yieldPa) / 1e9, 9);
+    // Cached: asking again returns the same answer.
+    expect(peakFields(timeline)).toBe(peaks);
+  });
+
+  it('a rod through armour reaches plastic flow and a molten interface, and nothing is as hot as it', () => {
+    const rod = peakFields(run('apfsds', 60));
+    expect(rod.stressRatio).toBeGreaterThan(1);
+    expect(rod.molten).toBe(true);
+    expect(rod.temperatureC).toBeGreaterThan(getPlateMaterial('rha').meltingPointC);
+    const fragments = peakFields(run('he-frag', 300));
+    expect(fragments.temperatureC).toBeLessThan(rod.temperatureC);
+  });
+
+  it('a squash head loads the plate through a pulse: stress reaches the spall level in a thin plate, not a thick one', () => {
+    const thin = peakFields(run('hesh', 30, 0, 'cast-iron'));
+    const thick = peakFields(run('hesh', 300));
+    expect(thin.stressRatio).toBeGreaterThan(thick.stressRatio);
+    expect(thin.molten).toBe(false);
   });
 });

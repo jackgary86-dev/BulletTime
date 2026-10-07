@@ -161,6 +161,7 @@ Analytic approximations of the picture, in real units:
 - **Stress over yield.** Highest at the penetrator's nose, about `Rt / Y`, falling with distance as `(r_n / (r_n + d))²`, switched off when the penetrator stops. At least 1 is the plastic zone.
 - **Pressure.** A compression front at `c · t` from the impact, initial pressure about the plate's impedance times half the impact speed (a matched-impedance estimate, capped at 3 Rt), falling as `1/r`, reflecting off the rear face as tension (an image source). A squash head uses its own planar pulse.
 - **Energy.** Remaining kinetic energy, plastic work, heat, thrown metal and the penetrator that gets through add up to the impact energy within 2% at every instant, which also checks that every model accounts for its energy.
+- **Peak readouts** (`peakFields`, #157). The results panel quotes the hottest metal and the largest stress over the whole impact. They are the maximum of the two functions above, sampled at 49 instants along the shot line and the crater wall, so they match the overlays by construction. They are sampled, not exact. The peak stress for a squash head comes from its pulse; for a spray of HE fragments the stress field has no model (it is zero everywhere), so the panel says "not modelled for fragments" instead of quoting a zero.
 
 **Sources.** Textbook stress-wave and adiabatic-heating treatments (Meyers, *Dynamic Behavior of Materials*; Zukas, *Impact Dynamics*). The shapes and the interface boost are lab choices.
 
