@@ -13,8 +13,8 @@ A slow-motion bullet impact simulator in the browser. Pick a round and a target,
 - **Four simulators:** the game opens on a launcher with **Bullet**, **Artillery**, **Missile** and **Explosion**. Each is an experimental impact or blast test on the same material catalogue, with slow-motion playback, per-material effects and a results panel. Add `?mode=artillery` (or `bullet`, `missile`, `explosion`, `armor`) to the URL to skip the launcher. Progress is tracked in epic [#186](https://github.com/jackgary86-dev/BulletTime/issues/186).
 - **Armor lab:** a fifth card on the launcher, a 2D teaching screen (no 3D renderer) showing a cut-away cross-section of metal plate as a munition defeats it: full-bore AP shot (De Marre ballistic limit, plugging), APFSDS long rods (Alekseevskii–Tate erosion), shaped-charge jets (density law, debris cone), HESH (stress-wave spall) and HE fragmentation (a spray of fragments that pit, embed or hole the plate), with ricochet and shatter on sloped plate, thrown pieces that bounce round a test room, spaced and layered plate stacks (up to four plates with gaps), and temperature, stress and pressure-wave overlays with legends and an energy bar. Pick a family and calibre (40–150 mm), plate material, thickness (10–300 mm), angle and arrangement, then fire; the results panel and a short explainer with a labelled diagram say what happened. Tracked in epic [#157](https://github.com/jackgary86-dev/BulletTime/issues/157). The equations, constants, sources and limits are in [docs/armor-models.md](docs/armor-models.md); models are simplified teaching models of impact outcomes only.
   - **Bullet:** .22 LR up to the 20 mm cannon shell.
-  - **Artillery:** about 30 shells from 20 mm to 240 mm, grouped as autocannon, anti-tank and field guns, naval guns, mortars, recoilless rifles, howitzers and tank guns. AP and APFSDS shot punch through; HE shells burst on the face and throw fragments; HEAT fires a shaped-charge jet; HESH spalls the far side. Heavy targets (armour plate, reinforced concrete, packed earth) are added for them.
-  - **Missile:** five basic airframes (light rocket, shoulder rocket, guided anti-tank, air-to-surface, cruise-class), each fitted with any of five warheads: shaped charge, tandem, blast-fragmentation, kinetic penetrator or thermobaric.
+  - **Artillery:** 22 armour-piercing and penetrator shells from 20 mm to 125 mm, grouped as autocannon, anti-tank and field guns, and tank guns: full-calibre AP shot, APCR (HVAP) and APDS cores, APFSDS long rods, and APHE, which bursts behind the plate it punched through. Heavy targets (armour plate, reinforced concrete, packed earth) are added for them.
+  - **Missile:** five basic airframes (light rocket, shoulder rocket, guided anti-tank, air-to-surface, cruise-class), each fitted with any of four penetrating heads: kinetic penetrator, long rod, heavy core or explosively formed penetrator.
   - **Explosion:** a test bed of seven charges (flash, cased fragmentation, demolition block, satchel, linear shaped, thermobaric and incendiary) detonated at a stand-off from the material. The results show the TNT-equivalent yield and the overpressure at the face, and weak materials (glass, drywall, wood) fail before strong ones (concrete, steel).
   - Explosive numbers are plausible game values, not engineering data.
 - **12 rounds** from .22 LR to .50 BMG: FMJ, hollow points, soft points, a fragmenting 5.56, buckshot, a slug, and a 20 mm HEI shell just for fun. Each has a true-scale 3D model and real-world data.
@@ -206,15 +206,15 @@ Shells are rows in `ROWS` in `src/data/artillery.ts`. Each row is turned into a 
 
 ```ts
 {
-  id: '100mm-he',                // unique, used in URLs and tests
-  group: 'Howitzers',            // heading in the picker; reuse an existing one
-  calibreMm: 100,
-  name: 'howitzer',              // a public class name, never a specific weapon
-  kind: 'he',                    // ap | aphe | he | he-delay | heat | hesh | dart
-  lengthMm: 480,
-  massKg: 14,
-  speedMs: 450,
-  fillKg: 2,                     // TNT-equivalent explosive; leave out for solid shot
+  id: '90mm-apds',               // unique, used in URLs and tests
+  group: 'Tank guns',            // heading in the picker; reuse an existing one
+  calibreMm: 90,
+  name: 'tank gun',              // a public class name, never a specific weapon
+  kind: 'apds',                  // ap | aphe | apcr | apds | dart
+  coreMm: 45,                    // sub-calibre rounds: the core's diameter
+  lengthMm: 220,
+  massKg: 2,                     // what strikes: the core, for a sub-calibre round
+  speedMs: 1400,
 }
 ```
 
@@ -222,13 +222,13 @@ Shells are rows in `ROWS` in `src/data/artillery.ts`. Each row is turned into a 
 
 | `kind` | Behaviour | What `blastOf()` gives it |
 | --- | --- | --- |
-| `ap` | Solid shot, a hard core: punches through, never explodes | no blast |
-| `dart` | APFSDS long rod, drawn 32 mm wide whatever the gun | no blast |
+| `ap` | Solid full-calibre shot, a hard core: punches through, never explodes | no blast |
+| `apcr` | A tungsten-carbide core in a light shell (HVAP): fast, narrow, the core does the work | no blast |
+| `apds` | A short core in a sabot that falls away at the muzzle | no blast |
+| `dart` | APFSDS long rod, run through the Armor lab's long-rod model in metal plate | no blast |
 | `aphe` | Goes through plate, then bursts behind it | `delayM` and 26 fragments |
-| `he` | Bursts on the face | fragments scaled to the calibre, up to 64 |
-| `he-delay` | Buries itself in earth or masonry, then bursts | as `he`, plus `delayM` |
-| `heat` | Fires a shaped-charge jet on contact | `jet` and 12 fragments |
-| `hesh` | Spreads on the face, then scabs the far side | `spall` fan and 12 fragments |
+
+The catalogue is armour-piercing and penetrator rounds only: there are no high-explosive, HEAT or HESH shells. For a sub-calibre round give `coreMm` and the core's own mass: the striking depth goes with mass x speed squared over the core's frontage, so the whole shell's mass on a narrow core bores far too deep.
 
 The shared lists in the file (`KIND_LABEL`, `KIND_TEXT`) give the type label and the sentence under the data card, so a new row needs no text of its own. A new *kind* of shell means a new case in `blastOf()` and in `KIND_LABEL`/`KIND_TEXT`.
 
@@ -236,12 +236,12 @@ Then run `npm test`. `src/sim/modesBaseline.test.ts` has a coverage test that fa
 
 ## Adding a missile airframe or warhead
 
-A missile is built from one airframe and one warhead, so the catalogue is every pair (5 × 5 today) and one new entry multiplies out. Both lists are in `src/data/missiles.ts`.
+A missile is built from one airframe and one warhead, so the catalogue is every pair (5 × 4 today) and one new entry multiplies out. Both lists are in `src/data/missiles.ts`.
 
 - **An airframe** goes in `AIRFRAMES`: `id`, `name`, `description`, body `caliberMm` and `lengthMm`, whole-missile `massKg`, the warhead section's `warheadKg`, and `speedMs` at impact. The warhead section sets the yield and, for jets, the jet mass, so a heavier `warheadKg` means a deeper bore.
-- **A warhead** goes in `WARHEADS` (`id`, `name`, `description`), and `blastFor()` needs a case for it that returns that warhead's `BlastSpec` for a given airframe. A warhead with no case gets a yield of zero. The `penetrator` head is special: `missileSpec()` makes it a narrow dense core with no blast.
+- **A warhead** goes in `WARHEADS` (`id`, `name`, `description`). A kinetic head also goes in `KINETIC` in the same file: its core's diameter and length as fractions of the airframe's, its mass as a multiple of the warhead section's and its speed; `missileSpec()` makes it a narrow dense core with no blast. The formed-penetrator head instead has a case in `blastFor()` giving its `BlastSpec`.
 
-`missileId(airframe, head)` gives `missile:<airframe>:<head>`, and `findMissile()` resolves one. Each new pair needs a row in `MISSILE_BASELINE` in `src/sim/modesBaseline.test.ts`. The shaped-charge depth is tuned to about four to five calibres of armour plate and a tandem to five to six (`JET_MASS_SCALE`), and `modes.test.ts` pins that, so a new airframe should land inside it.
+`missileId(airframe, head)` gives `missile:<airframe>:<head>`, and `findMissile()` resolves one. Each new pair needs a row in `MISSILE_BASELINE` in `src/sim/modesBaseline.test.ts`, and `modes.test.ts` checks that a long rod bores deeper than the standard core and a heavy core least.
 
 ## Adding a charge
 

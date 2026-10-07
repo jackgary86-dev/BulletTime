@@ -20,8 +20,8 @@ interface Simulator {
 
 const SIMULATORS: Simulator[] = [
   { id: 'bullet', name: 'Bullet', range: '.22 LR to 20 mm', blurb: 'Fire any round into gel, wood, concrete, steel, glass and layered stacks.', ready: true },
-  { id: 'artillery', name: 'Artillery', range: '20 mm to 240 mm', blurb: 'AP, HE, HEAT and HESH shells from autocannon to siege howitzers against plate, concrete and earth.', ready: true },
-  { id: 'missile', name: 'Missile', range: '5 missiles, 5 warheads', blurb: 'Five basic missiles, each fitted with a different warhead.', ready: true },
+  { id: 'artillery', name: 'Artillery', range: '20 mm to 125 mm', blurb: 'AP, APCR, APDS and APFSDS shot from autocannon to tank guns against plate, concrete and earth.', ready: true },
+  { id: 'missile', name: 'Missile', range: '5 missiles, 4 penetrators', blurb: 'Five basic missiles, each fitted with a kinetic core, a long rod, a heavy core or a formed penetrator.', ready: true },
   { id: 'explosion', name: 'Explosion', range: 'Every kind of blast', blurb: 'Detonate charges in a test bed and watch the materials respond.', ready: true },
   { id: 'armor', name: 'Armor lab', range: 'A cross-section of the plate', blurb: 'Shot, long rods, shaped-charge jets, squash heads and HE fragments against armour plate, with a classroom mode.', ready: true },
 ];

@@ -9,17 +9,17 @@ const depth = (bullet: string, gapM: number) => fire({ bullet, stack: block(gapM
 
 describe('jets cross air gaps between plates (#281)', () => {
   it('depth is continuous in the gap: solid-steel depth plus the air crossed, never stopping at an interface', () => {
-    for (const a of ['light-rocket', 'guided-at', 'air-surface']) {
-      for (const head of ['shaped', 'tandem']) {
-        const id = missileId(a, head);
+    // The cutting charge's jet and the formed penetrator's slug: the shaped-charge heads left in the catalogue.
+    for (const id of ['charge-shaped', missileId('light-rocket', 'efp'), missileId('guided-at', 'efp')]) {
+      {
         const solid = depth(id, 0);
         let last = solid;
         for (const gapM of [0.001, 0.002, 0.005, 0.01, 0.05]) {
           const d = depth(id, gapM);
           // At least the solid depth, at most that plus both gaps' air, and growing with the gap.
-          expect(d, `${a} ${head} ${gapM * 1000} mm`).toBeGreaterThanOrEqual(solid - 0.002);
-          expect(d, `${a} ${head} ${gapM * 1000} mm`).toBeLessThanOrEqual(solid + 2 * gapM + 0.01);
-          expect(d, `${a} ${head} ${gapM * 1000} mm`).toBeGreaterThanOrEqual(last - 0.002);
+          expect(d, `${id} ${gapM * 1000} mm`).toBeGreaterThanOrEqual(solid - 0.002);
+          expect(d, `${id} ${gapM * 1000} mm`).toBeLessThanOrEqual(solid + 2 * gapM + 0.01);
+          expect(d, `${id} ${gapM * 1000} mm`).toBeGreaterThanOrEqual(last - 0.002);
           last = d;
         }
       }
@@ -29,7 +29,7 @@ describe('jets cross air gaps between plates (#281)', () => {
   it('fragments that perforate a wall carry on across the room to the far wall', () => {
     const wall = getMedium('block-house-wall');
     const back = getMedium('block-house-back');
-    const t = fire({ bullet: missileId('guided-at', 'shaped'), stack: [{ medium: wall, thickness: 0.3, gapM: 0 }, { medium: back, thickness: 0.3, gapM: 3.4 }] });
+    const t = fire({ bullet: missileId('guided-at', 'efp'), stack: [{ medium: wall, thickness: 0.3, gapM: 0 }, { medium: back, thickness: 0.3, gapM: 3.4 }] });
     // Something reaches the far wall (layer 1) now.
     expect(t.events.some((e) => (e.type === 'impact' || e.type === 'enter') && e.layer === 1)).toBe(true);
   });
