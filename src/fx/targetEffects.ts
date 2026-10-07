@@ -6,7 +6,7 @@ import { loadBoneEffect } from './boneEffect';
 import { BloodPackEffect, type OrganicResult } from './bloodPackEffect';
 import { GlassCracks } from './glassEffect';
 import { GelEffect } from './gelEffect';
-import { HoleMarks } from './holes';
+import { HoleMarks, markFace, type MarkFace } from './holes';
 import { loadHardEffect } from './hardEffect';
 import { BlastDamage, loadBlastEffect } from './blastEffect';
 import { loadPanelEffect } from './panelEffect';
@@ -46,6 +46,19 @@ export class TargetEffects {
       const body = target.getObjectByName(layerGroupName(targetLayers[layer].stack ?? 0))?.getObjectByName(name);
       return body instanceof THREE.Mesh ? body : null;
     };
+    // Each stack layer's face, so its marks are cut off at its own edge and never run onto the ground or the next plate (#318).
+    const faces: MarkFace[] = [];
+    const seenStacks = new Set<number>();
+    for (const l of targetLayers) {
+      const stack = l.stack ?? 0;
+      if (seenStacks.has(stack)) continue;
+      seenStacks.add(stack);
+      const layer = target.getObjectByName(layerGroupName(stack));
+      const body = layer?.children[0];
+      const face = layer && body ? markFace(layer, body) : null;
+      if (face) faces.push(face);
+    }
+    this.holes.setFaces(faces);
     layers.forEach((medium, layer) => {
       if (medium.behaviour === 'gel' || medium.behaviour === 'water') {
         const water = medium.behaviour === 'water';

@@ -17,6 +17,8 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Impact marks are cut off at the edge of their plate with per-material clipping planes (#318).
+  renderer.localClippingEnabled = true;
   return renderer;
 }
 
