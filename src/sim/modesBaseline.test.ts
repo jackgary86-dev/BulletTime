@@ -112,14 +112,20 @@ const MISSILE_BASELINE: [string, number, FinalState, number][] = [
   ['missile:cruise:top-attack', 1, 'detonated', 16],
 ];
 
-/** Charge columns: charge, overpressure at the test-bed stand-off (kPa), final state, fragments, on a 0.19 m concrete block. */
+/**
+ * Charge columns: charge, overpressure at the test-bed stand-off (kPa), final state, fragments, on a 0.19 m concrete block.
+ *
+ * Re-recorded for #320: the pressure comes from each charge's free-air share of its yield (a cased charge 0.7, the
+ * cutting charge 0.3), and the far-field fit is held at its value at a scaled range of 0.5 instead of being
+ * extrapolated toward contact, so the block, satchel and fuel-air charge, all closer than that here, read the hold.
+ */
 const CHARGE_BASELINE: [string, number, FinalState, number][] = [
   ['charge-flash', 1420, 'detonated', 0],
-  ['charge-cased', 5582, 'detonated', 60],
-  ['charge-block', 18121, 'detonated', 0],
-  ['charge-satchel', 90959, 'detonated', 0],
-  ['charge-shaped', 13936, 'detonated', 6],
-  ['charge-thermobaric', 48893, 'detonated', 0],
+  ['charge-cased', 3915, 'detonated', 60],
+  ['charge-block', 13936, 'detonated', 0],
+  ['charge-satchel', 13936, 'detonated', 0],
+  ['charge-shaped', 4193, 'detonated', 6],
+  ['charge-thermobaric', 13936, 'detonated', 0],
   ['charge-incendiary', 309, 'detonated', 0],
 ];
 

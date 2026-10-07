@@ -220,12 +220,13 @@ describe('blast response of the material (#196)', () => {
     expect(at('concrete')).toBeGreaterThan(at('steel-mild'));
   });
 
-  it('destroys brittle panels, topples a wood panel in the middle range and cracks heavy ones', () => {
+  it('destroys brittle panels, breaks a wood panel up only under a high pressure and cracks heavy ones', () => {
+    // Whether a layer goes over is decided by the impulse against its stand (#320), not by the pressure: see blastTopple.test.ts.
     expect(outcomeFor('glass', 1.1).outcome).toBe('destroyed');
-    expect(outcomeFor('wood', 1.5).outcome).toBe('toppled');
+    expect(outcomeFor('wood', 1.5).outcome).toBe('cracked');
     expect(outcomeFor('wood', 3).outcome).toBe('destroyed');
     expect(outcomeFor('concrete', 3).outcome).toBe('cracked');
-    expect(outcomeFor('concrete', 8).outcome).toBe('toppled');
+    expect(outcomeFor('concrete', 8).outcome).toBe('cracked');
     expect(outcomeFor('steel', 0.5).outcome).toBe('intact');
   });
 

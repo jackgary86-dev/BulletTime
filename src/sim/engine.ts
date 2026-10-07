@@ -1,4 +1,4 @@
-import { blastResponse, overpressureKPa } from './blastResponse';
+import { airBlastYieldKg, blastResponse, overpressureKPa } from './blastResponse';
 import type { BulletSpec } from '../data/bullets';
 import { bulletMassKg } from '../data/bullets';
 import type { MediumSpec } from '../data/media';
@@ -1101,8 +1101,9 @@ function placeCharge(ctx: Context, b: BulletSpec, start: Vec3): void {
   event(ctx, body, 'detonate', {
     layer: 0,
     yieldKg: blast.yieldKg,
+    blastYieldKg: airBlastYieldKg(blast),
     fireball: blast.fireball ?? 'standard',
-    pressureKPa: Math.max(0, blastOverpressureKPa(blast.yieldKg, standoff)),
+    pressureKPa: Math.max(0, blastOverpressureKPa(airBlastYieldKg(blast), standoff)),
   });
   throwFragments(ctx, body, start, v3(1, 0, 0), blast, cone, CHARGE_FUZE_S);
 }
@@ -1175,7 +1176,7 @@ function summarise(ctx: Context, primary: Track): ShotSummary {
     ...(penetrator ? { penetrator } : {}),
     ...(ctx.setup.bullet.behaviour === 'charge' && blast
       ? {
-          blastLayers: blastResponse(blast.yieldKg, ctx.setup.standOffM, ctx.setup.layers).map((l) => ({
+          blastLayers: blastResponse(airBlastYieldKg(blast), ctx.setup.standOffM, ctx.setup.layers).map((l) => ({
             name: l.medium.name,
             pressureKPa: l.pressureKPa,
             outcome: l.outcome,

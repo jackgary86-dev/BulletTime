@@ -75,6 +75,8 @@ export interface ShotEvent {
   layer?: number;
   /** Detonations: TNT-equivalent yield in kilograms, the fireball look, and the overpressure at the target face (kPa; charges only). */
   yieldKg?: number;
+  /** Charges: the share of the yield in the free-air blast (see airBlastYieldKg), which sets the pressure and what it knocks over. */
+  blastYieldKg?: number;
   fireball?: string;
   pressureKPa?: number;
 }
