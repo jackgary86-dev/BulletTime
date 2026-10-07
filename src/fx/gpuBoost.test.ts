@@ -115,3 +115,80 @@ describe('a particle system with a boost per look', () => {
     expect(held(system, 'chunk')).toEqual({ gpu: false, count: 10 });
   });
 });
+
+describe('switching between the CPU and GPU paths while a shot is on screen', () => {
+  const internals = (system: ParticleSystem) => system as unknown as { gpuMeshes: Map<ParticleLook, GpuLookMesh>; meshes: Map<ParticleLook, THREE.Object3D> };
+
+  it('lays the shot out again under the new setting, both ways', () => {
+    const system = new ParticleSystem(NO_GPU);
+    system.add(burst('chunk'));
+    system.add(burst('vapour'));
+    expect(held(system, 'chunk')).toEqual({ gpu: false, count: 10 });
+
+    system.setGpuBoosts(parseGpuBoosts('?gpuparticles=3&gpuboost=vapour:1'));
+    expect(held(system, 'chunk')).toMatchObject({ gpu: true, count: 30 });
+    expect(held(system, 'vapour')).toMatchObject({ gpu: true, count: 10 });
+
+    system.setGpuBoosts(NO_GPU);
+    expect(held(system, 'chunk')).toEqual({ gpu: false, count: 10 });
+    expect(held(system, 'vapour')).toEqual({ gpu: false, count: 10 });
+  });
+
+  it('keeps a shot across two switches, and the bursts added after the switch', () => {
+    const system = new ParticleSystem(NO_GPU);
+    system.add(burst('grain'));
+    system.setGpuBoosts(parseGpuBoosts('?gpuparticles=2'));
+    system.add(burst('grain'));
+    expect(held(system, 'grain').count).toBe(40);
+    system.setGpuBoosts(NO_GPU);
+    expect(held(system, 'grain').count).toBe(20);
+  });
+
+  it('forgets the shot on clear, so a later switch has nothing to lay out', () => {
+    const system = new ParticleSystem(NO_GPU);
+    system.add(burst('chunk'));
+    system.clear();
+    system.setGpuBoosts(parseGpuBoosts('?gpuparticles=3'));
+    expect(held(system, 'chunk')).toMatchObject({ gpu: true, count: 0 });
+  });
+
+  it('does nothing when the setting has not changed, so the meshes stay', () => {
+    const system = new ParticleSystem(parseGpuBoosts('?gpuboost=chunk:2'));
+    const before = internals(system).meshes.get('chunk');
+    system.setGpuBoosts(parseGpuBoosts('?gpuboost=chunk:2'));
+    expect(internals(system).meshes.get('chunk')).toBe(before);
+  });
+
+  it('lets a boost from the query string win over the quality level', () => {
+    const system = new ParticleSystem(parseGpuBoosts('?gpuboost=chunk:2'));
+    system.setGpuBoosts(parseGpuBoosts('?gpuparticles=10'));
+    system.add(burst('chunk'));
+    system.add(burst('grain'));
+    expect(held(system, 'chunk')).toMatchObject({ gpu: true, count: 20 });
+    expect(held(system, 'grain')).toEqual({ gpu: false, count: 10 });
+  });
+
+  it('keeps free flight as each burst was added', () => {
+    const system = new ParticleSystem(NO_GPU);
+    system.freeFlight = true;
+    system.add({ ...burst('chunk'), gravity: 9.8 });
+    system.freeFlight = false;
+    system.setGpuBoosts(parseGpuBoosts('?gpuparticles=1'));
+    expect(system.freeFlight).toBe(false);
+    expect(held(system, 'chunk')).toMatchObject({ gpu: true, count: 10 });
+  });
+});
+
+describe('the unused instance-matrix buffer', () => {
+  it('stays as long as the instance count, because override-material passes read it', () => {
+    // Ambient occlusion and depth of field draw the scene with an override material and three's own instanced shader,
+    // which reads one matrix per instance. A shorter buffer is read past its end and smears garbage over the frame.
+    const system = new ParticleSystem(parseGpuBoosts('?gpuparticles=3&gpuboost=vapour:0.5'));
+    const gpuMeshes = (system as unknown as { gpuMeshes: Map<ParticleLook, GpuLookMesh> }).gpuMeshes;
+    expect(gpuMeshes.size).toBeGreaterThan(5);
+    for (const gpu of gpuMeshes.values()) {
+      expect(gpu.mesh.instanceMatrix.count).toBe(gpu.capacity);
+      expect(gpu.mesh.instanceMatrix.array.length).toBe(gpu.capacity * 16);
+    }
+  });
+});

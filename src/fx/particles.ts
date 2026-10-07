@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '../sim/random';
-import { boostFor, createGpuMesh, gpuParticleBoosts, type GpuBoosts, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
+import { boostFor, createGpuMesh, gpuActive, gpuParticleBoosts, sameGpuBoosts, type GpuBoosts, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
 
 /**
  * Deterministic, scrubbable particle bursts. Every particle is fully described
@@ -178,6 +178,12 @@ export class ParticleSystem {
   private readonly gpuMeshes = new Map<ParticleLook, GpuLookMesh>();
   /** How many times the usual count and cap each look on the GPU path gets. */
   private readonly lookBoost = new Map<ParticleLook, number>();
+  /** The GPU settings the looks were built with. */
+  private boosts: GpuBoosts;
+  /** Set when the page's query string asked for GPU particles: that wins over the quality level. */
+  private readonly forcedBoosts: GpuBoosts | null;
+  /** Every burst of the shot so far, so the debris can be laid out again when the looks are rebuilt. */
+  private readonly log: { spec: BurstSpec; freeFlight: boolean }[] = [];
   /** Multiplies every burst's particle count (the quality setting, #16). */
   density = 1;
   /** Multiplies each look's particle cap, up to MAX_CAP_SCALE (the quality setting, #16; Ultra goes above 1, #38). */
@@ -199,6 +205,13 @@ export class ParticleSystem {
     this.group.name = 'particles';
     this.flashLight.name = 'impact-flash';
     this.group.add(this.flashLight);
+    this.forcedBoosts = gpuActive(gpuBoosts) ? gpuBoosts : null;
+    this.boosts = gpuBoosts;
+    this.build(gpuBoosts);
+  }
+
+  /** Makes a mesh for every look: on the GPU path where its boost is above 0, otherwise on the CPU path. */
+  private build(gpuBoosts: GpuBoosts): void {
     for (const [look, config] of Object.entries(lookConfigs()) as [ParticleLook, LookConfig][]) {
       const boost = boostFor(gpuBoosts, look);
       const gpuKind = boost > 0 ? GPU_LOOKS.get(look) : undefined;
@@ -225,6 +238,44 @@ export class ParticleSystem {
     }
   }
 
+  /** Frees every look's mesh, buffers and textures. */
+  private disposeLooks(): void {
+    for (const mesh of this.meshes.values()) {
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+      const material = mesh.material as THREE.Material & { alphaMap?: THREE.Texture | null };
+      material.alphaMap?.dispose();
+      material.dispose();
+      mesh.customDepthMaterial?.dispose();
+      mesh.dispose();
+    }
+    this.meshes.clear();
+    this.particles.clear();
+    this.gpuMeshes.clear();
+    this.lookBoost.clear();
+  }
+
+  /**
+   * Moves looks between the CPU and GPU paths, as the quality level changes: the looks are built again and the
+   * shot's bursts are laid out again under the new setting. A boost named in the page's query string wins.
+   */
+  setGpuBoosts(wanted: GpuBoosts): void {
+    const next = this.forcedBoosts ?? wanted;
+    if (sameGpuBoosts(next, this.boosts)) return;
+    const shot = this.log.splice(0);
+    const freeFlight = this.freeFlight;
+    this.disposeLooks();
+    this.boosts = next;
+    this.build(next);
+    // add() records each burst again, so the log is whole once this is done.
+    for (const burst of shot) {
+      this.freeFlight = burst.freeFlight;
+      this.add(burst.spec);
+    }
+    this.freeFlight = freeFlight;
+    this.shownT = NaN;
+  }
+
   /** Sim time when the last particle dies. */
   get endTime(): number {
     let end = 0;
@@ -245,10 +296,12 @@ export class ParticleSystem {
     for (const list of this.particles.values()) list.length = 0;
     for (const mesh of this.meshes.values()) mesh.count = 0;
     for (const gpu of this.gpuMeshes.values()) gpu.clear();
+    this.log.length = 0;
     this.shownT = NaN;
   }
 
   add(spec: BurstSpec): void {
+    this.log.push({ spec: { ...spec, origin: spec.origin.clone(), axis: spec.axis.clone() }, freeFlight: this.freeFlight });
     const list = this.particles.get(spec.look)!;
     const gpu = this.gpuMeshes.get(spec.look);
     const have = gpu ? gpu.count : list.length;

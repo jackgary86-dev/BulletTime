@@ -13,7 +13,7 @@ import type { BurstSpec } from './particles';
  * whose stretch means something else (splinters stretch along their own length) must not be added without a flag.
  */
 
-/** Largest boost accepted, which keeps the instance buffers of all the looks near 250 MB together. */
+/** Largest boost accepted, which keeps the instance buffers of all the looks under 400 MB together (about 190 bytes a particle). */
 const MAX_BOOST = 50;
 
 /**
@@ -53,6 +53,21 @@ export function parseGpuBoosts(search: string): GpuBoosts {
 /** The boost for one look. */
 export function boostFor(boosts: GpuBoosts, look: string): number {
   return boosts.per.get(look) ?? boosts.all;
+}
+
+/** Whether any look is set to run on the GPU. */
+export function gpuActive(boosts: GpuBoosts): boolean {
+  return boosts.all > 0 || [...boosts.per.values()].some((n) => n > 0);
+}
+
+export function sameGpuBoosts(a: GpuBoosts, b: GpuBoosts): boolean {
+  return a.all === b.all && a.per.size === b.per.size && [...a.per].every(([look, n]) => b.per.get(look) === n);
+}
+
+/** A quality level's GPU settings (see QualitySettings.gpuParticles) as boosts. */
+export function gpuBoostsFromSettings(settings: { all: number; per: Readonly<Record<string, number>> }): GpuBoosts {
+  const clamp = (n: number) => Math.min(MAX_BOOST, Math.max(0, n));
+  return { all: clamp(settings.all), per: new Map(Object.entries(settings.per).map(([look, n]) => [look, clamp(n)])) };
 }
 
 /** The boosts the page was opened with, or none outside a browser. */
@@ -615,8 +630,10 @@ export function createGpuMesh(kind: GpuKind, geometry: THREE.BufferGeometry, mat
   mesh.count = 0;
   mesh.setColorAt(0, new THREE.Color(1, 1, 1));
   const colors = mesh.instanceColor!;
-  // The matrices are computed in the shader, so the matrix buffer three allocates is never read: keep it one entry long.
-  mesh.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(16), 16);
+  // The matrices are computed in the shader, so the matrix buffer three allocated (all zeros) is never written. It has to
+  // stay full size anyway: ambient occlusion and depth of field draw the scene with an override material, which uses
+  // three's own instanced shader and reads this buffer for every instance, so a short one is read past its end (garbage
+  // matrices, and a screen full of dark smears). Zeros collapse every instance, so those passes draw nothing of it.
   // three.js sorts transparent meshes far to near by the centre of this sphere, which it would otherwise build from
   // those matrices. The CPU path's is built once, when the mesh is still empty, so it sits at the origin: every look ties
   // and they draw in the order they were created (clouds, then sparks over them). Pinning it there keeps that order.
