@@ -121,7 +121,8 @@ async function open(page: Page, query: string): Promise<void> {
     localStorage.setItem('bullettime.contentWarningAccepted', '1');
     localStorage.setItem('bullettime.quality', 'low');
   });
-  await page.goto(`./?${query}`);
+  // Every frame drawn, idle or not (#329), so the idle lab stays a raster yardstick.
+  await page.goto(`./?${query}&alwaysdraw`);
   await page.waitForFunction(() => document.body.dataset.ready === 'true', undefined, { timeout: 300_000 });
 }
 
