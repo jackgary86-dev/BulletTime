@@ -9,13 +9,13 @@ import { expect, test, type Page } from '@playwright/test';
  * accepts it.
  */
 
-/** Opens the app with the content warning accepted and Low quality, then waits for the scene to be ready. */
-async function open(page: Page, query: string): Promise<void> {
-  await page.addInitScript(() => {
+/** Opens the app with the content warning accepted and Low quality (or `quality`), then waits for the scene to be ready. */
+async function open(page: Page, query: string, quality = 'low'): Promise<void> {
+  await page.addInitScript((q) => {
     localStorage.setItem('bullettime.contentWarningAccepted', '1');
-    localStorage.setItem('bullettime.quality', 'low');
+    localStorage.setItem('bullettime.quality', q);
     localStorage.setItem('bullettime.impactBeat', 'on');
-  });
+  }, quality);
   await page.goto(`./?${query}`);
   await page.waitForFunction(() => document.body.dataset.ready === 'true', undefined, { timeout: 300_000 });
   await settle(page);
@@ -34,7 +34,7 @@ async function settle(page: Page): Promise<void> {
   await page.waitForTimeout(1500);
 }
 
-const SHOTS: { name: string; query: string }[] = [
+const SHOTS: { name: string; query: string; quality?: string }[] = [
   { name: 'bullet-9mm-jhp-gel', query: 'mode=bullet&bullet=9mm-jhp&medium=gel10&at=1.2ms' },
   { name: 'bullet-308-sp-c35', query: 'mode=bullet&bullet=308-sp&medium=concrete-c35&at=300us' },
   { name: 'bullet-12ga-slug-steel', query: 'mode=bullet&bullet=12ga-slug&medium=steel-mild&thickness=0.006&at=150us' },
@@ -43,11 +43,15 @@ const SHOTS: { name: string; query: string }[] = [
   // Large steel plates on their proving-ground stand, spaced 300 mm (#232, #234).
   { name: 'artillery-plate-spaced', query: 'mode=artillery&bullet=155mm-he&preset=plate-spaced&at=300us' },
   { name: 'explosion-default', query: 'mode=explosion&at=2ms' },
+  // The brightest frame of a hot impact, with bloom on (#321): the plate edge and the hole must stay readable, not glare.
+  { name: 'flash-308-steel', query: 'mode=bullet&bullet=308-sp&medium=steel-ar500&at=590us', quality: 'high' },
+  { name: 'flash-88mm-ap-plate', query: 'mode=artillery&bullet=88mm-ap&medium=mild-plate&at=510us', quality: 'high' },
+  { name: 'flash-charge-1kg', query: 'mode=explosion&bullet=charge-block&at=1550us', quality: 'high' },
 ];
 
 for (const shot of SHOTS) {
   test(shot.name, async ({ page }) => {
-    await open(page, `${shot.query}&clean&still`);
+    await open(page, `${shot.query}&clean&still`, shot.quality);
     await expect(page).toHaveScreenshot(`${shot.name}.png`);
   });
 }
