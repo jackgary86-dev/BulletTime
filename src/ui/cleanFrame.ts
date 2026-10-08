@@ -4,6 +4,8 @@
  * leaves it, and `?clean` in the address starts with it on.
  */
 
+import { suppressFlashWash } from '../scene/flashSetting';
+
 export type CleanFrameAction = 'toggle' | 'exit' | null;
 
 /** What a key press means for the clean frame: H toggles, Escape leaves, anything typed into a field or with a modifier is ignored. */
@@ -44,6 +46,8 @@ export function mountCleanFrame(overlay: HTMLElement, initial: boolean): CleanFr
       if (next === on) return;
       on = next;
       overlay.classList.toggle('clean-frame', on);
+      // The whole-frame exposure wash goes too, so a blown frame can be inspected (#321).
+      suppressFlashWash(on);
       if (on) showHint();
       else hint?.remove();
     },

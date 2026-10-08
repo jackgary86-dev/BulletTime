@@ -1,4 +1,5 @@
 import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
+import { flashSetting, setFlashSetting, type FlashSetting } from '../scene/flashSetting';
 import { qualityLevels, type QualityLevel } from '../scene/quality';
 import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
@@ -68,6 +69,14 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
         </div>
       </div>
       <div>
+        <label class="field-label" for="flash-select">Impact flash</label>
+        <select id="flash-select" title="How bright the flash of a hot impact is. Off or Low keeps the strike easier to see">
+          <option value="normal">Normal</option>
+          <option value="low">Low</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <div>
         <label class="field-label" for="quality-select">Quality</label>
         <select id="quality-select" title="Lower quality uses fewer particles, no glow and no shadows, for smoother playback">
           ${qualityLevels().map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
@@ -120,6 +129,10 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
   }
 
   panel.querySelector('.clean-frame-btn')!.addEventListener('click', () => options.onCleanFrame());
+
+  const flashSelect = panel.querySelector<HTMLSelectElement>('#flash-select')!;
+  flashSelect.value = flashSetting();
+  flashSelect.addEventListener('change', () => setFlashSetting(flashSelect.value as FlashSetting));
 
   const quality = panel.querySelector<HTMLSelectElement>('#quality-select')!;
   quality.value = options.initialQuality;

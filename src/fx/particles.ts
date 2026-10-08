@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { flashLightLevel } from '../scene/flashSetting';
 import { seededRandom } from '../sim/random';
 import { boostFor, createGpuMesh, gpuActive, gpuParticleBoosts, sameGpuBoosts, type GpuBoosts, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
 
@@ -390,7 +391,8 @@ export class ParticleSystem {
       this.flashLight.position.copy(f.pos);
       this.flashLight.color.copy(f.color);
     }
-    this.flashLight.intensity = best;
+    // A soft cap and the flash setting keep the strike readable (#321).
+    this.flashLight.intensity = flashLightLevel(best);
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
       const gpu = this.gpuMeshes.get(look);
