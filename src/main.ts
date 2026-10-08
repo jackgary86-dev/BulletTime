@@ -17,6 +17,7 @@ import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
 import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
 import { isStill } from './scene/still';
+import { ResolutionGovernor, displayFrameMs } from './scene/resolutionGovernor';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
@@ -69,6 +70,8 @@ async function bootstrap(): Promise<void> {
   const modeInfo = MODES[mode];
   document.body.classList.add(`mode-${mode}`);
   await loader.progress(0.1, 'Starting the renderer');
+  // The display's own frame interval, before anything 3D draws: adaptive resolution aims at it on a display under 60 Hz (#332).
+  const refreshMs = await displayFrameMs();
   const renderer = createRenderer(canvas);
   const { camera, controls } = createCameraRig(canvas);
   const baseFov = camera.fov;
@@ -96,9 +99,14 @@ async function bootstrap(): Promise<void> {
   let lighting: LightingMode = 'lab';
   let quality: QualityLevel = initialQuality();
   /** Renderer-wide parts of the quality setting; each lane applies the rest. */
+  // Adaptive resolution (#332): never at Low, and never on a screenshot path, which must be the same every run.
+  const governor = new ResolutionGovernor(Math.max(1000 / 60, refreshMs));
+  const governed = () => quality !== 'low' && !isStill() && !new URLSearchParams(location.search).has('clean');
+  const setPixelRatio = () => renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio) * (governed() ? governor.scale : 1));
   const applyQuality = () => {
     const q = QUALITY[quality];
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
+    governor.reset();
+    setPixelRatio();
     renderer.shadowMap.enabled = q.shadowMapSize > 0;
     renderer.transmissionResolutionScale = q.transmissionScale;
     for (const lane of lanes()) lane.setQuality(q);
@@ -384,7 +392,13 @@ async function bootstrap(): Promise<void> {
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
     // Never negative: after a long stall (shaders compiling for a new target) the frame timestamps can
     // step backwards, and a negative step blows up the camera spring into NaN.
-    const delta = Math.max(0, Math.min(timer.getDelta(), 0.1));
+    const rawDelta = timer.getDelta();
+    const delta = Math.max(0, Math.min(rawDelta, 0.1));
+    // A frame that ran slow or fast steps the render scale (#332); the raw time, so a stall reads as one.
+    if (governed() && governor.frame(rawDelta * 1000)) {
+      setPixelRatio();
+      layout();
+    }
     // Read before update: the frame that reaches the end of the shot stops playback but still plays its sounds.
     const advancing = playback.isPlaying;
     // While a shot plays only the two readouts sit over the scene; the results come in when it stops (#239).
