@@ -24,9 +24,10 @@ import { createPostFx, type PostFx } from './scene/postfx';
 import { QUALITY, type QualitySettings } from './scene/quality';
 import { createStudio, type LightingMode, type Studio } from './scene/studio';
 import { wallClockS } from './scene/still';
-import { simulate } from './sim/engine';
+import { fireSession, type FireRound, type FireSessionInput } from './sim/fireSession';
+import { runFireSession } from './sim/simClient';
 import { seededRandom } from './sim/random';
-import { activeShot, appendShot, priorDamage, SHOT_GAP_S } from './sim/session';
+import { activeShot, SHOT_GAP_S } from './sim/session';
 import { patternSeed, roundOffsets } from './sim/firePattern';
 import type { Timeline } from './sim/types';
 import { hasMuzzle } from './data/modes';
@@ -37,8 +38,6 @@ import type { TargetSetup } from './ui/stackEditor';
 export const STAND_OFF_M = 0.5;
 /** Playback may run this much past the physics so impact effects can settle, in seconds. */
 const EFFECT_TAIL_S = 8e-3;
-/** In group fire, each round leaves this long after the previous one has finished, in seconds. */
-const GROUP_GAP_S = 1e-3;
 
 /**
  * One shooting lane: its own studio scene, target, round, shot session and
@@ -68,6 +67,8 @@ export class Lane {
   session: Timeline | null = null;
   /** Where the last Fire starts on the session timeline. */
   lastFireStart = 0;
+  /** Bumped by each Fire and each clear, so a result that lands after a newer Fire or a reset is dropped (#333). */
+  private fireSeq = 0;
   private targetGroup: THREE.Group | null = null;
   private lighting: LightingMode = 'lab';
   private quality: QualitySettings = QUALITY.medium;
@@ -232,6 +233,8 @@ export class Lane {
   clear(): void {
     this.session = null;
     this.lastFireStart = 0;
+    // A Fire still computing in the worker is dropped when it lands (#333).
+    this.fireSeq++;
     this.shot.clear();
     this.effects.clear();
     this.witness.clearEffects();
@@ -242,7 +245,25 @@ export class Lane {
    * timeline. `fresh` starts a new session at t = 0 instead of adding to it.
    */
   fire(plan: FirePlan, fresh = false): Timeline {
+    const prepared = this.prepareFire(plan, fresh);
+    return this.finishFire(prepared, fireSession(prepared.input));
+  }
+
+  /**
+   * Fires the plan with its simulation off the main thread (#333), so the view keeps moving while it computes.
+   * Resolves to the session timeline, or to null when a newer Fire or a reset came in meanwhile.
+   */
+  async fireAsync(plan: FirePlan, fresh = false): Promise<Timeline | null> {
+    const prepared = this.prepareFire(plan, fresh);
+    const timeline = await runFireSession(prepared.input);
+    if (prepared.seq !== this.fireSeq) return null;
+    return this.finishFire(prepared, timeline);
+  }
+
+  /** Works out the rounds of a Fire (aim, scatter, the layers each meets) as plain data for the simulation. */
+  private prepareFire(plan: FirePlan, fresh: boolean) {
     if (fresh) this.clear();
+    const seq = ++this.fireSeq;
     // A dive or a bearing (#250): shoot the layers behind the face it meets, at its obliquity, and turn the drawing onto the real path.
     const hit = this.approachHit;
     const shotSetup: TargetSetup = hit ? { layers: hit.layers, angleDeg: hit.obliquityDeg } : this.setup;
@@ -255,8 +276,7 @@ export class Lane {
     const limitY = face.y - 0.01;
     const limitZ = face.z - 0.01;
     const fireStart = this.session ? this.session.duration + SHOT_GAP_S : 0;
-    let offset = fireStart;
-    offsets.forEach((o, i) => {
+    const rounds: FireRound[] = offsets.map((o) => {
       // A group scatters round the aim point; a burst climbs with recoil (#153). Every round stays on the face.
       // Round objects (#156) keep the shot inside their outline, and the bullet crosses the chord at that point.
       const { y, z } = clampAimToObjects(
@@ -264,21 +284,27 @@ export class Lane {
         Math.max(-limitY, Math.min(limitY, plan.aimY + o.y)),
         Math.max(-limitZ, Math.min(limitZ, plan.aimZ + o.z)),
       );
-      const part = simulate({
-        bullet: this.spec,
-        layers: shapeLayers(layers, y, z),
-        angleDeg,
-        impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z },
-        standOffM: this.spec.standoffM ?? STAND_OFF_M,
-        damage: priorDamage(this.session),
-        resolution: this.quality.fineSimulation ? ULTRA_RESOLUTION : STANDARD_RESOLUTION,
-      });
-      // Stored relative to the target's centre line, so the muzzle can follow it.
-      part.shots[0].aim = { y: lineY - this.baseY + y, z };
-      this.session = appendShot(this.session, part, offset);
-      offset = plan.mode === 'burst' ? fireStart + ((i + 1) * 60) / plan.rpm : offset + part.duration + GROUP_GAP_S;
+      // The aim is stored relative to the target's centre line, so the muzzle can follow it.
+      return { layers: shapeLayers(layers, y, z), impactPoint: { x: TARGET_FRONT_X, y: lineY + y, z }, aim: { y: lineY - this.baseY + y, z } };
     });
-    const timeline = this.session!;
+    const input: FireSessionInput = {
+      bullet: this.spec,
+      rounds,
+      angleDeg,
+      standOffM: this.spec.standoffM ?? STAND_OFF_M,
+      resolution: this.quality.fineSimulation ? ULTRA_RESOLUTION : STANDARD_RESOLUTION,
+      session: this.session,
+      fireStart,
+      mode: plan.mode,
+      rpm: plan.rpm,
+    };
+    return { seq, hit, shotSetup, layers, angleDeg, fireStart, input };
+  }
+
+  /** Takes a Fire's simulated session and lays out its drawing, effects and witness blocks. */
+  private finishFire(prepared: ReturnType<Lane['prepareFire']>, timeline: Timeline): Timeline {
+    const { hit, shotSetup, layers, angleDeg, fireStart } = prepared;
+    this.session = timeline;
     this.lastFireStart = fireStart;
     this.setAttackFrame(hit);
     this.shot.load(timeline, shotSetup.layers[0]?.medium.hardness);

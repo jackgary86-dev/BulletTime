@@ -193,14 +193,41 @@ async function bootstrap(): Promise<void> {
       clearShot();
       director.reset();
     },
-    onFire: () => fireShot(shotsPanel.plan()),
+    onFire: () => void fireShotAsync(shotsPanel.plan()),
   });
 
-  /** Fires `plan` from lane A (and lane B when comparing) and starts the replay; returns lane A's timeline. */
+  /**
+   * Fires `plan` from lane A (and lane B when comparing) and starts the replay; returns lane A's timeline. Runs the
+   * simulation in place: for replay links, the range game and the first shot, which need the timeline at once.
+   */
   function fireShot(plan: FirePlan): Timeline | null {
     if (!laneA) return null;
     // Comparing: both lanes fire fresh from t = 0 so they stay in step.
     const timeline = laneA.fire(plan, !!laneB);
+    return showShot(plan, timeline, laneB ? laneB.fire(plan, true) : null);
+  }
+
+  /** Fire from the button (#333): the simulation runs in the worker, so the view keeps moving while it computes. */
+  let computing = 0;
+  async function fireShotAsync(plan: FirePlan): Promise<void> {
+    if (!laneA || computing) return;
+    const token = ++computing;
+    panel.setComputing(true);
+    try {
+      const [a, b] = await Promise.all([laneA.fireAsync(plan, !!laneB), laneB ? laneB.fireAsync(plan, true) : Promise.resolve(null)]);
+      // A reset, a new target or Compare while it computed: the lane dropped the result, and so does the page.
+      if (token === computing && a && (!laneB || b)) showShot(plan, a, b);
+    } finally {
+      if (token === computing) {
+        computing = 0;
+        panel.setComputing(false);
+      }
+    }
+  }
+
+  /** Shows a fired shot: results, labels, camera, playback, sounds and the scrubber. */
+  function showShot(plan: FirePlan, timeline: Timeline, b: Timeline | null): Timeline | null {
+    if (!laneA) return null;
     const hit = laneA.approachHit;
     // A dive or bearing (#250) says which face it met and how obliquely.
     const faceName = hit ? (hit.face === 'top' ? (laneA.setup.layers[0]?.medium.id === 'tank-hull' ? 'Turret roof' : 'Roof') : hit.face === 'side' ? 'Side wall' : 'Front face') : '';
@@ -209,8 +236,7 @@ async function bootstrap(): Promise<void> {
     results.show(timeline, laneA.setup.layers, physicsLayers(laneA.setup.layers), laneA.effects.organic);
     witnessPanel?.showResults(laneA.witnessResults.length ? laneA.witnessResults : null);
     let clock: Timeline = timeline;
-    if (laneB) {
-      const b = laneB.fire(plan, true);
+    if (laneB && b) {
       resultsB.show(b, laneB.setup.layers, physicsLayers(laneB.setup.layers), laneB.effects.organic);
       // One clock for both: as long as the longer of the two shots.
       clock = { ...timeline, duration: Math.max(timeline.duration, b.duration) };

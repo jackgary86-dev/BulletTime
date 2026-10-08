@@ -24,6 +24,8 @@ export interface ControlsPanel {
   setCameraMode(mode: CameraMode): void;
   /** Enables Replay once there is a shot to replay. */
   setHasShot(hasShot: boolean): void;
+  /** Shows that a shot is computing (#333): Fire is disabled and says so. */
+  setComputing(on: boolean): void;
 }
 
 export interface ControlsOptions {
@@ -159,6 +161,11 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
     setCameraMode,
     setHasShot(hasShot) {
       replay.disabled = !hasShot;
+    },
+    setComputing(on) {
+      fire.disabled = on;
+      fire.classList.toggle('computing', on);
+      fire.textContent = on ? 'Computing…' : 'Fire';
     },
   };
 }
