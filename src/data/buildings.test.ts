@@ -57,7 +57,8 @@ describe('mock test buildings (#246)', () => {
   });
 
   it('shows thin shed sheet barely slowing a shell, where the block house wall stops or slows it hard', () => {
-    const shell = getBullet(MODES.artillery.defaultId).id;
+    // Full-calibre shot: a dart would go through both.
+    const shell = getBullet('88mm-ap').id;
     const shed = fire({ bullet: shell, stack: presetLayers(preset('steel-shed')).slice(0, 1) }).summary;
     expect(shed.passedThrough).toBe(true);
     expect(shed.exitSpeed).toBeGreaterThan(shed.impactSpeed * 0.9);

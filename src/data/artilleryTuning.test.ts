@@ -59,7 +59,7 @@ function detonation(id: string, medium: string, thickness: number) {
   return { t, boom: t.events.find((e) => e.type === 'detonate') };
 }
 
-describe('delay fuzes and HESH (#190, #191)', () => {
+describe('APHE base fuze (#190)', () => {
   it('bursts an APHE shell behind the plate it punched through, not on the face', () => {
     const { boom } = detonation('88mm-aphe', 'rha', 0.05);
     expect(boom).toBeDefined();
@@ -67,30 +67,14 @@ describe('delay fuzes and HESH (#190, #191)', () => {
     expect(boom!.pos.x).toBeGreaterThan(-0.2 + 0.05);
   });
 
-  it('buries a delay-fuzed howitzer shell in earth before it bursts, where a contact shell bursts on the face', () => {
-    const delayed = detonation('155mm-he-delay', 'packed-earth', 2).boom!;
-    const contact = detonation('155mm-he', 'packed-earth', 2).boom!;
-    expect(contact.pos.x).toBeLessThan(-0.19);
-    expect(delayed.pos.x).toBeGreaterThan(contact.pos.x + 0.3);
-  });
-
-  it('scabs the far side of plate thinner than the HESH limit, and not thicker plate', () => {
-    const behindFace = (thickness: number) => {
-      const { t } = detonation('120mm-rr-hesh', 'rha', thickness);
-      const back = -0.2 + thickness;
-      return t.tracks.filter((tr) => tr.kind === 'fragment' && tr.keyframes[0].pos.x >= back).length;
-    };
-    expect(behindFace(0.08)).toBeGreaterThan(10);
-    expect(behindFace(0.4)).toBe(0);
-  });
 });
 
 describe('framing for big rounds (#192)', () => {
   it('reaches back for the length of the shell and caps it for the longest missiles', async () => {
     const { framingReach } = await import('./modes');
     expect(framingReach(getBullet('9mm-fmj'))).toBe(0.5);
-    expect(framingReach(getBullet('240mm-he'))).toBeCloseTo(1.2, 5);
-    expect(framingReach(getBullet('missile:cruise:shaped'))).toBe(3.5);
+    expect(framingReach(getBullet('120mm-apfsds'))).toBeCloseTo(0.9, 5);
+    expect(framingReach(getBullet('missile:cruise:efp'))).toBe(3.5);
     expect(framingReach(getBullet('charge-satchel'))).toBe(2);
   });
 });

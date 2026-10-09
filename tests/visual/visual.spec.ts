@@ -41,7 +41,7 @@ const SHOTS: { name: string; query: string; quality?: string }[] = [
   { name: 'artillery-default', query: 'mode=artillery&at=300us' },
   { name: 'missile-default', query: 'mode=missile&at=1ms' },
   // Large steel plates on their proving-ground stand, spaced 300 mm (#232, #234).
-  { name: 'artillery-plate-spaced', query: 'mode=artillery&bullet=155mm-he&preset=plate-spaced&at=300us' },
+  { name: 'artillery-plate-spaced', query: 'mode=artillery&bullet=120mm-apfsds&preset=plate-spaced&at=300us' },
   { name: 'explosion-default', query: 'mode=explosion&at=2ms' },
   // The brightest frame of a hot impact, with bloom on (#321): the plate edge and the hole must stay readable, not glare.
   { name: 'flash-308-steel', query: 'mode=bullet&bullet=308-sp&medium=steel-ar500&at=590us', quality: 'high' },

@@ -67,7 +67,7 @@ describe('replay link in the Missile lab (#245)', () => {
   }
 
   it('names a small target the mode does not list, and keeps the default plate and its thickness', () => {
-    const r = root({ '#bullet-select': ['missile:guided-at:shaped'], '#medium-select': ['rha-plate', 'mild-plate'] });
+    const r = root({ '#bullet-select': ['missile:guided-at:penetrator'], '#medium-select': ['rha-plate', 'mild-plate'] });
     const ignored = applyReplayLink(r, { atS: 1e-4, medium: 'steel-mild', thicknessM: 0.003 });
     expect(ignored).toEqual(['steel-mild']);
     expect((r as never as { selects: Record<string, { value: string }>; slider: { value: string } }).selects['#medium-select'].value).toBe('rha-plate');

@@ -106,12 +106,11 @@ describe('cue track', () => {
 });
 
 describe('heavy sounds (#199)', () => {
-  it('picks cannon and howitzer reports by shell mass, a launch for missiles and nothing for a charge', () => {
+  it('picks cannon and heavy-gun reports by shell mass, a launch for missiles and nothing for a charge', () => {
     expect(shotSound(getBullet('30mm-ap'))).toBe('shot-cannon');
-    expect(shotSound(getBullet('105mm-heat'))).toBe('shot-cannon');
-    expect(shotSound(getBullet('155mm-he'))).toBe('shot-howitzer');
-    expect(shotSound(getBullet('240mm-he'))).toBe('shot-howitzer');
-    expect(shotSound(getBullet('missile:guided-at:shaped'))).toBe('missile-launch');
+    expect(shotSound(getBullet('120mm-apfsds'))).toBe('shot-cannon');
+    expect(shotSound(getBullet('122mm-ap'))).toBe('shot-howitzer');
+    expect(shotSound(getBullet('missile:guided-at:efp'))).toBe('missile-launch');
     expect(shotSound(getBullet('charge-block'))).toBe('');
   });
 
@@ -121,7 +120,7 @@ describe('heavy sounds (#199)', () => {
     expect(cuesFor('charge-flash', boom(0.1, 'standard'))).toEqual([{ t: 0.0015, sound: 'blast-small' }]);
     expect(cuesFor('charge-satchel', boom(6.5, 'standard'))).toEqual([{ t: 0.0015, sound: 'blast-large' }]);
     expect(cuesFor('charge-thermobaric', boom(3.5, 'thermobaric'))).toEqual([{ t: 0.0015, sound: 'blast-thermobaric' }]);
-    for (const c of [...cuesFor('155mm-he', boom(8, 'standard')), ...cuesFor('missile:cruise:thermobaric', boom(630, 'thermobaric'))]) expect(() => getSound(c.sound)).not.toThrow();
+    for (const c of [...cuesFor('88mm-aphe', boom(0.15, 'standard')), ...cuesFor('missile:cruise:efp', boom(225, 'standard'))]) expect(() => getSound(c.sound)).not.toThrow();
   });
 });
 

@@ -109,7 +109,8 @@ describe('gel witness blocks (#249)', () => {
   });
 
   it('reports the blast at the block, damped by an unbroken wall', () => {
-    const shell = getBullet(MODES.artillery.defaultId).id;
+    // APHE is the artillery shell with a filler: it bursts after it gets through.
+    const shell = getBullet('88mm-aphe').id;
     const t = houseShot(shell);
     const [r] = witnessResults(t, frame, [{ distM: 0.3, lateralM: 0 }]);
     expect(r.blastKPa).toBeGreaterThan(0);
