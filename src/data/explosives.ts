@@ -28,7 +28,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 60,
     massGrains: gr(0.12),
     standoffM: 0.8,
-    blast: { yieldKg: 0.1, fireball: 'standard' },
+    blast: { yieldKg: 0.1, blastFraction: 1, fireball: 'standard' },
   }),
   charge({
     id: 'charge-cased',
@@ -39,7 +39,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 90,
     massGrains: gr(0.9),
     standoffM: 1.0,
-    blast: { yieldKg: 0.4, fragmentCount: 60, fragmentSpeedMs: 1400, fragmentMassFraction: 0.6, fireball: 'standard' },
+    blast: { yieldKg: 0.4, blastFraction: 0.7, fragmentCount: 60, fragmentSpeedMs: 1400, fragmentMassFraction: 0.6, fireball: 'standard' },
   }),
   charge({
     id: 'charge-block',
@@ -50,7 +50,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 120,
     massGrains: gr(1),
     standoffM: 1.2,
-    blast: { yieldKg: 1.3, fireball: 'standard' },
+    blast: { yieldKg: 1.3, blastFraction: 1, fireball: 'standard' },
   }),
   charge({
     id: 'charge-satchel',
@@ -61,7 +61,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 200,
     massGrains: gr(5),
     standoffM: 2.0,
-    blast: { yieldKg: 6.5, fireball: 'standard' },
+    blast: { yieldKg: 6.5, blastFraction: 1, fireball: 'standard' },
   }),
   charge({
     id: 'charge-shaped',
@@ -72,7 +72,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 130,
     massGrains: gr(2),
     standoffM: 0.5,
-    blast: { yieldKg: 1.0, jet: { count: 6, speedMs: 7500, massFraction: 0.12 }, fireball: 'standard' },
+    blast: { yieldKg: 1.0, blastFraction: 0.3, jet: { count: 6, speedMs: 7500, massFraction: 0.12 }, fireball: 'standard' },
   }),
   charge({
     id: 'charge-thermobaric',
@@ -83,7 +83,7 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 160,
     massGrains: gr(2),
     standoffM: 2.0,
-    blast: { yieldKg: 3.5, fireball: 'thermobaric' },
+    blast: { yieldKg: 3.5, blastFraction: 1, fireball: 'thermobaric' },
   }),
   charge({
     id: 'charge-incendiary',
@@ -94,6 +94,6 @@ export const EXPLOSIVES: BulletSpec[] = [
     lengthMm: 100,
     massGrains: gr(0.5),
     standoffM: 0.8,
-    blast: { yieldKg: 0.02, fireball: 'incendiary' },
+    blast: { yieldKg: 0.02, blastFraction: 1, fireball: 'incendiary' },
   }),
 ];
