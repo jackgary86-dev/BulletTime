@@ -39,6 +39,7 @@ import { contentGate } from './ui/contentWarning';
 import { chooseSimulator } from './ui/launcher';
 import { mountArmorLab } from './ui/armorLab';
 import { loadImpactBeat, saveImpactBeat } from './ui/beatSetting';
+import { initialFlash, saveFlash, setCleanFrameFlash, setFlashLevel } from './scene/flash';
 import { buildCues, CueTrack, cueStretch } from './audio/cues';
 import { playSound, unlockAudio } from './audio/sounds';
 
@@ -95,6 +96,8 @@ async function bootstrap(): Promise<void> {
   }
   let lighting: LightingMode = 'lab';
   let quality: QualityLevel = initialQuality();
+  const flashLevel = initialFlash();
+  setFlashLevel(flashLevel);
   /** Renderer-wide parts of the quality setting; each lane applies the rest. */
   const applyQuality = () => {
     const q = QUALITY[quality];
@@ -157,12 +160,17 @@ async function bootstrap(): Promise<void> {
   };
   canvas.addEventListener('pointerdown', revealEarly);
   window.addEventListener('keydown', revealEarly);
-  const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'));
+  const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'), setCleanFrameFlash);
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
     initialImpactBeat: playback.impactBeat,
     initialCamera: 'side',
     initialQuality: quality,
+    initialFlash: flashLevel,
+    onFlashChange: (level) => {
+      setFlashLevel(level);
+      saveFlash(level);
+    },
     onRateChange: (rate) => (playback.rate = rate),
     onCleanFrame: () => cleanFrame.toggle(),
     onImpactBeatChange: (on) => {

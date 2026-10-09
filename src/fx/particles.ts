@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '../sim/random';
+import { flashCandela, lightScale } from '../scene/flash';
 import { boostFor, createGpuMesh, gpuActive, gpuParticleBoosts, sameGpuBoosts, type GpuBoosts, type GpuConstants, type GpuKind, type GpuLookMesh, type SpawnOptions } from './gpuParticles';
 
 /**
@@ -377,9 +378,7 @@ export class ParticleSystem {
 
   /** Lays the particles out for sim time `t`; moving bits smear over a `shutterS` exposure (#74). */
   update(t: number, shutterS = 0): void {
-    if (t === this.shownT && shutterS === this.shownShutter) return;
-    this.shownT = t;
-    this.shownShutter = shutterS;
+    // The flash first, every frame, so a change to the Flash setting shows on a paused frame too.
     let best = 0;
     for (const f of this.flashes) {
       const age = t - f.t;
@@ -390,7 +389,11 @@ export class ParticleSystem {
       this.flashLight.position.copy(f.pos);
       this.flashLight.color.copy(f.color);
     }
-    this.flashLight.intensity = best;
+    // Soft-capped, so a big hit does not light the face so hard that bloom hides it (#321).
+    this.flashLight.intensity = flashCandela(best) * lightScale();
+    if (t === this.shownT && shutterS === this.shownShutter) return;
+    this.shownT = t;
+    this.shownShutter = shutterS;
     for (const [look, list] of this.particles) {
       const mesh = this.meshes.get(look)!;
       const gpu = this.gpuMeshes.get(look);
