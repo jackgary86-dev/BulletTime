@@ -17,6 +17,7 @@ import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
 import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
 import { isStill } from './scene/still';
+import { FrameGate, cameraSignature } from './scene/frameGate';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
@@ -387,6 +388,12 @@ async function bootstrap(): Promise<void> {
 
   const timer = new THREE.Timer();
   timer.connect(document);
+  // Draw only the frames that change (#329); `?alwaysdraw` keeps the old every-frame loop (the perf test's yardstick).
+  const gate = new URLSearchParams(location.search).has('alwaysdraw') ? null : new FrameGate();
+  const invalidate = () => gate?.invalidate();
+  for (const type of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize', 'change', 'input', 'focus', 'visibilitychange']) window.addEventListener(type, invalidate, { passive: true, capture: true });
+  window.addEventListener('pointermove', (e) => e.buttons && invalidate(), { passive: true, capture: true });
+  THREE.DefaultLoadingManager.onLoad = invalidate;
   renderer.setAnimationLoop((timestamp) => {
     timer.update(timestamp);
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
@@ -415,12 +422,20 @@ async function bootstrap(): Promise<void> {
 
     const { width, height } = size;
     const all = lanes();
+    const draw =
+      !gate ||
+      gate.shouldDraw(
+        `${cameraSignature(camera)}|${t}|${width}x${height}|${all.length}|${advancing}|${playback.shutterS}`,
+        all.some((lane) => lane.shot.live),
+        delta,
+      );
     const laneWidth = all.length > 1 ? Math.floor(width / 2) : width;
     renderer.setScissorTest(all.length > 1);
     // The side panels cover the outer edge of each half, so slide each lane's view toward the middle.
     const slide = all.length > 1 && width > 900 ? Math.min(SIDE_PANEL_PX / 2, laneWidth / 4) : 0;
     all.forEach((lane, i) => {
       lane.update(t, camera, playback.shutterS);
+      if (!draw) return;
       lane.postFx.setFocus(director.focusDistance);
       // Side by side: each lane draws into its own half of the canvas, through the same camera.
       renderer.setViewport(i * laneWidth, 0, laneWidth, height);
