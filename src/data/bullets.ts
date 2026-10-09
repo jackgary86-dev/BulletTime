@@ -42,6 +42,11 @@ export type BulletShape =
 export interface BlastSpec {
   /** TNT-equivalent explosive, in kilograms. Sets the fireball, the overpressure and the shockwave. */
   yieldKg: number;
+  /**
+   * Share of the yield that goes into the free-air blast (default 1). A shaped or cutting charge puts much of its
+   * energy into the jet and a cased charge into its fragments, so their blast is weaker sideways than their yield (#320).
+   */
+  blastFraction?: number;
   /** Fragments thrown (a representative sample, not the real count) and their speed. */
   fragmentCount?: number;
   fragmentSpeedMs?: number;

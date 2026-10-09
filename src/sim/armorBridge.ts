@@ -81,9 +81,13 @@ export function rodImpact(rod: RodState): SolidImpact {
   return { family: 'apfsds', calibreMm: diameter * 1000, velocity: rod.speed, material: 'tungsten-alloy', density, diameter, length, mass: rod.massKg };
 }
 
-/** What a rod does to `pathM` of this plate along its path (the line-of-sight thickness for a sloped plate). */
-export function rodThroughPlate(rod: RodState, material: PlateMaterial, pathM: number): RodOutcome {
-  const { result } = longRodShot({ impact: rodImpact(rod), material, thicknessM: Math.max(1e-4, pathM), obliquityDeg: 0 });
+/**
+ * What a rod does to `pathM` of this plate along its path (the line-of-sight thickness for a sloped plate). `rearRoomM`
+ * is the air behind it before another plate along the path: a plate backed closely by another gives the rod almost no
+ * free breakout at its rear face, so a stack of plates in contact bores like one solid plate (#325).
+ */
+export function rodThroughPlate(rod: RodState, material: PlateMaterial, pathM: number, rearRoomM?: number): RodOutcome {
+  const { result } = longRodShot({ impact: rodImpact(rod), material, thicknessM: Math.max(1e-4, pathM), obliquityDeg: 0, rearRoomM });
   return {
     perforated: result.perforated,
     depthM: result.perforated ? pathM : result.penetrationM,

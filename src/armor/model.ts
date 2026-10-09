@@ -48,6 +48,11 @@ export interface ArmorShot {
   thicknessM: number;
   /** Plate slope, degrees from the normal (0 = square-on), 0 to `MAX_OBLIQUITY_DEG`; each model clamps it to the range it models. */
   obliquityDeg: number;
+  /**
+   * Room behind the rear face, along the shot line, before the next plate, m. A rear face backed closely by another plate
+   * cannot bulge and plug out further than that (#325). Leave out for a free rear face.
+   */
+  rearRoomM?: number;
 }
 
 /** The state of the impact at one instant. Lengths in metres, speeds in m/s. */

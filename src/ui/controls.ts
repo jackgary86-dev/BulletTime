@@ -1,5 +1,6 @@
 import { CAMERA_MODES, type CameraMode } from '../scene/cameraDirector';
 import { qualityLevels, type QualityLevel } from '../scene/quality';
+import { FLASH_LEVELS, type FlashLevel } from '../scene/flash';
 import type { LightingMode } from '../scene/studio';
 import { formatTime } from './format';
 import { CAMERA_ICONS, LIGHTING_ICONS } from './icons';
@@ -32,6 +33,9 @@ export interface ControlsOptions {
   initialImpactBeat: boolean;
   initialCamera: CameraMode;
   initialQuality: QualityLevel;
+  /** How bright impact flashes and the muzzle-flash wash are (#321). */
+  initialFlash: FlashLevel;
+  onFlashChange(level: FlashLevel): void;
   onFire(): void;
   onReplay(): void;
   onReset(): void;
@@ -71,6 +75,12 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
         <label class="field-label" for="quality-select">Quality</label>
         <select id="quality-select" title="Lower quality uses fewer particles, no glow and no shadows, for smoother playback">
           ${qualityLevels().map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="field-label" for="flash-select">Flash</label>
+        <select id="flash-select" title="How bright the impact flash and the muzzle-flash glare are. Lower it if a hit is hard to see.">
+          ${FLASH_LEVELS.map(({ level, label }) => `<option value="${level}">${label}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -124,6 +134,10 @@ export function mountControls(root: HTMLElement, options: ControlsOptions): Cont
   const quality = panel.querySelector<HTMLSelectElement>('#quality-select')!;
   quality.value = options.initialQuality;
   quality.addEventListener('change', () => options.onQualityChange(quality.value as QualityLevel));
+
+  const flash = panel.querySelector<HTMLSelectElement>('#flash-select')!;
+  flash.value = options.initialFlash;
+  flash.addEventListener('change', () => options.onFlashChange(flash.value as FlashLevel));
 
   const presetButtons = RATE_PRESETS.map((preset) => {
     const button = document.createElement('button');

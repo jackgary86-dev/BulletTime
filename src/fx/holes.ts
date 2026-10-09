@@ -69,12 +69,85 @@ export interface HoleSpec {
 
 const OFFSET = 0.0006;
 
+/** How far outside a face a hit may land and still count as on it (a mark right at the edge, a fragment hole on the rim). */
+const FACE_SLACK = 0.02;
+
+/**
+ * A flat face that marks sit on, as it was when the shot loaded (#318): the box of the body in its layer's own frame,
+ * and the four planes (in world space, normals pointing in) that bound it across and up. Marks are flat decals drawn
+ * in front of the face, so without these a mark sized from a big round hangs in the air past the plate's edge.
+ */
+export interface MarkFace {
+  /** World to the layer's frame (x through the thickness, y up, z across). */
+  toLocal: THREE.Matrix4;
+  /** The body's extent in that frame. */
+  box: THREE.Box3;
+  /** The layer's thickness axis in world space: the direction its front and back faces point along. */
+  across: THREE.Vector3;
+  /** The sides, in world space: up, down, left and right of the face. A fragment is kept where all four are positive. */
+  planes: THREE.Plane[];
+}
+
+/**
+ * The face of a layer's body: its extent in the layer's own frame, from the meshes themselves, so it is right for any
+ * size of plate and any impact angle. Null if the body has no geometry.
+ */
+export function markFace(layer: THREE.Object3D, body: THREE.Object3D): MarkFace | null {
+  layer.updateWorldMatrix(true, true);
+  const toLocal = layer.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  body.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    box.union(mesh.geometry.boundingBox!.clone().applyMatrix4(toLocal.clone().multiply(mesh.matrixWorld)));
+  });
+  if (box.isEmpty()) return null;
+  // Normals point into the face, so a fragment on the wrong side of any of them is clipped.
+  const planes = [
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), -box.min.y),
+    new THREE.Plane(new THREE.Vector3(0, -1, 0), box.max.y),
+    new THREE.Plane(new THREE.Vector3(0, 0, 1), -box.min.z),
+    new THREE.Plane(new THREE.Vector3(0, 0, -1), box.max.z),
+  ].map((plane) => plane.applyMatrix4(layer.matrixWorld));
+  return { toLocal, box, across: new THREE.Vector3(1, 0, 0).transformDirection(layer.matrixWorld), planes };
+}
+
 export class HoleMarks {
   readonly group = new THREE.Group();
   private readonly holes: { t: number; object: THREE.Object3D; glow?: { material: THREE.MeshBasicMaterial; cool: number } }[] = [];
+  /** The faces of the target now loaded, so each mark can be cut off at the edge of the one it is on (#318). */
+  private faces: MarkFace[] = [];
 
   constructor() {
     this.group.name = 'holes';
+  }
+
+  /** The faces of the target about to be marked; call before the shot's marks are added. */
+  setFaces(faces: MarkFace[]): void {
+    this.faces = faces;
+  }
+
+  /**
+   * The face a mark at a position, facing a direction, is on, or null when it is not on the front or back of a known one (a
+   * mark on a cut edge is left alone). The nearest face wins, so a gap between plates cannot hand a mark to the wrong one.
+   */
+  private faceOf(pos: THREE.Vector3, normal: THREE.Vector3): MarkFace | null {
+    let best: MarkFace | null = null;
+    let bestOut = Infinity;
+    const local = new THREE.Vector3();
+    for (const face of this.faces) {
+      local.copy(pos).applyMatrix4(face.toLocal);
+      // Only the front and back faces: the normal must run along the thickness.
+      if (Math.abs(face.across.dot(normal)) < 0.7) continue;
+      // How far outside the box it is (0 when on or inside it).
+      const out = Math.max(face.box.min.x - local.x, local.x - face.box.max.x, face.box.min.y - local.y, local.y - face.box.max.y, face.box.min.z - local.z, local.z - face.box.max.z, 0);
+      if (out <= FACE_SLACK && out < bestOut) {
+        best = face;
+        bestOut = out;
+      }
+    }
+    return best;
   }
 
   add(spec: HoleSpec): void {
@@ -263,6 +336,15 @@ export class HoleMarks {
       object.add(fins);
     }
 
+    // Cut every part of the mark off at the edge of the face it is on, whatever its size.
+    const face = this.faceOf(new THREE.Vector3(spec.pos.x, spec.pos.y, spec.pos.z), normal);
+    if (face) {
+      object.traverse((o) => {
+        const material = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        for (const m of Array.isArray(material) ? material : material ? [material] : []) m.clippingPlanes = face.planes;
+      });
+    }
+
     object.visible = false;
     object.renderOrder = this.holes.length;
     object.traverse((o) => (o.renderOrder = this.holes.length));
@@ -278,6 +360,7 @@ export class HoleMarks {
       this.group.remove(object);
     }
     this.holes.length = 0;
+    this.faces = [];
   }
 
   update(t: number): void {

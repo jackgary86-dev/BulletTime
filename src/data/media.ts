@@ -931,7 +931,7 @@ export const MEDIA: MediumSpec[] = [
   {
     id: 'rha-plate',
     name: 'Large RHA plate',
-    description: 'Rolled homogeneous armour at proving-ground size (3 x 2 m face, up to 300 mm). HE and HESH do little to it; AP and long-rod shot are what it is for.',
+    description: 'Rolled homogeneous armour at proving-ground size (3 x 2 m face, up to 300 mm): the plate AP shot and long rods are proved against.',
     behaviour: 'steel',
     look: 'ar500',
     density: 7850,
@@ -950,7 +950,7 @@ export const MEDIA: MediumSpec[] = [
   {
     id: 'mild-plate',
     name: 'Large mild steel plate',
-    description: 'Structural steel plate at proving-ground size. Soft and ductile: thin sections are holed by HE fragments and shells, and it dishes and tears rather than shattering.',
+    description: 'Structural steel plate at proving-ground size. Soft and ductile: thin sections are holed easily, and it dishes and tears rather than shattering.',
     behaviour: 'steel',
     look: 'mildSteel',
     density: 7850,

@@ -51,6 +51,8 @@ export class ShotRenderer {
   private heatHazeOn = true;
   /** The hot air behind the first burning motor this frame, in this group's frame (#247). */
   readonly haze = { active: false, nozzle: new THREE.Vector3(), tip: new THREE.Vector3(), radius: 0 };
+  /** True while a plume is in the air: it flickers by the wall clock, so the frame changes even when paused (#329). */
+  live = false;
   /** Lead shards and curled strips of torn jacket (#71); every third fragment is jacket. */
   private readonly fragments: THREE.InstancedMesh;
   private readonly jacketCurls: THREE.InstancedMesh;
@@ -153,6 +155,7 @@ export class ShotRenderer {
 
     let lit = false;
     this.haze.active = false;
+    this.live = false;
     for (const { model, trackId, wake, streak, air, trail, crumples } of this.bullets) {
       const track = timeline.tracks[trackId];
       let frame = sampleTrack(track, t);
@@ -186,6 +189,7 @@ export class ShotRenderer {
         }
         // Wall-clock flicker, frozen in still mode (#243).
         const now = wallClockS();
+        if (inAir) this.live = true;
         trail.layers = this.plumeLayers;
         trail.update(inAir, model.length, frame?.diameter ?? 0, now);
         if (inAir && frame && this.motorLightOn && !lit) {
