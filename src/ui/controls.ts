@@ -6,17 +6,19 @@ import { formatTime } from './format';
 import { CAMERA_ICONS, LIGHTING_ICONS } from './icons';
 
 /**
- * Slow-motion presets, as simulated seconds per real second. Nothing faster than 1/1,000:
- * at 1× or 1/100 a shot is over before anything can be seen (#149).
+ * Slow-motion presets, as simulated seconds per real second, fastest first. 1/100 and 1/500 play the whole
+ * shot through in moments (the impact beat still slows each hit); the slower presets are for the detail.
  */
 export const RATE_PRESETS = [
+  { label: '1/100', rate: 1 / 100 },
+  { label: '1/500', rate: 1 / 500 },
   { label: '1/1,000', rate: 1 / 1000 },
   { label: '1/10,000', rate: 1 / 10_000 },
   { label: '1/100,000', rate: 1 / 100_000 },
 ] as const;
 
 const MIN_EXPONENT = -5; // 1/100,000×
-const MAX_EXPONENT = -3; // 1/1,000×
+const MAX_EXPONENT = -2; // 1/100×
 
 export interface ControlsPanel {
   /** Updates the live readout of simulated time and bullet speed. */
