@@ -197,7 +197,7 @@ export function longRodShot(input: ArmorShot): ArmorTimeline {
 
   const { diameter: D, length: L0, mass, velocity: v0, density: rhoP } = impact;
   const tLos = losThickness(shot.thicknessM, shot.obliquityDeg);
-  const breakoutAllowance = Math.min(BREAKOUT_RATIO * D, 0.5 * tLos);
+  const breakoutAllowance = Math.min(BREAKOUT_RATIO * D, 0.5 * tLos, Math.max(0, shot.rearRoomM ?? Infinity));
   const breakoutDepth = tLos - breakoutAllowance;
   const { samples, end } = integrate(impact, material, breakoutDepth);
   const last = samples[samples.length - 1];

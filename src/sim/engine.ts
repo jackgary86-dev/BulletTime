@@ -834,6 +834,8 @@ function enterLayer(ctx: Context, body: Body, index: number): EntryOutcome {
  * over the path through it, ending at the model's exit speed or bringing the body to rest at the model's depth.
  */
 function armorEntry(ctx: Context, body: Body, index: number): void {
+  // Straight from a plate into the one behind it, with no gap and so no exit: the first plate's erosion still applies (#325).
+  if (body.armor && body.armor.layer !== index) leaveArmor(ctx, body);
   body.armor = undefined;
   if (ctx.setup.bullet.mode === 'bullet') return;
   const layer = ctx.setup.layers[index];
@@ -847,7 +849,7 @@ function armorEntry(ctx: Context, body: Body, index: number): void {
       ? { layer: index, decel: jetDecel(body.jet.tipSpeed, body.jet.lengthM * TANDEM_SECOND_REACH, plate), holeDecel: full * DAMAGED_CHANNEL_FACTOR }
       : { layer: index, decel: full };
   } else if (body.kind === 'bullet' && body.bullet?.shape === 'dart') {
-    const out = rodThroughPlate({ speed: body.speed, massKg: body.mass, lengthM: body.lengthM }, plate, pathM);
+    const out = rodThroughPlate({ speed: body.speed, massKg: body.mass, lengthM: body.lengthM }, plate, pathM, rearRoom(ctx, body, index));
     body.armor = {
       layer: index,
       decel: steadyDecel(body.speed, { perforated: out.perforated, depthM: out.depthM, exitSpeed: out.residualSpeed }, pathM),
@@ -856,16 +858,36 @@ function armorEntry(ctx: Context, body: Body, index: number): void {
   }
 }
 
+/**
+ * A rod leaving the plate the Armor lab model ran for: it comes out at the model's residual mass and length (#204), and
+ * what the plate eroded off it goes on as behind-armour debris. The model already took that mass off, so nothing more is
+ * shed (#325).
+ */
+function leaveArmor(ctx: Context, body: Body): void {
+  const exit = body.armor?.exit;
+  body.armor = undefined;
+  if (!exit) return;
+  const eroded = body.mass - exit.massKg;
+  body.mass = exit.massKg;
+  body.lengthM = exit.lengthM;
+  if (eroded > 0) spray(ctx, body, eroded, 14, 0.5);
+}
+
+/** The air between a metal plate's rear face and the next metal plate, along the shot line; undefined when none follows. */
+function rearRoom(ctx: Context, body: Body, index: number): number | undefined {
+  const layer = ctx.setup.layers[index];
+  const next = ctx.setup.layers[index + 1];
+  if (!next || !plateMaterialFor(next.medium)) return undefined;
+  const cos = Math.max(0.05, Math.abs(dot(body.dir, ctx.normal)));
+  return Math.max(0, next.offset - (layer.offset + layer.thickness)) / cos;
+}
+
 function exitLayer(ctx: Context, body: Body, index: number): void {
   const medium = ctx.setup.layers[index].medium;
-  if (body.armor?.layer === index) {
-    // What the plate eroded off a rod stays behind (#204).
-    if (body.armor.exit) {
-      body.mass = body.armor.exit.massKg;
-      body.lengthM = body.armor.exit.lengthM;
-    }
-    body.armor = undefined;
-  }
+  const armored = body.armor?.layer === index;
+  // A rod the model eroded has shed what it is going to; a jet still throws its spray (#325).
+  const rodLeaving = armored && !body.jet;
+  if (armored) leaveArmor(ctx, body);
   const cosOut = dot(body.dir, ctx.normal);
   event(ctx, body, 'exit', { normal: scale(ctx.normal, Math.sign(cosOut) || 1), layer: index });
   // A jet runs straight on out of a plate (#204); a bullet or fragment is knocked off line.
@@ -878,7 +900,7 @@ function exitLayer(ctx: Context, body: Body, index: number): void {
     body.burstDecel = medium.exitTail.burst?.decelMs2;
     body.burstUntil = medium.exitTail.burst ? body.t + medium.exitTail.burst.durationS : undefined;
   }
-  if (medium.behaviour === 'steel' && body.kind !== 'fragment' && body.mass > 0) {
+  if (medium.behaviour === 'steel' && body.kind !== 'fragment' && body.mass > 0 && !rodLeaving) {
     // Punching through a plate tears the bullet (and plate spall) into a wide cone of fragments.
     shed(ctx, body, body.kind === 'pellet' ? 0.3 : 0.45, body.kind === 'pellet' ? 4 : 14, 0.5);
   }
@@ -945,6 +967,11 @@ function shed(ctx: Context, body: Body, fraction: number, count: number, spread:
   body.mass -= lost;
   // Remaining core shrinks in proportion to its mass.
   body.lengthM *= 1 - fraction * 0.6;
+  spray(ctx, body, lost, count, spread);
+}
+
+/** Throws `mass` off the body as `count` fragments fanning out by up to `spread` radians, without taking it off the body. */
+function spray(ctx: Context, body: Body, lost: number, count: number, spread: number): void {
   for (let i = 0; i < count; i++) {
     const m = (lost / count) * (0.5 + ctx.rand());
     const d = fragmentDiameter(m);
