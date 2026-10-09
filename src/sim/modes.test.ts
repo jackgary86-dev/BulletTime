@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_MUNITIONS, BULLETS, getBullet } from '../data/bullets';
-import { ARTILLERY } from '../data/artillery';
 import { EXPLOSIVES } from '../data/explosives';
 import { AIRFRAMES, MISSILES, OPTIMUM_STANDOFF_CAL, WARHEADS, findMissile, jetStandoffFactor, missileId } from '../data/missiles';
 import { MODES, roundsForMode } from '../data/modes';
@@ -29,20 +28,28 @@ describe('simulator catalogues', () => {
     for (const id of ids) expect(getBullet(id).id).toBe(id);
   });
 
-  it('covers the ranges: bullets to 20 mm, artillery 20 to 240 mm', () => {
+  it('covers the ranges: bullets to 20 mm, artillery from autocannon to tank guns', () => {
     expect(Math.min(...BULLETS.map((b) => b.caliberMm))).toBeLessThan(6);
     expect(Math.max(...BULLETS.map((b) => b.caliberMm))).toBe(20);
-    const calibres = roundsForMode('artillery').map((b) => b.caliberMm);
-    expect(Math.min(...calibres)).toBe(20);
-    expect(Math.max(...calibres)).toBe(240);
+    const ids = roundsForMode('artillery').map((b) => b.id);
+    expect(ids).toContain('20mm-ap');
+    expect(ids).toContain('125mm-apfsds');
   });
 
-  it('builds five airframes with ten warheads each', () => {
+  it('offers only armour-piercing and penetrator rounds in Artillery and Missile', () => {
+    // APHE keeps a small filler that bursts after it gets through; everything else is solid shot or a core.
+    for (const b of roundsForMode('artillery')) expect(b.blast === undefined || b.type === 'APHE', b.id).toBe(true);
+    for (const b of MISSILES) expect(b.blast === undefined || b.type === 'Explosively formed penetrator', b.id).toBe(true);
+    expect(roundsForMode('artillery').map((b) => b.id)).not.toContain('20mm-hei');
+  });
+
+  it('builds five airframes with four penetrating heads each', () => {
     expect(AIRFRAMES).toHaveLength(5);
-    expect(WARHEADS).toHaveLength(10);
-    expect(MISSILES).toHaveLength(50);
-    expect(findMissile(missileId('cruise', 'thermobaric'))?.mode).toBe('missile');
-    expect(findMissile('missile:nope:shaped')).toBeUndefined();
+    expect(WARHEADS.map((w) => w.id)).toEqual(['penetrator', 'long-rod', 'heavy-core', 'efp']);
+    expect(MISSILES).toHaveLength(20);
+    expect(findMissile(missileId('cruise', 'long-rod'))?.mode).toBe('missile');
+    expect(findMissile('missile:cruise:shaped')).toBeUndefined();
+    expect(findMissile('missile:nope:penetrator')).toBeUndefined();
   });
 
   it('gives every mode a default round that exists', () => {
@@ -79,16 +86,29 @@ describe('blast physics', () => {
 });
 
 describe('artillery and missile impacts', () => {
-  it('lets a shaped-charge jet through armour that blast-fragmentation cannot cross', () => {
-    const jet = shoot(missileId('guided-at', 'shaped'), 'rha', 0.2);
-    const frag = shoot(missileId('guided-at', 'blast-frag'), 'rha', 0.2);
-    expect(jet.summary.passedThrough).toBe(true);
-    expect(frag.summary.passedThrough).toBe(false);
-    expect(jet.summary.penetrationM).toBeGreaterThan(frag.summary.penetrationM * 3);
+  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
+
+  it('sends a sub-calibre core deeper into armour than full-calibre shot from the same gun', () => {
+    expect(depth('76mm-hvap')).toBeGreaterThan(depth('76mm-ap'));
+    expect(depth('88mm-apcr')).toBeGreaterThan(depth('88mm-ap'));
+    expect(depth('57mm-apds')).toBeGreaterThan(depth('57mm-ap'));
+    expect(depth('30mm-apfsds')).toBeGreaterThan(depth('30mm-ap'));
+    expect(depth('105mm-apfsds')).toBeGreaterThan(depth('105mm-apds'));
   });
 
-  it('keeps high-explosive shell fragments from defeating thick armour', () => {
-    for (const shell of ARTILLERY.filter((b) => b.id.endsWith('-he'))) expect(shoot(shell.id, 'rha', 0.3).summary.passedThrough).toBe(false);
+  it('keeps sub-calibre depths in the range of their class, at the muzzle', () => {
+    // Rounded point-blank figures for each class, within a wide margin: the engine is tuned for the look, not a range table.
+    const near = (id: string, mm: number) => {
+      expect(depth(id) * 1000, id).toBeGreaterThan(mm * 0.7);
+      expect(depth(id) * 1000, id).toBeLessThan(mm * 1.3);
+    };
+    near('25mm-apds', 90);
+    near('57mm-apds', 190);
+    near('76mm-hvap', 210);
+    near('88mm-apcr', 280);
+    near('105mm-apds', 330);
+    near('105mm-apfsds', 420);
+    near('125mm-apfsds', 560);
   });
 
   it('lets a heavy armour-piercing shot through a concrete wall that stops a light one', () => {
@@ -96,71 +116,31 @@ describe('artillery and missile impacts', () => {
     expect(shoot('30mm-ap', 'reinforced-concrete', 0.4).summary.passedThrough).toBe(false);
   });
 
-  it('detonates a high-explosive shell on contact, with its yield on the event', () => {
-    const t = shoot('155mm-he', 'reinforced-concrete', 0.4);
-    expect(t.summary.finalState).toBe('detonated');
-    expect(t.events.find((e) => e.type === 'detonate')?.yieldKg).toBe(8);
+  it('never detonates solid shot or a kinetic core', () => {
+    for (const id of ['120mm-apfsds', '88mm-ap', missileId('guided-at', 'long-rod')]) {
+      const t = shoot(id, 'reinforced-concrete', 0.4);
+      expect(t.events.some((e) => e.type === 'detonate'), id).toBe(false);
+    }
   });
 });
 
-describe('missile warheads', () => {
-  const bore = (airframe: string, head: string) => {
-    const b = getBullet(missileId(airframe, head));
-    return simulate({ bullet: b, layers: layersFor(getMedium('rha'), 4), angleDeg: 0, impactPoint: { x: -0.2, y: 0.16, z: 0 }, standOffM: b.standoffM ?? 0.5 }).summary.penetrationM;
-  };
+describe('missile heads', () => {
+  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
 
-  it('bores deeper with a wider warhead, a few calibres into armour', () => {
-    const depths = AIRFRAMES.map((a) => bore(a.id, 'shaped'));
-    for (let i = 1; i < depths.length; i++) expect(depths[i]).toBeGreaterThan(depths[i - 1]);
-    AIRFRAMES.forEach((a, i) => {
-      const calibres = depths[i] / (a.caliberMm / 1000);
-      expect(calibres).toBeGreaterThan(2.5);
-      expect(calibres).toBeLessThan(7);
-    });
-  });
-
-  it('sends a tandem warhead second jets down the first hole, so it bores deeper than a single charge', () => {
-    for (const a of AIRFRAMES) expect(bore(a.id, 'tandem')).toBeGreaterThan(bore(a.id, 'shaped') * 1.1);
-  });
-});
-
-describe('shaped-charge depth (#195, #193)', () => {
-  const calibres = (id: string) => {
-    const t = shoot(id, 'rha', 1.0);
-    return t.summary.penetrationM / (getBullet(id).caliberMm / 1000);
-  };
-
-  it('bores about four to five calibres of armour from every airframe that fits the plate', () => {
-    for (const a of ['light-rocket', 'shoulder-rocket', 'guided-at', 'air-surface']) {
-      const d = calibres(missileId(a, 'shaped'));
-      expect(d).toBeGreaterThan(3.5);
-      expect(d).toBeLessThan(6.5);
+  it('a long rod bores deeper than the standard core, and a heavy core least', () => {
+    for (const a of ['light-rocket', 'shoulder-rocket', 'guided-at']) {
+      expect(depth(missileId(a, 'long-rod')), a).toBeGreaterThan(depth(missileId(a, 'penetrator')));
+      expect(depth(missileId(a, 'penetrator')), a).toBeGreaterThan(depth(missileId(a, 'heavy-core')));
     }
   });
 
-  it('bores deeper with a tandem warhead, whose second jets follow the first hole', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(calibres(missileId(a, 'tandem'))).toBeGreaterThan(calibres(missileId(a, 'shaped')) * 1.1);
-  });
-});
-
-describe('more shaped-charge heads (#260)', () => {
-  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
-
-  it('a large-calibre head bores deeper than the standard shaped charge', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-large'))).toBeGreaterThan(depth(missileId(a, 'shaped')) * 1.1);
-    // Light rocket: 70 mm calibre, over 5.5 calibres into the plate.
-    expect(depth(missileId('light-rocket', 'shaped-large')) / 0.07).toBeGreaterThan(5.5);
-  });
-
-  it('an explosively formed penetrator is a single slug that bores less than a jet', () => {
+  it('an explosively formed penetrator is a single slug that bores less than a long rod', () => {
     expect(getBullet(missileId('guided-at', 'efp')).blast?.jet?.count).toBe(1);
-    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'efp'))).toBeLessThan(depth(missileId(a, 'shaped')));
+    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'efp'))).toBeLessThan(depth(missileId(a, 'long-rod')));
   });
 });
 
 describe('jet stand-off (#260)', () => {
-  const depth = (id: string) => shoot(id, 'rha', 1.0).summary.penetrationM;
-
   it('the factor is 1 at the optimum, lower either side, and never below 0.4', () => {
     expect(jetStandoffFactor(undefined)).toBe(1);
     expect(jetStandoffFactor(OPTIMUM_STANDOFF_CAL)).toBe(1);
@@ -168,10 +148,6 @@ describe('jet stand-off (#260)', () => {
     expect(jetStandoffFactor(10)).toBeLessThan(1);
     expect(jetStandoffFactor(0)).toBeGreaterThanOrEqual(0.4);
     expect(jetStandoffFactor(100)).toBeGreaterThanOrEqual(0.4);
-  });
-
-  it('a probe bores deeper than a charge fuzed at the nose', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(depth(missileId(a, 'shaped-probe'))).toBeGreaterThan(depth(missileId(a, 'shaped-short')) * 1.15);
   });
 });
 
@@ -181,28 +157,8 @@ describe('reactive armour (#260)', () => {
   const rha = (id: string, layers = stack) => fire({ bullet: id, stack: layers }).summary.penetrationM;
   const tile = stack[0].thickness + stack[1].gapM;
 
-  it('spoils a single shaped charge: it bores less of the plate than with no tile', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(rha(missileId(a, 'shaped')) - tile).toBeLessThan(rha(missileId(a, 'shaped'), bare) * 0.85);
-  });
-
-  it('a tandem warhead is hurt far less: its second jets pass the fired tile', () => {
-    for (const a of ['light-rocket', 'guided-at']) {
-      const lost = (h: string) => 1 - (rha(missileId(a, h)) - tile) / rha(missileId(a, h), bare);
-      expect(lost('tandem')).toBeLessThan(lost('shaped'));
-    }
-  });
-});
-
-describe('top-attack head (#260)', () => {
-  const at = (id: string, angleDeg: number) =>
-    simulate({ bullet: getBullet(id), layers: layersFor(getMedium('rha'), 0.6), angleDeg, impactPoint: { x: -0.2, y: 0.16, z: 0 }, standOffM: 0.5 }).summary.penetrationM;
-
-  it('matches a standard shaped charge head-on', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(at(missileId(a, 'top-attack'), 0)).toBeCloseTo(at(missileId(a, 'shaped'), 0), 1);
-  });
-
-  it('on a steeply slanted roof it bores deeper than a charge that fires along its heading', () => {
-    for (const a of ['light-rocket', 'guided-at']) expect(at(missileId(a, 'top-attack'), 60)).toBeGreaterThan(at(missileId(a, 'shaped'), 60) * 1.15);
+  it("spoils the cutting charge's jet: it bores less of the plate than with no tile", () => {
+    expect(rha('charge-shaped') - tile).toBeLessThan(rha('charge-shaped', bare) * 0.85);
   });
 });
 
@@ -251,7 +207,7 @@ describe('blast response of the material (#196)', () => {
 
 describe('results for warheads and charges (#200)', () => {
   it('follows the deepest jet through the plate, fastest at the face and slowing as it bores', () => {
-    const s = shoot(missileId('guided-at', 'shaped'), 'rha', 0.3).summary;
+    const s = shoot('charge-shaped', 'rha', 0.3).summary;
     expect(s.penetrator).toBeDefined();
     expect(s.penetrator!.startSpeed).toBeGreaterThan(3000);
     const curve = s.penetrator!.curve;
@@ -284,7 +240,8 @@ describe('debris scaling (#192)', () => {
 
 describe('missile launch run (#194)', () => {
   it('starts a powered missile slowly, well back from the target, and has it at full speed by impact', () => {
-    const spec = getBullet(missileId('guided-at', 'shaped'));
+    // The formed-penetrator head is the one missile left that flies its own way in.
+    const spec = getBullet(missileId('guided-at', 'efp'));
     const t = shoot(spec.id, 'rha', 0.1);
     const frames = t.tracks[0].keyframes;
     expect(frames[0].speed).toBeCloseTo(spec.muzzleVelocityMs * 0.25, 0);
@@ -297,7 +254,7 @@ describe('missile launch run (#194)', () => {
 
   it('gives a kinetic penetrator no launch run, and keeps the run bounded for the biggest airframe', () => {
     expect(getBullet(missileId('guided-at', 'penetrator')).launch).toBeUndefined();
-    const cruise = getBullet(missileId('cruise', 'shaped'));
+    const cruise = getBullet(missileId('cruise', 'efp'));
     expect(cruise.launch!.runM).toBe(3);
     expect(shoot(cruise.id, 'rha', 0.1).duration).toBeLessThan(0.05);
   });

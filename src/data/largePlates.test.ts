@@ -3,7 +3,6 @@ import { ARTILLERY } from './artillery';
 import { LARGE_PLATE_IDS, MEDIA, getMedium, mediumListedIn } from './media';
 import { STACK_PRESETS, presetLayers } from './stacks';
 import { fire } from '../sim/testUtil';
-import { getBullet } from './bullets';
 import { missileId } from './missiles';
 
 describe('large steel plates (#232)', () => {
@@ -43,46 +42,35 @@ describe('large steel plates (#232)', () => {
     }
   });
 
-  it('shell types separate: HE holes thin mild plate but stops on armour; AP goes through 100 mm RHA but not 300 mm', () => {
+  it('shell types separate: full-calibre AP goes through 100 mm RHA but not 300 mm, a dart goes through 300 mm', () => {
     const through = (bullet: string, medium: string, thickness: number) => fire({ bullet, medium, thickness }).summary.passedThrough;
-    expect(through('155mm-he', 'mild-plate', 0.02)).toBe(true);
-    expect(through('155mm-he', 'ar500-plate', 0.025)).toBe(false);
-    expect(through('155mm-he', 'rha-plate', 0.1)).toBe(false);
     expect(through('76mm-ap', 'rha-plate', 0.1)).toBe(true);
     expect(through('76mm-ap', 'rha-plate', 0.3)).toBe(false);
+    expect(through('120mm-apfsds', 'rha-plate', 0.3)).toBe(true);
   });
 });
 
-describe('Missile jets against the large plates (#233)', () => {
+describe('Missile penetrators against the large plates (#233)', () => {
   const block = presetLayers(STACK_PRESETS.find((p) => p.id === 'plate-block')!);
-  const calibres = (id: string) => {
-    const s = fire({ bullet: id, stack: block }).summary;
-    return { s, cal: s.penetrationM / (getBullet(id).caliberMm / 1000) };
-  };
+  const depth = (head: string, airframe = 'guided-at') => fire({ bullet: missileId(airframe, head), stack: block }).summary;
 
-  it('a shaped charge stops in the RHA block about four to five calibres deep, like solid armour (#195)', () => {
-    for (const a of ['light-rocket', 'shoulder-rocket', 'guided-at']) {
-      const { s, cal } = calibres(missileId(a, 'shaped'));
-      expect(s.passedThrough, a).toBe(false);
-      expect(cal, a).toBeGreaterThan(3.5);
-      expect(cal, a).toBeLessThan(6.5);
-    }
-  });
-
-  it('a tandem head bores deeper into the block than a single charge, and still stops', () => {
+  it('a long rod bores deepest into the 900 mm RHA block and a heavy core least, which stops in it', () => {
     for (const a of ['light-rocket', 'guided-at']) {
-      const tandem = calibres(missileId(a, 'tandem'));
-      expect(tandem.s.passedThrough, a).toBe(false);
-      expect(tandem.cal, a).toBeGreaterThan(calibres(missileId(a, 'shaped')).cal * 1.1);
+      const rod = depth('long-rod', a);
+      const core = depth('penetrator', a);
+      const heavy = depth('heavy-core', a);
+      expect(heavy.passedThrough, a).toBe(false);
+      if (!rod.passedThrough) expect(rod.penetrationM, a).toBeGreaterThan(core.penetrationM);
+      expect(core.penetrationM, a).toBeGreaterThan(heavy.penetrationM);
     }
   });
 
-  it('shaped and tandem heads defeat each large plate at its default thickness with a clean result', () => {
+  it('every head fires cleanly into each large plate at its default thickness', () => {
     for (const id of LARGE_PLATE_IDS) {
-      for (const head of ['shaped', 'tandem']) {
+      for (const head of ['penetrator', 'long-rod', 'heavy-core', 'efp']) {
         const s = fire({ bullet: missileId('guided-at', head), medium: id }).summary;
         for (const v of [s.impactSpeed, s.impactEnergyJ, s.penetrationM]) expect(Number.isFinite(v), `${id} ${head}`).toBe(true);
-        expect(s.passedThrough, `${id} ${head}`).toBe(true);
+        expect(s.penetrationM, `${id} ${head}`).toBeGreaterThan(0);
       }
     }
   });

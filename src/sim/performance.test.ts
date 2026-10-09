@@ -10,7 +10,7 @@ import { layersFor, simulate } from './engine';
  * so a slow CI runner does not fail it, but a runaway fragment count would.
  */
 const BUDGET_MS = 2000;
-const HEAVY = ['240mm-he', '203mm-he-delay', '120mm-rr-hesh', 'charge-cased', 'missile:cruise:tandem', 'missile:air-surface:blast-frag', '12ga-00buck'];
+const HEAVY = ['122mm-ap', '125mm-apfsds', '88mm-aphe', 'charge-cased', 'missile:cruise:heavy-core', 'missile:cruise:efp', '12ga-00buck'];
 
 describe('fire time for heavy rounds (#201)', () => {
   it.each(HEAVY)('simulates %s into armour and gel inside the budget at Standard and Ultra', (id) => {
