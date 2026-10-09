@@ -17,6 +17,7 @@ import { mountOverlay } from './ui/overlay';
 import { mountCleanFrame } from './ui/cleanFrame';
 import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
 import { isStill } from './scene/still';
+import { ShadowGate } from './scene/shadowGate';
 import { FrameGate, cameraSignature } from './scene/frameGate';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
@@ -72,6 +73,17 @@ async function bootstrap(): Promise<void> {
   document.body.classList.add(`mode-${mode}`);
   await loader.progress(0.1, 'Starting the renderer');
   const renderer = createRenderer(canvas);
+  // Shadow maps are redrawn only when a caster may have moved (#331): see the frame loop and warmUp.
+  renderer.shadowMap.autoUpdate = false;
+  const shadows = new ShadowGate();
+  const invalidateShadows = () => shadows.invalidate();
+  // A new target, round, thickness, quality, lighting or a second lane (set through form controls, buttons and keys) or a loaded asset changes the casters.
+  for (const type of ['change', 'input', 'click', 'keydown']) window.addEventListener(type, invalidateShadows, { passive: true, capture: true });
+  const previousOnLoad = THREE.DefaultLoadingManager.onLoad;
+  THREE.DefaultLoadingManager.onLoad = () => {
+    previousOnLoad?.();
+    invalidateShadows();
+  };
   const { camera, controls } = createCameraRig(canvas);
   const baseFov = camera.fov;
 
@@ -104,6 +116,7 @@ async function bootstrap(): Promise<void> {
     const q = QUALITY[quality];
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
     renderer.shadowMap.enabled = q.shadowMapSize > 0;
+    shadows.invalidate();
     renderer.transmissionResolutionScale = q.transmissionScale;
     for (const lane of lanes()) lane.setQuality(q);
   };
@@ -183,6 +196,7 @@ async function bootstrap(): Promise<void> {
     onLightingChange: (mode) => {
       lighting = mode;
       for (const lane of lanes()) lane.setLightingMode(mode);
+      shadows.invalidate();
     },
     onQualityChange: (level) => {
       quality = level;
@@ -393,7 +407,12 @@ async function bootstrap(): Promise<void> {
   const invalidate = () => gate?.invalidate();
   for (const type of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize', 'change', 'input', 'focus', 'visibilitychange']) window.addEventListener(type, invalidate, { passive: true, capture: true });
   window.addEventListener('pointermove', (e) => e.buttons && invalidate(), { passive: true, capture: true });
-  THREE.DefaultLoadingManager.onLoad = invalidate;
+  // Chained: the shadow gate listens for loads too.
+  const shadowOnLoad = THREE.DefaultLoadingManager.onLoad;
+  THREE.DefaultLoadingManager.onLoad = () => {
+    shadowOnLoad?.();
+    invalidate();
+  };
   renderer.setAnimationLoop((timestamp) => {
     timer.update(timestamp);
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
@@ -429,6 +448,8 @@ async function bootstrap(): Promise<void> {
         all.some((lane) => lane.shot.live),
         delta,
       );
+    // Asked only on frames that draw: asking clears a pending invalidation, which a skipped frame would lose.
+    const shadowsDue = draw && shadows.shouldUpdate(t, delta);
     const laneWidth = all.length > 1 ? Math.floor(width / 2) : width;
     renderer.setScissorTest(all.length > 1);
     // The side panels cover the outer edge of each half, so slide each lane's view toward the middle.
@@ -445,6 +466,8 @@ async function bootstrap(): Promise<void> {
         camera.aspect = (laneWidth + 2 * slide) / height;
         camera.setViewOffset(laneWidth + 2 * slide, height, i === 0 ? 0 : 2 * slide, 0, laneWidth, height);
       }
+      // Each lane's light has its own map, and three clears the flag after a render, so it is set per lane.
+      renderer.shadowMap.needsUpdate = shadowsDue;
       lane.postFx.render();
       if (slide) {
         camera.aspect = laneWidth / height;
@@ -511,11 +534,13 @@ async function warmUp(
   for (const t of [30e-6, timeline.impactTime + 150e-6]) {
     lane.update(t, camera, 1e-6);
     await renderer.compileAsync(lane.scene, camera);
+    renderer.shadowMap.needsUpdate = true;
     lane.postFx.render();
   }
   await progress(0.8, 'Preparing the first frame');
   lane.clear();
   lane.update(null, camera);
+  renderer.shadowMap.needsUpdate = true;
   lane.postFx.render();
 }
 
