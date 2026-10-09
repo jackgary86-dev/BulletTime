@@ -157,6 +157,10 @@ function gravelMaps(): { map: THREE.Texture; normalMap: THREE.Texture } {
   return { map: toTexture(c), normalMap: toTexture(normalMapFromHeight(h, 2.5), false) };
 }
 
+/** Depth offsets for surfaces that lie a few millimetres from another: always behind it, or always in front. */
+export const BEHIND = { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 8 } as const;
+export const IN_FRONT = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 } as const;
+
 function createGround(): THREE.Mesh {
   const { map, normalMap } = gravelMaps();
   const repeat = 120;
@@ -164,7 +168,9 @@ function createGround(): THREE.Mesh {
   normalMap.repeat.set(repeat, repeat);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshStandardMaterial({ map, normalMap, roughness: 0.97, metalness: 0 }),
+    // Pushed back in depth: the pad's top is 5 mm above the gravel and the camera orbits out to 45 m, where the depth
+    // buffer cannot tell 5 mm apart, so the gravel showed through the pad in patches that flickered as the camera moved.
+    new THREE.MeshStandardMaterial({ map, normalMap, roughness: 0.97, metalness: 0, ...BEHIND }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -255,7 +261,8 @@ function createContactShadow(): THREE.Mesh {
   ctx.fillRect(size * 0.22, size * 0.22, size * 0.56, size * 0.56);
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }),
+    // Over the pad by 7 mm: drawn in front of it so it does not flicker in and out at a distance.
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, ...IN_FRONT }),
   );
   mesh.rotation.x = -Math.PI / 2;
   mesh.name = 'contact-shadow';
