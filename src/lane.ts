@@ -20,6 +20,7 @@ import { LEVEL, approachHit, clampApproach, engineToWorld, isLevel, type Approac
 import type { MediumSpec } from './data/media';
 import { disposeTree } from './scene/dispose';
 import { flashExposure, HIGHSPEED_GRADE, LAB_GRADE } from './scene/gradePass';
+import { washScale } from './scene/flash';
 import { createPostFx, type PostFx } from './scene/postfx';
 import { QUALITY, type QualitySettings } from './scene/quality';
 import { createStudio, type LightingMode, type Studio } from './scene/studio';
@@ -358,7 +359,7 @@ export class Lane {
       heatHaze.strength = 1;
       heatHaze.time = wallClockS();
     }
-    this.postFx.grade.setFlash(current && t !== null ? flashExposure(t - current.start, shutterS) : 0);
+    this.postFx.grade.setFlash(current && t !== null ? flashExposure(t - current.start, shutterS) * washScale() : 0);
   }
 }
 

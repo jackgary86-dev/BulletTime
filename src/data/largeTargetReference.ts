@@ -48,7 +48,7 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     figures: steelFigures('rha'),
   },
   {
-    mediumId: 'mild-plate', plateMaterial: 'mild-steel', replay: '?mode=artillery&bullet=155mm-he&medium=mild-plate&at=1ms',
+    mediumId: 'mild-plate', plateMaterial: 'mild-steel', replay: '?mode=artillery&bullet=122mm-ap&medium=mild-plate&at=1ms',
     figures: steelFigures('mild-steel'),
   },
   {
@@ -64,7 +64,7 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     ],
   },
   {
-    mediumId: 'reinforced-concrete', replay: '?mode=artillery&bullet=155mm-he&medium=reinforced-concrete&at=3ms',
+    mediumId: 'reinforced-concrete', replay: '?mode=artillery&bullet=122mm-ap&medium=reinforced-concrete&at=3ms',
     figures: [
       { name: 'Density', value: 2400, unit: 'kg/m³', status: 'published', source: 'Typical reinforced concrete, handbook value' },
       { name: 'Resistance (engine constant)', value: 750e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },
@@ -72,7 +72,7 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     ],
   },
   {
-    mediumId: 'packed-earth', replay: '?mode=artillery&bullet=155mm-he&medium=packed-earth&at=3ms',
+    mediumId: 'packed-earth', replay: '?mode=artillery&bullet=122mm-ap&medium=packed-earth&at=3ms',
     figures: [
       { name: 'Density', value: 1800, unit: 'kg/m³', status: 'published', source: 'Typical compacted soil, handbook value' },
       { name: 'Resistance (engine constant)', value: 25e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },
@@ -93,7 +93,7 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     figures: [...steelFigures('rha'), { name: 'Floor thickness', value: 0.02, unit: 'm', status: 'illustrative', source: 'The default thickness in data/media.ts; not a real vehicle' }],
   },
   {
-    mediumId: 'bunker-wall', replay: '?mode=artillery&bullet=155mm-he&medium=bunker-wall&at=3ms',
+    mediumId: 'bunker-wall', replay: '?mode=artillery&bullet=122mm-ap&medium=bunker-wall&at=3ms',
     figures: [
       { name: 'Density', value: 2400, unit: 'kg/m³', status: 'published', source: 'Typical reinforced concrete, handbook value' },
       { name: 'Resistance (engine constant)', value: 750e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },
@@ -101,14 +101,14 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     ],
   },
   {
-    mediumId: 'block-house-wall', replay: '?mode=artillery&bullet=155mm-he&medium=block-house-wall&at=3ms',
+    mediumId: 'block-house-wall', replay: '?mode=artillery&bullet=122mm-ap&medium=block-house-wall&at=3ms',
     figures: [
       { name: 'Density', value: 2400, unit: 'kg/m³', status: 'published', source: 'Typical reinforced concrete, handbook value' },
       { name: 'Resistance (engine constant)', value: 750e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },
     ],
   },
   {
-    mediumId: 'brick-wall-full', replay: '?mode=artillery&bullet=155mm-he&medium=brick-wall-full&at=3ms',
+    mediumId: 'brick-wall-full', replay: '?mode=artillery&bullet=122mm-ap&medium=brick-wall-full&at=3ms',
     figures: [
       { name: 'Density', value: 1900, unit: 'kg/m³', status: 'published', source: 'Typical fired clay brick masonry, handbook value' },
       { name: 'Resistance (engine constant)', value: 120e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },
@@ -116,7 +116,7 @@ export const LARGE_TARGET_REFERENCE: readonly LargeTargetReference[] = [
     ],
   },
   {
-    mediumId: 'earth-berm-full', replay: '?mode=artillery&bullet=155mm-he&medium=earth-berm-full&at=3ms',
+    mediumId: 'earth-berm-full', replay: '?mode=artillery&bullet=122mm-ap&medium=earth-berm-full&at=3ms',
     figures: [
       { name: 'Density', value: 1800, unit: 'kg/m³', status: 'published', source: 'Typical compacted soil, handbook value' },
       { name: 'Resistance (engine constant)', value: 25e6, unit: 'Pa', status: 'model', source: 'resistancePa in data/media.ts, tuned, not measured' },

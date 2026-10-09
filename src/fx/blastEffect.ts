@@ -61,7 +61,7 @@ export function loadBlastEffect(timeline: Timeline, layers: TargetLayer[], parti
 /** A shell or warhead bursting on the face throws up the material it is on, sized by its yield. */
 function contactDebris(particles: ParticleSystem, e: ShotEvent, layers: TargetLayer[], origin: THREE.Vector3, yieldKg: number, seed: number): void {
   const layer = layers[e.layer!];
-  const response: LayerBlast = { stack: layer.stack ?? 0, medium: layer.medium, rangeM: 0, pressureKPa: 0, k: 1 + 10 * Math.cbrt(Math.max(1e-6, yieldKg)), outcome: 'cracked', arriveS: 0, tiltRad: 0 };
+  const response: LayerBlast = { stack: layer.stack ?? 0, medium: layer.medium, rangeM: 0, pressureKPa: 0, k: 1 + 10 * Math.cbrt(Math.max(1e-6, yieldKg)), tip: 0, outcome: 'cracked', arriveS: 0, tiltRad: 0 };
   debris(particles, e, response, origin, layers, seed, debrisScale(yieldKg));
 }
 
@@ -69,7 +69,7 @@ function contactDebris(particles: ParticleSystem, e: ShotEvent, layers: TargetLa
 export function responses(e: ShotEvent, layers: TargetLayer[]): LayerBlast[] {
   if (e.yieldKg === undefined || !layers.length) return [];
   const standoff = Math.max(0.05, TARGET_FRONT_X + layers[0].offset - e.pos.x);
-  return blastResponse(e.yieldKg, standoff, layers).map((r) => ({ ...r, arriveS: r.arriveS }));
+  return blastResponse(e.blastYieldKg ?? e.yieldKg, standoff, layers).map((r) => ({ ...r, arriveS: r.arriveS }));
 }
 
 function fireball(particles: ParticleSystem, e: ShotEvent, origin: THREE.Vector3, axis: THREE.Vector3, spread: number, yieldKg: number, kind: string, seed: number): void {

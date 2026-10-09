@@ -1,9 +1,10 @@
 import type { BlastSpec, BulletSpec } from './bullets';
 
 /**
- * The Missile simulator (#181): five basic airframes, each fittable with any of
- * five warhead types. A round is built from one of each, so the catalogue is the
- * product of the two lists. Numbers are rounded and generic, tuned for the
+ * The Missile simulator (#181): five basic airframes, each fittable with a
+ * penetrating head: a kinetic penetrator or an explosively formed penetrator. A
+ * round is built from one of each, so the catalogue is the product of the two
+ * lists. Blast and shaped-charge heads are not in the catalogue. Numbers are rounded and generic, tuned for the
  * look and the physics.
  */
 const GRAINS_PER_KG = 15432.36;
@@ -38,20 +39,14 @@ export const AIRFRAMES: Airframe[] = [
 ];
 
 export const WARHEADS: WarheadHead[] = [
-  { id: 'shaped', name: 'Shaped charge', description: 'A hollow-charge jet: very narrow and very fast.' },
-  { id: 'shaped-large', name: 'Large-calibre shaped charge', description: 'A wide, long-cone hollow charge: a faster, heavier jet that bores about 5 to 6 calibres of armour, deeper than the standard charge.' },
-  { id: 'shaped-probe', name: 'Shaped charge with probe', description: 'A nose probe holds the cone at the best stand-off (about 4 calibres) so the jet is fully stretched.' },
-  { id: 'top-attack', name: 'Top-attack shaped charge', description: 'Flies over the target and fires its jet straight down through the roof, whatever angle it dives at, so a slanted roof does not lengthen the path of the jet through it.' },
-  { id: 'shaped-short', name: 'Shaped charge, no probe', description: 'Fuzed at the nose with almost no stand-off: the jet has no room to stretch, so it bores far less.' },
-  { id: 'efp', name: 'Explosively formed penetrator', description: 'A plate that folds into a single slug at about 2 km/s: it keeps its punch at long stand-off but bores far less than a jet.' },
-  { id: 'tandem', name: 'Tandem shaped charge', description: 'Two shaped charges in a row: the first clears the way for the second.' },
-  { id: 'blast-frag', name: 'Blast-fragmentation', description: 'A cased high-explosive warhead: a burst and a cone of fragments.' },
   { id: 'penetrator', name: 'Kinetic penetrator', description: 'A solid dense core with no explosive: all its energy in a narrow bar.' },
-  { id: 'thermobaric', name: 'Thermobaric', description: 'A fuel-rich warhead: a huge fireball and a long, strong blast, little fragmentation.' },
+  { id: 'long-rod', name: 'Long-rod penetrator', description: 'A slimmer, longer tungsten rod driven faster: it bores deepest into armour plate.' },
+  { id: 'heavy-core', name: 'Heavy penetrator', description: 'A thick, heavy steel-jacketed core at a lower speed: less depth in armour, but it carries more momentum into concrete and earth.' },
+  { id: 'efp', name: 'Explosively formed penetrator', description: 'A plate that folds into a single slug at about 2 km/s: it keeps its punch at long stand-off but bores far less than a jet.' },
 ];
 
 export const DEFAULT_AIRFRAME_ID = 'guided-at';
-export const DEFAULT_WARHEAD_ID = 'shaped';
+export const DEFAULT_WARHEAD_ID = 'penetrator';
 
 /** Stand-off, in calibres, at which a jet has stretched to its full length. */
 export const OPTIMUM_STANDOFF_CAL = 4;
@@ -76,24 +71,8 @@ const jetFraction = (a: Airframe): number => (a.warheadKg * JET_MASS_SCALE) / a.
 
 const blastFor = (head: string, a: Airframe): BlastSpec => {
   switch (head) {
-    case 'shaped':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a) }, fireball: 'standard' };
-    case 'shaped-large':
-      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 8400, massFraction: jetFraction(a) * 2.0, lengthScale: 1.2 }, fireball: 'standard' };
-    case 'shaped-probe':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), standoffCal: OPTIMUM_STANDOFF_CAL }, fireball: 'standard' };
-    case 'top-attack':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), fireNormal: true }, fireball: 'standard' };
-    case 'shaped-short':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), standoffCal: 1 }, fireball: 'standard' };
     case 'efp':
       return { yieldKg: a.warheadKg * 0.5, fragmentCount: 4, fragmentSpeedMs: 1000, jet: { count: 1, speedMs: 2200, massFraction: jetFraction(a) * 0.7 }, fireball: 'standard' };
-    case 'tandem':
-      return { yieldKg: a.warheadKg * 0.6, fragmentCount: 10, fragmentSpeedMs: 1000, jet: { count: 6, speedMs: 7800, massFraction: jetFraction(a), tandem: true }, fireball: 'standard' };
-    case 'blast-frag':
-      return { yieldKg: a.warheadKg * 0.5, fragmentCount: 56, fragmentSpeedMs: 1500, fireball: 'standard' };
-    case 'thermobaric':
-      return { yieldKg: a.warheadKg * 1.4, fragmentCount: 6, fragmentSpeedMs: 900, fireball: 'thermobaric' };
     default:
       return { yieldKg: 0 };
   }
@@ -103,12 +82,23 @@ export function missileId(airframe: string, head: string): string {
   return `missile:${airframe}:${head}`;
 }
 
+/**
+ * The kinetic heads: the core's diameter and length as fractions of the airframe's, its mass as a multiple of the
+ * warhead section's, and its speed at the target.
+ */
+const KINETIC: Record<string, { calibre: number; length: number; mass: number; speedMs: number; minMm: number }> = {
+  penetrator: { calibre: 0.35, length: 0.6, mass: 1.5, speedMs: 1500, minMm: 25 },
+  'long-rod': { calibre: 0.22, length: 0.8, mass: 1.2, speedMs: 1800, minMm: 18 },
+  'heavy-core': { calibre: 0.5, length: 0.5, mass: 2.4, speedMs: 1100, minMm: 35 },
+};
+
 /** Builds the round for an airframe fitted with a warhead head. */
 export function missileSpec(airframeId: string, headId: string): BulletSpec {
   const a = AIRFRAMES.find((f) => f.id === airframeId);
   const h = WARHEADS.find((w) => w.id === headId);
   if (!a || !h) throw new Error(`Unknown missile ${airframeId}/${headId}`);
-  const kinetic = h.id === 'penetrator';
+  const core = KINETIC[h.id];
+  const kinetic = !!core;
   return {
     id: missileId(a.id, h.id),
     mode: 'missile',
@@ -116,10 +106,10 @@ export function missileSpec(airframeId: string, headId: string): BulletSpec {
     type: h.name,
     description: `${a.description} ${h.description}`,
     // A kinetic round is its own dense core: much narrower and much faster than the body.
-    caliberMm: kinetic ? Math.max(25, a.caliberMm * 0.35) : a.caliberMm,
-    lengthMm: kinetic ? a.lengthMm * 0.6 : a.lengthMm,
-    massGrains: gr(kinetic ? a.warheadKg * 1.5 : a.massKg),
-    muzzleVelocityMs: kinetic ? 1500 : a.speedMs,
+    caliberMm: core ? Math.max(core.minMm, a.caliberMm * core.calibre) : a.caliberMm,
+    lengthMm: core ? a.lengthMm * core.length : a.lengthMm,
+    massGrains: gr(core ? a.warheadKg * core.mass : a.massKg),
+    muzzleVelocityMs: core ? core.speedMs : a.speedMs,
     behaviour: kinetic ? 'intact' : 'explosive',
     shape: kinetic ? 'dart' : 'missile',
     noseDragFactor: kinetic ? 0.25 : 0.5,

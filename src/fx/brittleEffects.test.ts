@@ -51,7 +51,7 @@ describe('packed earth throws a soil column (#296)', () => {
   });
 
   it('throws clods and a dust plume sized to a shell, which a sandbag does not', () => {
-    const { timeline } = shoot('155mm-he', 'packed-earth', 1);
+    const { timeline } = shoot('122mm-ap', 'packed-earth', 1);
     const earth = recorder();
     loadSandEffect(timeline, 0, earth.system, earth.holes, getMedium('packed-earth'));
     const bag = recorder();
@@ -59,7 +59,7 @@ describe('packed earth throws a soil column (#296)', () => {
     const clods = earth.bursts.filter((b) => b.look === 'chunk');
     expect(clods.length).toBeGreaterThan(0);
     expect(bag.bursts.filter((b) => b.look === 'chunk').length).toBe(0);
-    // A 155 mm shell throws clods of several centimetres, not millimetres.
+    // A 122 mm shell throws clods of several centimetres, not millimetres.
     expect(Math.max(...clods.map((b) => b.size[1]))).toBeGreaterThan(0.02);
     // The column goes up: its axis points above the horizontal.
     expect(clods.every((b) => b.axis.y > 0.3)).toBe(true);

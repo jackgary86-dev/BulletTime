@@ -18,6 +18,7 @@ import { mountCleanFrame } from './ui/cleanFrame';
 import { FIRST_SHOT, markFirstShotSeen, openWithShotNow } from './ui/firstShot';
 import { isStill } from './scene/still';
 import { ShadowGate } from './scene/shadowGate';
+import { FrameGate, cameraSignature } from './scene/frameGate';
 import { mountControls } from './ui/controls';
 import { mountBulletSelector } from './ui/bulletSelector';
 import { mountStackEditor, type TargetSetup } from './ui/stackEditor';
@@ -40,6 +41,7 @@ import { contentGate } from './ui/contentWarning';
 import { chooseSimulator } from './ui/launcher';
 import { mountArmorLab } from './ui/armorLab';
 import { loadImpactBeat, saveImpactBeat } from './ui/beatSetting';
+import { initialFlash, saveFlash, setCleanFrameFlash, setFlashLevel } from './scene/flash';
 import { buildCues, CueTrack, cueStretch } from './audio/cues';
 import { playSound, unlockAudio } from './audio/sounds';
 
@@ -107,6 +109,8 @@ async function bootstrap(): Promise<void> {
   }
   let lighting: LightingMode = 'lab';
   let quality: QualityLevel = initialQuality();
+  const flashLevel = initialFlash();
+  setFlashLevel(flashLevel);
   /** Renderer-wide parts of the quality setting; each lane applies the rest. */
   const applyQuality = () => {
     const q = QUALITY[quality];
@@ -170,12 +174,17 @@ async function bootstrap(): Promise<void> {
   };
   canvas.addEventListener('pointerdown', revealEarly);
   window.addEventListener('keydown', revealEarly);
-  const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'));
+  const cleanFrame = mountCleanFrame(overlay, new URLSearchParams(location.search).has('clean'), setCleanFrameFlash);
   const panel = mountControls(overlay, {
     initialRate: playback.rate,
     initialImpactBeat: playback.impactBeat,
     initialCamera: 'side',
     initialQuality: quality,
+    initialFlash: flashLevel,
+    onFlashChange: (level) => {
+      setFlashLevel(level);
+      saveFlash(level);
+    },
     onRateChange: (rate) => (playback.rate = rate),
     onCleanFrame: () => cleanFrame.toggle(),
     onImpactBeatChange: (on) => {
@@ -393,6 +402,17 @@ async function bootstrap(): Promise<void> {
 
   const timer = new THREE.Timer();
   timer.connect(document);
+  // Draw only the frames that change (#329); `?alwaysdraw` keeps the old every-frame loop (the perf test's yardstick).
+  const gate = new URLSearchParams(location.search).has('alwaysdraw') ? null : new FrameGate();
+  const invalidate = () => gate?.invalidate();
+  for (const type of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize', 'change', 'input', 'focus', 'visibilitychange']) window.addEventListener(type, invalidate, { passive: true, capture: true });
+  window.addEventListener('pointermove', (e) => e.buttons && invalidate(), { passive: true, capture: true });
+  // Chained: the shadow gate listens for loads too.
+  const shadowOnLoad = THREE.DefaultLoadingManager.onLoad;
+  THREE.DefaultLoadingManager.onLoad = () => {
+    shadowOnLoad?.();
+    invalidate();
+  };
   renderer.setAnimationLoop((timestamp) => {
     timer.update(timestamp);
     // Cap the step so a slow frame doesn't skip a large chunk of the shot.
@@ -421,13 +441,22 @@ async function bootstrap(): Promise<void> {
 
     const { width, height } = size;
     const all = lanes();
-    const shadowsDue = shadows.shouldUpdate(t, delta);
+    const draw =
+      !gate ||
+      gate.shouldDraw(
+        `${cameraSignature(camera)}|${t}|${width}x${height}|${all.length}|${advancing}|${playback.shutterS}`,
+        all.some((lane) => lane.shot.live),
+        delta,
+      );
+    // Asked only on frames that draw: asking clears a pending invalidation, which a skipped frame would lose.
+    const shadowsDue = draw && shadows.shouldUpdate(t, delta);
     const laneWidth = all.length > 1 ? Math.floor(width / 2) : width;
     renderer.setScissorTest(all.length > 1);
     // The side panels cover the outer edge of each half, so slide each lane's view toward the middle.
     const slide = all.length > 1 && width > 900 ? Math.min(SIDE_PANEL_PX / 2, laneWidth / 4) : 0;
     all.forEach((lane, i) => {
       lane.update(t, camera, playback.shutterS);
+      if (!draw) return;
       lane.postFx.setFocus(director.focusDistance);
       // Side by side: each lane draws into its own half of the canvas, through the same camera.
       renderer.setViewport(i * laneWidth, 0, laneWidth, height);

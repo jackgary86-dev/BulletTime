@@ -22,7 +22,7 @@ export interface CleanFrame {
 }
 
 /** Wires the clean frame to `overlay` (a class that hides its children) and the keyboard. */
-export function mountCleanFrame(overlay: HTMLElement, initial: boolean): CleanFrame {
+export function mountCleanFrame(overlay: HTMLElement, initial: boolean, onChange: (on: boolean) => void = () => {}): CleanFrame {
   let on = false;
   let hint: HTMLDivElement | null = null;
 
@@ -44,6 +44,7 @@ export function mountCleanFrame(overlay: HTMLElement, initial: boolean): CleanFr
       if (next === on) return;
       on = next;
       overlay.classList.toggle('clean-frame', on);
+      onChange(on);
       if (on) showHint();
       else hint?.remove();
     },
